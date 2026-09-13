@@ -2236,6 +2236,29 @@ fn can_persist_selective_content(
         && row.body_state == expected_state
 }
 
+// All accounts share admission for background body batches. This budgets
+// encoded BODYSTRUCTURE estimates, not decoded strings or total process RSS.
+// Oversized single messages run alone; foreground message reads stay independent.
+const BACKGROUND_BODY_BUDGET_KIB: u32 = 16 * 1024;
+static BACKGROUND_BODY_BUDGET: std::sync::OnceLock<std::sync::Arc<tokio::sync::Semaphore>> =
+    std::sync::OnceLock::new();
+
+async fn reserve_background_body_bytes(bytes: u64) -> tokio::sync::OwnedSemaphorePermit {
+    let permits = bytes
+        .div_ceil(1024)
+        .clamp(1, u64::from(BACKGROUND_BODY_BUDGET_KIB)) as u32;
+    BACKGROUND_BODY_BUDGET
+        .get_or_init(|| {
+            std::sync::Arc::new(tokio::sync::Semaphore::new(
+                BACKGROUND_BODY_BUDGET_KIB as usize,
+            ))
+        })
+        .clone()
+        .acquire_many_owned(permits)
+        .await
+        .expect("body budget is never closed")
+}
+
 fn planned_text_bytes(item: &PlannedBodyFetch) -> u64 {
     item.plan
         .text_sections
@@ -2274,6 +2297,27 @@ fn selective_fetch_batches(
 #[cfg(test)]
 mod content_batch_tests {
     use super::*;
+
+    #[tokio::test]
+    async fn background_budget_is_shared_and_oversized_batches_run_alone() {
+        let permit = reserve_background_body_bytes(u64::MAX).await;
+        assert!(
+            tokio::time::timeout(
+                std::time::Duration::from_millis(10),
+                reserve_background_body_bytes(1)
+            )
+            .await
+            .is_err()
+        );
+        drop(permit);
+        let permit = tokio::time::timeout(
+            std::time::Duration::from_secs(1),
+            reserve_background_body_bytes(16 * 1024 * 1024),
+        )
+        .await
+        .unwrap();
+        drop(permit);
+    }
 
     fn item(id: i64, size: u32) -> PlannedBodyFetch {
         PlannedBodyFetch {
@@ -2769,6 +2813,13 @@ async fn fetch_body_chunk(
             if batch.is_empty() {
                 continue;
             }
+            let memory_permit = reserve_background_body_bytes(
+                batch
+                    .iter()
+                    .map(planned_text_bytes)
+                    .fold(0u64, u64::saturating_add),
+            )
+            .await;
             let uids: Vec<u32> = batch.iter().map(|item| item.uid).collect();
             let fetched = imap::fetch_content_sections_batch(session, &uids, &sections)
                 .await
@@ -2777,7 +2828,7 @@ async fn fetch_body_chunk(
                 .into_iter()
                 .map(|message| (message.uid, message.sections))
                 .collect();
-            let (decoded, batch_failures) = tokio::task::spawn_blocking(move || {
+            let (decoded, batch_failures, memory_permit) = tokio::task::spawn_blocking(move || {
                 let mut decoded = Vec::with_capacity(batch.len());
                 let mut failures = Vec::new();
                 for item in batch {
@@ -2796,7 +2847,7 @@ async fn fetch_body_chunk(
                         Err(error) => failures.push((message_id, error.to_string())),
                     }
                 }
-                (decoded, failures)
+                (decoded, failures, memory_permit)
             })
             .await
             .map_err(|error| {
@@ -2819,6 +2870,7 @@ async fn fetch_body_chunk(
                     folder_id: chunk.folder_id,
                 },
                 decoded,
+                Some(memory_permit),
             )
             .await
             .map_err(BodyChunkError::Fatal)?;
@@ -3245,6 +3297,7 @@ async fn fetch_selective_content(
         config.id,
         SelectivePersistGuard::Priority { folder_id },
         vec![content],
+        None,
     )
     .await
     .map(|_| ())
@@ -3294,6 +3347,7 @@ async fn persist_selective_batch(
     account_id: i64,
     guard: SelectivePersistGuard,
     contents: Vec<DecodedSelectiveContent>,
+    memory_permit: Option<tokio::sync::OwnedSemaphorePermit>,
 ) -> Result<u64> {
     if contents.is_empty() {
         return Ok(0);
@@ -3311,6 +3365,7 @@ async fn persist_selective_batch(
     let (thread_ids, count) = ctx
         .db
         .write(move |conn| {
+            let _memory_permit = memory_permit;
             let tx = conn.transaction()?;
             let mut thread_ids = Vec::new();
             let mut count = 0u64;

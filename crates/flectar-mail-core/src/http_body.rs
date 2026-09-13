@@ -36,7 +36,8 @@ pub(crate) async fn bytes(
         .content_length()
         .and_then(|length| usize::try_from(length).ok())
         .unwrap_or(8 * 1024)
-        .min(max_bytes);
+        .min(max_bytes)
+        .min(64 * 1024);
     let mut body = Vec::with_capacity(capacity);
     while let Some(chunk) = response.chunk().await.map_err(|error| {
         if error.is_timeout() || error.is_connect() {
@@ -58,6 +59,14 @@ fn append_bounded(
 ) -> Result<()> {
     if chunk.len() > max_bytes.saturating_sub(body.len()) {
         return Err(too_large(context, max_bytes));
+    }
+    let required = body.len() + chunk.len();
+    if required > body.capacity() {
+        // Vec's implicit doubling can exceed the caller's response ceiling.
+        let target = required
+            .max(body.capacity().saturating_mul(2))
+            .min(max_bytes);
+        body.reserve_exact(target - body.len());
     }
     body.extend_from_slice(chunk);
     Ok(())
