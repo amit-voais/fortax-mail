@@ -129,11 +129,10 @@ fn decoded_value(head: &str, raw: &str) -> String {
         name.eq_ignore_ascii_case("CHARSET")
             .then(|| value.trim_matches('"'))
     });
-    let text = charset
+    charset
         .and_then(|label| encoding_rs::Encoding::for_label(label.as_bytes()))
         .map(|encoding| encoding.decode(&decoded).0.into_owned())
-        .unwrap_or_else(|| String::from_utf8_lossy(&decoded).into_owned());
-    text
+        .unwrap_or_else(|| String::from_utf8_lossy(&decoded).into_owned())
 }
 
 fn property_name(line: &str) -> Option<&str> {

@@ -626,17 +626,18 @@ END:VCARD</c:address-data></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:props
         sync_account(&db, &EventBus::new(), &transport, 1)
             .await
             .unwrap();
-        let seen = transport.seen.lock().unwrap();
-        assert_eq!(seen[1].5.as_deref(), Some("0"));
-        assert!(
-            seen[1]
-                .4
-                .as_deref()
-                .unwrap()
-                .contains("<d:sync-token></d:sync-token>")
-        );
-        assert_eq!(seen[2].5.as_deref(), Some("0"));
-        drop(seen);
+        {
+            let seen = transport.seen.lock().unwrap();
+            assert_eq!(seen[1].5.as_deref(), Some("0"));
+            assert!(
+                seen[1]
+                    .4
+                    .as_deref()
+                    .unwrap()
+                    .contains("<d:sync-token></d:sync-token>")
+            );
+            assert_eq!(seen[2].5.as_deref(), Some("0"));
+        }
         let (_, token) = db
             .read(|conn| repo::carddav::sync_state(conn, 1))
             .await

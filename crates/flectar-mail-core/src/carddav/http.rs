@@ -152,18 +152,19 @@ impl Transport for HttpTransport {
 }
 
 #[cfg(test)]
+pub type MockRequest = (
+    String,
+    String,
+    Vec<(String, String)>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+);
+
+#[cfg(test)]
 pub struct MockTransport {
     pub responses: std::sync::Mutex<std::collections::VecDeque<DavResponse>>,
-    pub seen: std::sync::Mutex<
-        Vec<(
-            String,
-            String,
-            Vec<(String, String)>,
-            Option<String>,
-            Option<String>,
-            Option<String>,
-        )>,
-    >,
+    pub seen: std::sync::Mutex<Vec<MockRequest>>,
 }
 
 #[cfg(test)]

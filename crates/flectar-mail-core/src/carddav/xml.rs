@@ -134,10 +134,11 @@ pub fn parse(body: &str) -> Result<Multistatus> {
             }
             Event::Empty(e) => {
                 let name = local(e.name().as_ref());
-                if name == "addressbook" && path.last().is_some_and(|v| v == "resourcetype") {
-                    if let Some(item) = props.as_mut().or(current.as_mut()) {
-                        item.is_addressbook = true;
-                    }
+                if name == "addressbook"
+                    && path.last().is_some_and(|v| v == "resourcetype")
+                    && let Some(item) = props.as_mut().or(current.as_mut())
+                {
+                    item.is_addressbook = true;
                 }
                 if matches!(name.as_str(), "write" | "write-content" | "all")
                     && path
@@ -231,10 +232,10 @@ pub fn parse(body: &str) -> Result<Multistatus> {
                         }
                     }
                     "displayname" => {
-                        if !value.is_empty() {
-                            if let Some(item) = props.as_mut().or(current.as_mut()) {
-                                item.display_name = Some(value);
-                            }
+                        if !value.is_empty()
+                            && let Some(item) = props.as_mut().or(current.as_mut())
+                        {
+                            item.display_name = Some(value);
                         }
                     }
                     "getctag" => {
