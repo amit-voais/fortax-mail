@@ -128,8 +128,8 @@ class PackagingTests(unittest.TestCase):
             (root / "target/release/flectar-mail").chmod(0o755)
 
             (root / "scripts/stage-pdfium.py").write_text(
-                "import pathlib, sys\n"
-                "assert sys.argv[1] == 'mac-arm64'\n"
+                "import os, pathlib, sys\n"
+                "assert sys.argv[1] == os.environ['EXPECTED_PDFIUM_TARGET']\n"
                 "frameworks = pathlib.Path(sys.argv[2])\n"
                 "licenses = pathlib.Path(sys.argv[sys.argv.index('--licenses-destination') + 1])\n"
                 "frameworks.mkdir(parents=True, exist_ok=True)\n"
@@ -169,27 +169,39 @@ class PackagingTests(unittest.TestCase):
                 'if [[ "$1" == "create" ]]; then : > "${@: -1}"; else test -f "$2"; fi\n',
             )
 
-            codesign_log = root / "codesign.log"
-            result = subprocess.run(
-                ["bash", str(root / "scripts/package-macos.sh")],
-                cwd=root,
-                env={
-                    **os.environ,
-                    "PATH": f"{tools}:{os.environ['PATH']}",
-                    "CODESIGN_LOG": str(codesign_log),
-                },
-                capture_output=True,
-                text=True,
-            )
-            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            app = root / "target/macos/Flectar Mail.app/Contents"
-            self.assertTrue((app / "Frameworks/libpdfium.dylib").is_file())
-            self.assertTrue((app / "Resources/Licenses/PDFium/build.json").is_file())
-            self.assertFalse((app / "MacOS/libpdfium.dylib").exists())
-            signatures = codesign_log.read_text().splitlines()
-            self.assertIn("Contents/Frameworks/libpdfium.dylib", signatures[0])
-            self.assertTrue(signatures[1].endswith("Flectar Mail.app"))
-            self.assertIn("--verify --deep --strict", signatures[2])
+            for architecture, pdfium_target in (("arm64", "mac-arm64"), ("x64", "mac-x64")):
+                with self.subTest(architecture=architecture):
+                    output_dir = root / f"target/macos-{architecture}"
+                    codesign_log = root / f"codesign-{architecture}.log"
+                    result = subprocess.run(
+                        [
+                            "bash",
+                            str(root / "scripts/package-macos.sh"),
+                            str(root / "target/release/flectar-mail"),
+                            str(output_dir),
+                            architecture,
+                        ],
+                        cwd=root,
+                        env={
+                            **os.environ,
+                            "PATH": f"{tools}:{os.environ['PATH']}",
+                            "CODESIGN_LOG": str(codesign_log),
+                            "EXPECTED_PDFIUM_TARGET": pdfium_target,
+                        },
+                        capture_output=True,
+                        text=True,
+                    )
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    app = output_dir / "Flectar Mail.app/Contents"
+                    self.assertTrue((app / "Frameworks/libpdfium.dylib").is_file())
+                    self.assertTrue((app / "Resources/Licenses/PDFium/build.json").is_file())
+                    self.assertFalse((app / "MacOS/libpdfium.dylib").exists())
+                    self.assertTrue((output_dir / f"flectar-mail-macos-{architecture}.zip").is_file())
+                    self.assertTrue((output_dir / f"flectar-mail-macos-{architecture}.dmg").is_file())
+                    signatures = codesign_log.read_text().splitlines()
+                    self.assertIn("Contents/Frameworks/libpdfium.dylib", signatures[0])
+                    self.assertTrue(signatures[1].endswith("Flectar Mail.app"))
+                    self.assertIn("--verify --deep --strict", signatures[2])
 
     def test_apk_requires_pdfium_notices_and_aligned_native_libraries(self):
         with tempfile.TemporaryDirectory() as directory:

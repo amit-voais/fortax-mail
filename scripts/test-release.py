@@ -338,6 +338,8 @@ pathlib.Path(sys.argv[2]).write_text(json.dumps({
                 "windows/flectar-mail-windows-x64-setup.exe",
                 "macos/flectar-mail-macos-arm64.zip",
                 "macos/flectar-mail-macos-arm64.dmg",
+                "macos/flectar-mail-macos-x64.zip",
+                "macos/flectar-mail-macos-x64.dmg",
                 "android/flectar-mail.apk",
             )
             for name in names:
@@ -347,7 +349,7 @@ pathlib.Path(sys.argv[2]).write_text(json.dumps({
             (source / "benchmark.json").write_text("{}")
             dist = root / "dist"
             prepare(source, dist, "0.1.0-beta.1")
-            self.assertEqual(len(list(dist.iterdir())), 10)
+            self.assertEqual(len(list(dist.iterdir())), 12)
             self.assertTrue((dist / "flectar-mail-0.1.0-beta.1-android-arm64-test.apk").is_file())
             # GitHub must not rewrite a download name after we checksum it.
             deb = dist / "flectar-mail_0.1.0.beta.1_amd64.deb"
@@ -372,14 +374,14 @@ pathlib.Path(sys.argv[2]).write_text(json.dumps({
             with self.assertRaises(ValueError):
                 prepare(source, root / "duplicate", "0.1.0-beta.1")
 
-            # Stable releases keep the eight desktop downloads, even if the
+            # Stable releases keep the ten desktop downloads, even if the
             # input folder happens to contain test APKs from another step.
             (source / "linux/deb/flectar-mail_0.1.0~beta.1_amd64.deb").rename(
                 source / "linux/deb/flectar-mail_0.1.0_amd64.deb"
             )
             stable_dist = root / "stable"
             prepare(source, stable_dist, "0.1.0")
-            self.assertEqual(len(list(stable_dist.iterdir())), 9)
+            self.assertEqual(len(list(stable_dist.iterdir())), 11)
             self.assertTrue((stable_dist / "flectar-mail_0.1.0_amd64.deb").is_file())
             self.assertFalse(list(stable_dist.glob("*.apk")))
 
@@ -388,6 +390,7 @@ pathlib.Path(sys.argv[2]).write_text(json.dumps({
         self.assertIn("prereleases only", release_assets.release_notes("0.1.0"))
         self.assertIn("does not receive Flathub updates", release_assets.release_notes("0.1.0-beta.1"))
         self.assertIn("build-provenance attestations", release_assets.release_notes("0.1.0-beta.1"))
+        self.assertIn("Apple silicon and Intel", release_assets.release_notes("0.1.0-beta.1"))
 
     def test_metadata_rejects_stale_android_lockfile(self):
         with tempfile.TemporaryDirectory() as directory:

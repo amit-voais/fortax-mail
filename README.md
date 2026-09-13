@@ -164,7 +164,7 @@ When preview builds are published, download them from
 - **Linux x64:** AppImage, Debian/Ubuntu `.deb`, Fedora `.rpm`, or a
   sideloaded Flatpak preview bundle
 - **Windows x64:** Setup `.exe` or portable ZIP
-- **macOS Apple silicon (macOS 14+):** DMG or application ZIP
+- **macOS Apple silicon or Intel (macOS 14+):** DMG or application ZIP
 - **Android arm64 (Android 8.0+):** Experimental test APK in prereleases
 
 Windows previews are unsigned; macOS previews are ad-hoc signed and not

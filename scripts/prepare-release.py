@@ -21,6 +21,8 @@ def prepare(source: Path, destination: Path, version: str) -> None:
         "flectar-mail-windows-x64-setup.exe": f"flectar-mail-{version}-windows-x64-setup.exe",
         "flectar-mail-macos-arm64.zip": f"flectar-mail-{version}-macos-arm64.zip",
         "flectar-mail-macos-arm64.dmg": f"flectar-mail-{version}-macos-arm64.dmg",
+        "flectar-mail-macos-x64.zip": f"flectar-mail-{version}-macos-x64.zip",
+        "flectar-mail-macos-x64.dmg": f"flectar-mail-{version}-macos-x64.dmg",
     }
     if "-" in version:
         packages["flectar-mail.apk"] = f"flectar-mail-{version}-android-arm64-test.apk"
@@ -54,7 +56,7 @@ def release_notes(version: str) -> str:
         if "-" in version else "The Android test APK is available in prereleases only.\n"
     )
     return (
-        "Desktop builds for Linux x64, Windows x64, and macOS Apple silicon. "
+        "Desktop builds for Linux x64, Windows x64, and macOS Apple silicon and Intel. "
         "Linux testers can choose AppImage, Debian, Fedora RPM, or Flatpak.\n\n"
         "Gmail and Outlook sign-in require a bundled OAuth registration or your own "
         "keys in **Sign-in settings** on the welcome screen. IMAP/SMTP and JMAP "

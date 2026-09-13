@@ -5,7 +5,23 @@ trap 'status=$?; printf "macOS packaging failed at line %s: %s\n" "$LINENO" "$BA
 project_dir="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 binary_path="${1:-$project_dir/target/release/flectar-mail}"
 output_dir="${2:-$project_dir/target/macos}"
+architecture="${3:-$(uname -m)}"
+case "$architecture" in
+  arm64|aarch64)
+    asset_architecture="arm64"
+    pdfium_target="mac-arm64"
+    ;;
+  x64|x86_64|amd64)
+    asset_architecture="x64"
+    pdfium_target="mac-x64"
+    ;;
+  *)
+    printf 'Unsupported macOS architecture: %s\n' "$architecture" >&2
+    exit 1
+    ;;
+esac
 app_dir="$output_dir/Flectar Mail.app"
+archive_path="$output_dir/flectar-mail-macos-$asset_architecture"
 
 if [[ ! -x "$binary_path" ]]; then
   printf 'Missing release binary: %s\n' "$binary_path" >&2
@@ -23,7 +39,7 @@ mkdir -p \
 cp "$binary_path" "$app_dir/Contents/MacOS/flectar-mail"
 
 python3 "$project_dir/scripts/stage-pdfium.py" \
-  mac-arm64 "$app_dir/Contents/Frameworks" \
+  "$pdfium_target" "$app_dir/Contents/Frameworks" \
   --licenses-destination "$app_dir/Contents/Resources/Licenses/PDFium"
 chmod 0755 "$app_dir/Contents/Frameworks/libpdfium.dylib"
 
@@ -70,8 +86,8 @@ codesign --force --sign - "$app_dir"
 python3 "$project_dir/scripts/test-pdf-preview.py" "$app_dir/Contents/MacOS/flectar-mail"
 
 mkdir -p "$output_dir"
-ditto -c -k --sequesterRsrc --keepParent "$app_dir" "$output_dir/flectar-mail-macos-arm64.zip"
-printf 'Built %s\n' "$output_dir/flectar-mail-macos-arm64.zip"
+ditto -c -k --sequesterRsrc --keepParent "$app_dir" "$archive_path.zip"
+printf 'Built %s\n' "$archive_path.zip"
 
 # Use a separate source folder so the disk image contains only the app and the
 # usual Applications shortcut, not the ZIP or a previous disk image.
@@ -81,8 +97,8 @@ mkdir -p "$staging"
 ditto "$app_dir" "$staging/Flectar Mail.app"
 ln -s /Applications "$staging/Applications"
 hdiutil create -volname "Flectar Mail" -srcfolder "$staging" -ov -format UDZO \
-  "$output_dir/flectar-mail-macos-arm64.dmg"
-hdiutil verify "$output_dir/flectar-mail-macos-arm64.dmg"
+  "$archive_path.dmg"
+hdiutil verify "$archive_path.dmg"
 codesign --verify --deep --strict "$app_dir"
 rm -rf "$staging"
-printf 'Built %s\n' "$output_dir/flectar-mail-macos-arm64.dmg"
+printf 'Built %s\n' "$archive_path.dmg"
