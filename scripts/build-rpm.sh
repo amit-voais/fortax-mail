@@ -21,7 +21,7 @@ else
   rpm_release="1"
 fi
 
-build_args=(--locked --bin flectar-mail --manifest-path "$project_dir/Cargo.toml" --release --no-default-features --features remote-content)
+build_args=(--locked --bin flectar-mail --manifest-path "$project_dir/Cargo.toml" --release --no-default-features --features remote-content,gpu-renderer)
 if [[ "${FLECTAR_SKIP_BUILD:-0}" == "1" ]]; then
   if [[ ! -x "$project_dir/target/release/flectar-mail" ]]; then
     printf 'FLECTAR_SKIP_BUILD=1 requires an existing release executable.\n' >&2

@@ -147,7 +147,7 @@ jobs:
           FLECTAR_GOOGLE_DESKTOP_CLIENT_ID: ${{ secrets.FLECTAR_GOOGLE_DESKTOP_CLIENT_ID }}
           FLECTAR_GOOGLE_DESKTOP_CLIENT_SECRET: ${{ secrets.FLECTAR_GOOGLE_DESKTOP_CLIENT_SECRET }}
           FLECTAR_MICROSOFT_DESKTOP_CLIENT_ID: ${{ secrets.FLECTAR_MICROSOFT_DESKTOP_CLIENT_ID }}
-        run: cargo build --locked --release --no-default-features --features remote-content --bin flectar-mail
+        run: cargo build --locked --release --no-default-features --features remote-content,gpu-renderer --bin flectar-mail
 
       - name: Build AppImage
         env:
@@ -223,7 +223,7 @@ jobs:
           FLECTAR_GOOGLE_DESKTOP_CLIENT_ID: ${{ secrets.FLECTAR_GOOGLE_DESKTOP_CLIENT_ID }}
           FLECTAR_GOOGLE_DESKTOP_CLIENT_SECRET: ${{ secrets.FLECTAR_GOOGLE_DESKTOP_CLIENT_SECRET }}
           FLECTAR_MICROSOFT_DESKTOP_CLIENT_ID: ${{ secrets.FLECTAR_MICROSOFT_DESKTOP_CLIENT_ID }}
-        run: cargo build --locked --release --no-default-features --features remote-content --bin flectar-mail
+        run: cargo build --locked --release --no-default-features --features remote-content,gpu-renderer --bin flectar-mail
       - name: Build and inspect RPM
         env:
           FLECTAR_SKIP_BUILD: "1"
@@ -334,7 +334,7 @@ jobs:
           FLECTAR_MICROSOFT_DESKTOP_CLIENT_ID: ${{ secrets.FLECTAR_MICROSOFT_DESKTOP_CLIENT_ID }}
         run: |
           mkdir -p target
-          if cargo build --locked --release --no-default-features --features remote-content --bin flectar-mail 2>&1 | tee target/windows-build.log; then
+          if cargo build --locked --release --no-default-features --features remote-content,gpu-renderer --bin flectar-mail 2>&1 | tee target/windows-build.log; then
             exit 0
           fi
           # Keep the compiler's final diagnostics available in the check result,
@@ -430,7 +430,7 @@ jobs:
           FLECTAR_GOOGLE_DESKTOP_CLIENT_ID: ${{ secrets.FLECTAR_GOOGLE_DESKTOP_CLIENT_ID }}
           FLECTAR_GOOGLE_DESKTOP_CLIENT_SECRET: ${{ secrets.FLECTAR_GOOGLE_DESKTOP_CLIENT_SECRET }}
           FLECTAR_MICROSOFT_DESKTOP_CLIENT_ID: ${{ secrets.FLECTAR_MICROSOFT_DESKTOP_CLIENT_ID }}
-        run: cargo build --locked --release --no-default-features --features remote-content --bin flectar-mail
+        run: cargo build --locked --release --no-default-features --features remote-content,gpu-renderer --bin flectar-mail
 
       - name: Create ad-hoc signed app bundle
         run: |

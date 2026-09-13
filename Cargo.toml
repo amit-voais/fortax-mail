@@ -37,10 +37,9 @@ name = "flectar-mail"
 path = "src/desktop.rs"
 
 [features]
-# The default AppImage is deliberately software-rendered. Creating a WGPU
-# device makes several Linux drivers reserve hundreds of MiB before the user
-# has opened a message. GPU rendering remains available as an explicit build.
-default = ["remote-content"]
+# Desktop builds include both renderers. The saved runtime preference defaults
+# to CPU, which does not initialize WGPU. Minimal/mobile builds opt out below.
+default = ["remote-content", "gpu-renderer"]
 gpu-renderer = [
     "dep:anyrender_vello",
     "dep:vello",

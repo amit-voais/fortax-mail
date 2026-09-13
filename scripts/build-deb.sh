@@ -15,7 +15,7 @@ if [[ -z "$version" ]]; then
 fi
 
 app_features="${FLECTAR_APP_FEATURES:-}"
-build_args=(--locked --bin flectar-mail --manifest-path "$project_dir/Cargo.toml" --release --no-default-features --features remote-content)
+build_args=(--locked --bin flectar-mail --manifest-path "$project_dir/Cargo.toml" --release --no-default-features --features remote-content,gpu-renderer)
 if [[ -n "$app_features" ]]; then
   build_args+=(--features "$app_features")
 fi

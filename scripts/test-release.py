@@ -232,11 +232,17 @@ class ReleaseTests(unittest.TestCase):
             )
             (root / "bin").mkdir()
             cargo = root / "bin/cargo"
-            cargo.write_text("#!/bin/sh\nexit 0\n")
+            cargo.write_text(
+                "#!/usr/bin/env python3\n"
+                "import json, pathlib, sys\n"
+                "with pathlib.Path('cargo-args.jsonl').open('a') as output:\n"
+                "    output.write(json.dumps(sys.argv[1:]) + '\\n')\n"
+            )
             cargo.chmod(0o755)
             result = subprocess.run(
                 ["bash", str(root / "scripts/build-deb.sh")], cwd=root,
-                env={**os.environ, "PATH": f"{root / 'bin'}:{os.environ['PATH']}"},
+                env={**os.environ, "PATH": f"{root / 'bin'}:{os.environ['PATH']}",
+                     "FLECTAR_SKIP_BUILD": "0", "FLECTAR_APP_FEATURES": ""},
                 capture_output=True, text=True,
             )
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -276,7 +282,8 @@ pathlib.Path(sys.argv[2]).write_text(json.dumps({
             result = subprocess.run(
                 ["bash", str(root / "scripts/build-appimage.sh")], cwd=root,
                 env={**os.environ, "PATH": f"{root / 'bin'}:{os.environ['PATH']}",
-                     "LINUXDEPLOY": str(deploy), "APPIMAGETOOL": str(pack), "VERSION": "stale"},
+                     "LINUXDEPLOY": str(deploy), "APPIMAGETOOL": str(pack), "VERSION": "stale",
+                     "FLECTAR_SKIP_BUILD": "0", "FLECTAR_APP_FEATURES": ""},
                 capture_output=True, text=True,
             )
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -286,6 +293,22 @@ pathlib.Path(sys.argv[2]).write_text(json.dumps({
             release = ET.fromstring(packaged["metainfo"]).find("./releases/release")
             self.assertEqual(release.get("version"), "0.1.0-alpha.1")
             self.assertEqual(release.get("type"), "development")
+
+            # Both normal package commands must include the optional runtime
+            # choice, even though their builds disable Cargo's default features.
+            invocations = [
+                json.loads(line)
+                for line in (root / "cargo-args.jsonl").read_text().splitlines()
+            ]
+            self.assertEqual(len(invocations), 2)
+            for args in invocations:
+                enabled = {
+                    feature
+                    for index, arg in enumerate(args)
+                    if arg == "--features"
+                    for feature in args[index + 1].split(",")
+                }
+                self.assertTrue({"remote-content", "gpu-renderer"} <= enabled)
 
     def test_versions_and_tags(self):
         for version in ("0.1.0", "1.2.3-alpha.1", "1.2.3-beta.2", "1.2.3-rc.3"):

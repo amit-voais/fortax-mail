@@ -92,9 +92,9 @@ jobs:
       - name: Check the capability-minimal application
         run: cargo check -p flectar-mail --no-default-features --locked
       - name: Check the Flatpak application profile
-        run: cargo check -p flectar-mail --no-default-features --features remote-content,flatpak --locked
-      - name: Check the opt-in GPU renderer
-        run: cargo check -p flectar-mail --no-default-features --features remote-content,gpu-renderer --locked
+        run: cargo check -p flectar-mail --no-default-features --features remote-content,gpu-renderer,flatpak --locked
+      - name: Check the CPU-only renderer build
+        run: cargo check -p flectar-mail --no-default-features --features remote-content --locked
       - name: Lint without warnings
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Validate the Spanish catalog

@@ -28,12 +28,10 @@ download_tool() {
 }
 
 mkdir -p "$build_dir"
-# The normal distributable includes the runtime-gated remote-image capability
-# but stays on the software-rendered low-memory profile. A benchmark artifact
-# can opt into the GPU renderer explicitly:
-# FLECTAR_APP_FEATURES=gpu-renderer ./scripts/build-appimage.sh
+# Include both renderer choices; CPU remains the initial runtime selection.
+# FLECTAR_APP_FEATURES can enable additional application features.
 app_features="${FLECTAR_APP_FEATURES:-}"
-build_args=(--locked --bin flectar-mail --manifest-path "$project_dir/Cargo.toml" --release --no-default-features --features remote-content)
+build_args=(--locked --bin flectar-mail --manifest-path "$project_dir/Cargo.toml" --release --no-default-features --features remote-content,gpu-renderer)
 if [[ -n "$app_features" ]]; then
   build_args+=(--features "$app_features")
 fi

@@ -13,6 +13,7 @@ separate-locales: false
 finish-args:
   - --share=ipc
   - --share=network
+  - --device=dri
   - --socket=wayland
   - --socket=fallback-x11
   - --talk-name=org.freedesktop.secrets
@@ -35,7 +36,7 @@ modules:
         CARGO_HOME: /run/build/flectar-mail/cargo
         CARGO_NET_OFFLINE: 'true'
     build-commands:
-      - cargo build --offline --locked --release --no-default-features --features remote-content,flatpak --bin flectar-mail
+      - cargo build --offline --locked --release --no-default-features --features remote-content,gpu-renderer,flatpak --bin flectar-mail
       - install -Dm0755 target/release/flectar-mail /app/bin/flectar-mail
       - install -Dm0755 pdfium-runtime/lib/libpdfium.so /app/lib/flectar-mail/libpdfium.so
       - python3 scripts/test-pdf-preview.py /app/bin/flectar-mail
