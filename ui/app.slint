@@ -657,12 +657,20 @@ export component AppWindow inherits Window {
     in-out property <bool> text_mode: false;
     // The Rust renderer reads these bindings during Slint's WGPU rendering
     // callback and reflows Blitz at the current logical viewport size.
-    out property <length> email-viewport-width: mail-view.email-viewport-width;
-    out property <length> email-viewport-height: mail-view.email-viewport-height;
+    in-out property <length> email-viewport-width: 0px;
+    in-out property <length> email-viewport-height: 0px;
     in-out property <length> email-scroll-y: 0px;
     in-out property <bool> settings_open: false;
+    changed settings_open => { root.product-changed(root.active_view); }
     in-out property <string> active_view: "mail";
-    changed active_view => { if root.active_view != "mail" { MailAttachments.command("close", ""); } }
+    callback product-changed(string);
+    private property <string> mail-compact-page: "list";
+    private property <bool> mail-folders-open: false;
+    private property <bool> contacts-detail-visible: false;
+    changed active_view => {
+        if root.active_view != "mail" { MailAttachments.command("close", ""); }
+        root.product-changed(root.active_view);
+    }
     in-out property <string> settings_tab: "General";
     in-out property <string> theme_mode: "system";
     in-out property <bool> show_avatars: true;
@@ -801,8 +809,8 @@ export component AppWindow inherits Window {
     private property <bool> compact-layout: root.width - root.safe-area-insets.left - root.safe-area-insets.right < 980px;
     private property <bool> compact-primary-nav-visible: root.compact-layout
         && !root.compose_open && !root.calendar_editor_open
-        && !(root.active_view == "mail" && mail-view.compact-page == "message")
-        && !(root.active_view == "contacts" && contacts-view.detail-page-visible)
+        && !(root.active_view == "mail" && root.mail-compact-page == "message")
+        && !(root.active_view == "contacts" && root.contacts-detail-visible)
         && !(root.active_view == "files" && FilesUi.preview-open);
     private property <length> compact-primary-nav-height: LayoutMetrics.compact-navigation-height;
     private property <bool> folder-dialog-open: false;
@@ -864,7 +872,8 @@ export component AppWindow inherits Window {
         if MailAttachments.open { MailAttachments.command("close", ""); return true; }
         if root.active_view == "files" && FilesUi.transfers-open {FilesUi.transfers-open=false;return true;}
         if root.active_view == "files" && FilesUi.dialog != "" { FilesUi.dialog = ""; return true; }
-        if root.active_view == "files" && files-view.close-navigation() { return true; }
+        if root.active_view == "files" && FilesUi.setup-open { FilesUi.setup-open = false; return true; }
+        if root.active_view == "files" && FilesUi.navigation-open { FilesUi.navigation-open = false; return true; }
         if root.active_view == "files" && FilesUi.preview-open { FilesUi.preview-open = false; if FilesUi.busy { FilesUi.command("cancel", "", ""); } FilesUi.command("release-preview", "", ""); return true; }
         if root.active_view == "files" && FilesUi.can-up && !FilesUi.busy { FilesUi.command("up", "", ""); return true; }
         if (root.folder-dialog-open) {
@@ -886,17 +895,17 @@ export component AppWindow inherits Window {
             root.settings_open = false;
             return true;
         }
-        if (root.active_view == "mail" && mail-view.folders-open) {
-            mail-view.folders-open = false;
+        if (root.active_view == "mail" && root.mail-folders-open) {
+            root.mail-folders-open = false;
             return true;
         }
-        if (root.active_view == "mail" && mail-view.compact-page == "message") {
-            mail-view.compact-page = "list";
+        if (root.active_view == "mail" && root.mail-compact-page == "message") {
+            root.mail-compact-page = "list";
             root.close_preview();
             return true;
         }
-        if (root.active_view == "contacts" && contacts-view.detail-page-visible) {
-            contacts-view.detail-page-visible = false;
+        if (root.active_view == "contacts" && root.contacts-detail-visible) {
+            root.contacts-detail-visible = false;
             return true;
         }
         return false;
@@ -937,19 +946,21 @@ export component AppWindow inherits Window {
             select-view(view) => {
                 root.active_view = view;
                 root.settings_open = false;
-                if (view == "contacts") { root.load-contacts(); }
-                if (view == "files") { FilesUi.command("load", "", ""); }
+
             }
         }
 
-        WorkspaceFrame {
-            visible: root.active_view == "mail";
+        if root.active_view == "mail" : WorkspaceFrame {
             compact: root.compact-layout;
             reserve-compact-navigation: root.compact-primary-nav-visible;
             available-width: parent.width;
             available-height: parent.height;
 
-        mail-view := MailView {
+        MailView {
+            changed email-viewport-width => { root.email-viewport-width = self.email-viewport-width; }
+            changed email-viewport-height => { root.email-viewport-height = self.email-viewport-height; }
+            compact-page <=> root.mail-compact-page;
+            folders-open <=> root.mail-folders-open;
             loading: !root.startup_hydrated || root.mail_page_loading;
             x: 0px;
             y: 0px;
@@ -1068,8 +1079,7 @@ export component AppWindow inherits Window {
         }
         }
 
-        WorkspaceFrame {
-            visible: root.active_view == "calendar";
+        if root.active_view == "calendar" : WorkspaceFrame {
             compact: root.compact-layout;
             reserve-compact-navigation: root.compact-primary-nav-visible;
             available-width: parent.width;
@@ -1119,14 +1129,14 @@ export component AppWindow inherits Window {
         }
         }
 
-        WorkspaceFrame {
-            visible: root.active_view == "contacts";
+        if root.active_view == "contacts" : WorkspaceFrame {
             compact: root.compact-layout;
             reserve-compact-navigation: root.compact-primary-nav-visible;
             available-width: parent.width;
             available-height: parent.height;
 
-        contacts-view := ContactsView {
+        ContactsView {
+            detail-page-visible <=> root.contacts-detail-visible;
             active: root.active_view == "contacts";
             x: 0px;
             y: 0px;
@@ -1205,8 +1215,7 @@ export component AppWindow inherits Window {
         }
         }
 
-        WorkspaceFrame {
-            visible: root.active_view == "files";
+        if root.active_view == "files" : WorkspaceFrame {
             compact: root.compact-layout;
             reserve-compact-navigation: root.compact-primary-nav-visible;
             available-width: parent.width;
@@ -1231,12 +1240,11 @@ export component AppWindow inherits Window {
             select-view(view) => {
                 root.active_view = view;
                 root.settings_open = false;
-                if (view == "contacts") { root.load-contacts(); }
-                if (view == "files") { FilesUi.command("load", "", ""); }
+
             }
         }
 
-        CalendarEventDialog {
+        if root.calendar_editor_open : CalendarEventDialog {
             compact: root.compact-layout;
             x: 0px;
             y: 0px;
@@ -1262,8 +1270,7 @@ export component AppWindow inherits Window {
             }
         }
 
-        WorkspaceFrame {
-            visible: root.settings_open;
+        if root.settings_open : WorkspaceFrame {
             compact: root.compact-layout;
             reserve-compact-navigation: root.compact-primary-nav-visible;
             available-width: parent.width;

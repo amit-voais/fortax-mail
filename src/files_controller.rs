@@ -53,6 +53,7 @@ pub(crate) fn register(
             install_pdf_lifecycle_observers();
         }
     }
+    let view_active = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let directory = Arc::new(Mutex::new((
         (0usize, 0u64),
         Directory {
@@ -100,6 +101,7 @@ pub(crate) fn register(
         slint::TimerMode::Repeated,
         std::time::Duration::from_millis(500),
         move || {
+            if profile_ui.upgrade().is_none_or(|app| app.get_active_view() != "files") { return; }
             let core = worker_state.borrow().core.as_ref().map(|c| c.file_core());
             if let Some(core) = core {
                 if worker_slot
@@ -107,6 +109,7 @@ pub(crate) fn register(
                     .as_ref()
                     .is_none_or(|(prior, _)| !Arc::ptr_eq(prior, &core))
                 {
+                    if worker_slot.borrow().is_some() {
                     profile_generation.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                     if let Some(task) = profile_pending.borrow_mut().take() {
                         task.abort();
@@ -114,6 +117,7 @@ pub(crate) fn register(
                     if let Some(app) = profile_ui.upgrade() {
                         reset_profile(&app.global::<FilesUi>());
                         *profile_pdf.lock().unwrap() = None;
+                    }
                     }
                     *worker_slot.borrow_mut() = Some((
                         core.clone(),
@@ -171,6 +175,38 @@ pub(crate) fn register(
             return;
         };
         let ui = app.global::<FilesUi>();
+        if action.as_str() == "load" { view_active.store(true, std::sync::atomic::Ordering::SeqCst); }
+        if action.as_str() == "release-view" {
+            view_active.store(false, std::sync::atomic::Ordering::SeqCst);
+            // The sync worker only refreshes rebuildable projections. A user
+            // transfer is a separate task and is allowed to finish.
+            worker.borrow_mut().take();
+            if preview_pending.swap(false, std::sync::atomic::Ordering::SeqCst) {
+                generation.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                if let Some(task) = pending.borrow_mut().take() { task.abort(); }
+                ui.set_busy(false);
+            }
+            *pdf_document.lock().unwrap() = None;
+            ui.set_pdf_pages(0);
+            ui.set_preview_image(slint::Image::default());
+            ui.set_preview_text("".into());
+            ui.set_preview_open(false);
+            ui.set_rows(Default::default());
+            ui.set_operations(Default::default());
+            let directory = directory.clone();
+            let generation = generation.clone();
+            let current = generation.load(std::sync::atomic::Ordering::SeqCst);
+            let view_active = view_active.clone();
+            handle.spawn(async move {
+                let mut workspace = directory.lock().await;
+                if !view_active.load(std::sync::atomic::Ordering::SeqCst) && generation.load(std::sync::atomic::Ordering::SeqCst) == current {
+                    workspace.1.entries = Vec::new();
+                    workspace.1.client = None;
+                    workspace.1.mail_search = None;
+                }
+            });
+            return;
+        }
         if action.as_str() == "release-preview" {
             if preview_pending.swap(false, std::sync::atomic::Ordering::SeqCst) {
                 generation.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
@@ -357,6 +393,11 @@ pub(crate) fn register(
                     return;
                 }
                 let ui = app.global::<FilesUi>();
+                if app.get_active_view() != "files" {
+                    ui.set_busy(false);
+                    preview_pending.store(false, std::sync::atomic::Ordering::SeqCst);
+                    return;
+                }
                 snapshot.apply(&ui);
                 if action == "connect" && result.is_ok() { ui.set_connection_revision(ui.get_connection_revision().wrapping_add(1)); }
                 if action == "more" || result.is_ok() {

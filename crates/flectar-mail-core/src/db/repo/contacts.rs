@@ -79,22 +79,31 @@ pub fn harvest(
 /// One-time fill of `contacts.folded` for rows harvested before the column
 /// existed. Cheap no-op once every row is folded.
 pub fn backfill_folded(conn: &Connection) -> Result<()> {
-    let mut stmt =
-        conn.prepare("SELECT id, COALESCE(name,''), email FROM contacts WHERE folded IS NULL")?;
-    let rows = stmt
-        .query_map([], |r| {
-            Ok((
-                r.get::<_, i64>(0)?,
-                r.get::<_, String>(1)?,
-                r.get::<_, String>(2)?,
-            ))
-        })?
-        .collect::<rusqlite::Result<Vec<_>>>()?;
-    for (id, name, email) in rows {
-        conn.execute(
-            "UPDATE contacts SET folded = ?1 WHERE id = ?2",
-            params![fold(&format!("{name} {email}")), id],
-        )?;
+    loop {
+        let rows = {
+            let mut stmt = conn.prepare(
+                "SELECT id, COALESCE(name,''), email FROM contacts WHERE folded IS NULL LIMIT 256",
+            )?;
+            stmt.query_map([], |r| {
+                Ok((
+                    r.get::<_, i64>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, String>(2)?,
+                ))
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?
+        };
+        if rows.is_empty() {
+            break;
+        }
+        let tx = conn.unchecked_transaction()?;
+        for (id, name, email) in rows {
+            tx.execute(
+                "UPDATE contacts SET folded = ?1 WHERE id = ?2",
+                params![fold(&format!("{name} {email}")), id],
+            )?;
+        }
+        tx.commit()?;
     }
     Ok(())
 }

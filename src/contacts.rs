@@ -308,6 +308,34 @@ fn apply_contact_form(app: &AppWindow, contact: &ContactRecord) {
     app.set_contact_has_selection(true);
 }
 
+/// Product teardown must not discard an editor with unsaved changes.
+pub(crate) fn has_unsaved_edits(app: &AppWindow, state: &ContactDirectoryState) -> bool {
+    if state.editing_new { return true; }
+    let Some(contact) = state.selected_id.and_then(|id| state.contacts.iter().find(|c| c.id == id)) else { return false; };
+    app.get_contact_name().as_str() != contact.name
+        || app.get_contact_email().as_str() != contact.email
+        || app.get_contact_phone().as_str() != contact.phone
+        || app.get_contact_company().as_str() != contact.company
+        || app.get_contact_job_title().as_str() != contact.job_title
+        || app.get_contact_website().as_str() != contact.website
+        || app.get_contact_birthday().as_str() != contact.birthday
+        || app.get_contact_address().as_str() != contact.postal_address
+        || app.get_contact_notes().as_str() != contact.notes
+        || app.get_contact_tags().as_str() != contact.tags
+        || app.get_contact_favorite() != contact.is_favorite
+}
+
+/// Keep the editor's source record while it has unsaved input.
+pub(crate) fn release_directory(app: &AppWindow, state: &mut ContactDirectoryState) -> bool {
+    if has_unsaved_edits(app, state) {
+        return false;
+    }
+    state.contacts = Vec::new();
+    state.rows.set_vec(Vec::new());
+    state.next_cursor = None;
+    true
+}
+
 pub(crate) fn apply_contact_directory(app: &AppWindow, state: &Rc<RefCell<ContactDirectoryState>>) {
     {
         let mut directory = state.borrow_mut();

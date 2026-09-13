@@ -319,16 +319,9 @@ impl Core {
                 mail_db_path.display()
             ))
         })?;
-        let calendar_db_path = paths.calendar_db_file();
-        tracing::info!(database = %calendar_db_path.display(), "core startup: opening calendar database");
-        let calendar_db = Db::open_calendar(&calendar_db_path).map_err(|error| {
-            CoreError::Other(format!(
-                "opening calendar database {}: {error}",
-                calendar_db_path.display()
-            ))
-        })?;
-        let files_db = Db::open_files(&paths.files_db_file())?;
-        tracing::info!("core startup: databases opened and migrated");
+        // Product databases are opened by their first operation, not by Core construction.
+        let calendar_db = Db::deferred_calendar(paths.calendar_db_file());
+        let files_db = Db::deferred_files(paths.files_db_file());
         let bus = EventBus::new();
         let core = Core {
             db,
@@ -354,7 +347,21 @@ impl Core {
         // calendar stores, then remove calendar rows that predate the durable
         // operation journal and no longer have a mail account owner.
         core.recover_cross_store_state().await?;
-        core.recover_files().await?;
+        if core.paths.files_db_file().exists()
+            || core
+                .db
+                .read(|conn| {
+                    Ok(conn.query_row(
+                        "SELECT EXISTS(SELECT 1 FROM app_settings WHERE key LIKE 'files:%')",
+                        [],
+                        |r| r.get::<_, bool>(0),
+                    )?)
+                })
+                .await?
+        {
+            core.recover_files().await?;
+            core.files_db.release_idle_connections().await?;
+        }
         let removed_staged_files = core.cleanup_orphaned_draft_files().await?;
         if removed_staged_files > 0 {
             tracing::info!(removed_staged_files, "removed orphaned draft staging files");
@@ -376,13 +383,16 @@ impl Core {
             Ok(n) if n > 0 => tracing::info!("recovered {n} orphaned in-flight action(s)"),
             _ => {}
         }
-        match core
-            .calendar_db
-            .write(|conn| repo::actions::recover_inflight(conn))
-            .await
-        {
-            Ok(n) if n > 0 => tracing::info!("recovered {n} calendar action(s)"),
-            _ => {}
+        if core.calendar_db.is_open() {
+            match core
+                .calendar_db
+                .write(|conn| repo::actions::recover_inflight(conn))
+                .await
+            {
+                Ok(n) if n > 0 => tracing::info!("recovered {n} calendar action(s)"),
+                _ => {}
+            }
+            core.calendar_db.release_idle_connections().await?;
         }
         match core
             .db
@@ -425,10 +435,11 @@ impl Core {
                     core.spawn_actor(cfg).await;
                 }
                 // Calendar sync tasks for accounts with a connected CalDAV server.
-                if let Ok(cal_accounts) = core
-                    .calendar_db
-                    .read(|conn| repo::caldav::all_configs(conn))
-                    .await
+                if core.paths.calendar_db_file().exists()
+                    && let Ok(cal_accounts) = core
+                        .calendar_db
+                        .read(|conn| repo::caldav::all_configs(conn))
+                        .await
                 {
                     for cfg in cal_accounts {
                         core.spawn_cal_task(cfg.account_id).await;
@@ -1604,6 +1615,10 @@ impl Core {
         for account_id in pending {
             tracing::warn!(account_id, "finishing interrupted account removal");
             self.complete_account_removal(account_id).await?;
+        }
+
+        if !self.paths.calendar_db_file().exists() {
+            return Ok(());
         }
 
         let valid_accounts = self
@@ -7295,6 +7310,10 @@ mod thread_read_tests {
         let core = Core::start_mail_ui(Paths::for_tests(temp.path()))
             .await
             .unwrap();
+        assert!(!core.paths.calendar_db_file().exists());
+        assert!(!core.paths.files_db_file().exists());
+        assert!(!core.calendar_db.is_open());
+        assert!(!core.files_db.is_open());
         let (thread_id, message_id) = core
             .db
             .write(|conn| {

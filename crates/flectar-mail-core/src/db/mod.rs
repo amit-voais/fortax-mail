@@ -15,12 +15,24 @@ use rusqlite::config::DbConfig;
 use std::path::{Path, PathBuf};
 use tokio::sync::{mpsc, oneshot};
 
-type Job = Box<dyn FnOnce(&mut Connection) + Send + 'static>;
+type Job = Box<dyn FnOnce(Result<&mut Connection>) + Send + 'static>;
+
+enum Command {
+    Run(Job),
+    Release(oneshot::Sender<()>),
+}
+
+struct LazyStore {
+    path: PathBuf,
+    kind: StoreKind,
+    opened: tokio::sync::OnceCell<Db>,
+}
 
 // Backpressure keeps a burst of sync/UI work from retaining an unbounded
 // number of captured query arguments while SQLite is busy with a long write.
 // The queue is deliberately much larger than normal foreground fan-out, yet
-// small enough to put a deterministic ceiling on pending-job memory.
+// small enough to bound queued job count. Captured payloads and producers
+// awaiting admission need their own byte budgets.
 const JOB_QUEUE_CAPACITY: usize = 128;
 
 #[derive(Clone, Copy)]
@@ -32,8 +44,9 @@ enum StoreKind {
 
 #[derive(Clone)]
 pub struct Db {
-    write_tx: mpsc::Sender<Job>,
-    read_tx: mpsc::Sender<Job>,
+    write_tx: Option<mpsc::Sender<Command>>,
+    read_tx: Option<mpsc::Sender<Command>>,
+    lazy: Option<std::sync::Arc<LazyStore>>,
 }
 
 fn spawn_conn_thread(
@@ -41,17 +54,38 @@ fn spawn_conn_thread(
     name: &str,
     kind: StoreKind,
     query_only: bool,
-) -> Result<mpsc::Sender<Job>> {
-    let (tx, mut rx) = mpsc::channel::<Job>(JOB_QUEUE_CAPACITY);
-    let mut conn = open_connection(&path, kind)?;
+) -> Result<mpsc::Sender<Command>> {
+    let (tx, mut rx) = mpsc::channel::<Command>(JOB_QUEUE_CAPACITY);
+    let conn = open_connection(&path, kind)?;
     if query_only {
         conn.pragma_update(None, "query_only", "ON")?;
     }
     std::thread::Builder::new()
         .name(format!("flectar-mail-db-{name}"))
         .spawn(move || {
-            while let Some(job) = rx.blocking_recv() {
-                job(&mut conn);
+            let mut connection = Some(conn);
+            while let Some(command) = rx.blocking_recv() {
+                match command {
+                    Command::Release(done) => {
+                        // Serialized behind earlier work: never close a connection
+                        // while a transaction or result is still using it.
+                        connection.take();
+                        let _ = done.send(());
+                    }
+                    Command::Run(job) => {
+                        let result = (|| {
+                            if connection.is_none() {
+                                let conn = open_connection(&path, kind)?;
+                                if query_only {
+                                    conn.pragma_update(None, "query_only", "ON")?;
+                                }
+                                connection = Some(conn);
+                            }
+                            Ok(())
+                        })();
+                        job(result.map(|()| connection.as_mut().unwrap()));
+                    }
+                }
             }
         })
         .map_err(CoreError::Io)?;
@@ -60,6 +94,7 @@ fn spawn_conn_thread(
 
 fn open_connection(path: &Path, kind: StoreKind) -> Result<Connection> {
     let conn = Connection::open(path)?;
+    conn.busy_timeout(std::time::Duration::from_secs(10))?;
     // Treat the database as data, never executable configuration. Defensive
     // mode blocks dangerous schema/file pragmas and an untrusted schema keeps
     // schema objects from invoking non-innocuous application functions.
@@ -71,19 +106,21 @@ fn open_connection(path: &Path, kind: StoreKind) -> Result<Connection> {
     // Bound each connection's private page cache. The old 64 MiB setting was
     // applied independently to the reader and writer, allowing SQLite alone
     // to retain roughly 128 MiB after a large mailbox scan. mmap remains a
-    // reclaimable file-backed fast path, but its visible window is bounded.
+    // reclaimable file-backed fast path, but a large startup badge scan makes
+    // every touched page resident and visible in the process RSS. Keep the
+    // mapping no larger than the bounded private cache so an exact mailbox
+    // count cannot leave tens of MiB mapped after startup.
     let (mmap_size, cache_size_kib) = match kind {
-        StoreKind::Mail => (67_108_864i64, 8_192i64),
+        StoreKind::Mail => (8_388_608i64, 8_192i64),
         // Calendar queries touch a tiny working set compared with mailbox/FTS
         // scans. A smaller cache avoids paying the mail profile twice.
-        StoreKind::Calendar => (16_777_216i64, 2_048i64),
-        StoreKind::Files => (33_554_432i64, 4_096i64),
+        StoreKind::Calendar => (0i64, 2_048i64),
+        StoreKind::Files => (0i64, 2_048i64),
     };
     conn.pragma_update(None, "mmap_size", mmap_size)?;
     conn.pragma_update(None, "cache_size", -cache_size_kib)?;
     // Large sorts should not compete with the renderer for resident memory.
     conn.pragma_update(None, "temp_store", "FILE")?;
-    conn.busy_timeout(std::time::Duration::from_secs(10))?;
     Ok(conn)
 }
 
@@ -133,6 +170,92 @@ fn prepare_store(
 }
 
 impl Db {
+    fn deferred(path: PathBuf, kind: StoreKind) -> Self {
+        Self {
+            write_tx: None,
+            read_tx: None,
+            lazy: Some(std::sync::Arc::new(LazyStore {
+                path,
+                kind,
+                opened: tokio::sync::OnceCell::new(),
+            })),
+        }
+    }
+
+    pub fn deferred_calendar(path: PathBuf) -> Self {
+        Self::deferred(path, StoreKind::Calendar)
+    }
+    pub fn deferred_files(path: PathBuf) -> Self {
+        Self::deferred(path, StoreKind::Files)
+    }
+
+    pub fn is_open(&self) -> bool {
+        self.lazy
+            .as_ref()
+            .is_none_or(|store| store.opened.get().is_some())
+    }
+
+    async fn ready(&self) -> Result<&Self> {
+        if let Some(store) = &self.lazy {
+            if store.opened.get().is_none() {
+                // Keep initialization alive if its first UI caller is cancelled.
+                // Otherwise a second caller could race the abandoned migration.
+                let initializing = store.clone();
+                tokio::spawn(async move {
+                    initializing
+                        .opened
+                        .get_or_try_init(|| async {
+                            let path = initializing.path.clone();
+                            let kind = initializing.kind;
+                            tokio::task::spawn_blocking(move || match kind {
+                                StoreKind::Calendar => Self::open_calendar(&path),
+                                StoreKind::Files => Self::open_files(&path),
+                                StoreKind::Mail => Self::open(&path),
+                            })
+                            .await
+                            .map_err(|error| CoreError::Other(error.to_string()))?
+                        })
+                        .await
+                        .map(|_| ())
+                })
+                .await
+                .map_err(|error| CoreError::Other(error.to_string()))??;
+            }
+            Ok(store.opened.get().unwrap())
+        } else {
+            Ok(self)
+        }
+    }
+
+    /// Release resident connections without opening an unused product store.
+    /// A subsequent job reopens its connection with the normal profile.
+    pub async fn release_idle_connections(&self) -> Result<()> {
+        let db = match &self.lazy {
+            Some(store) => match store.opened.get() {
+                Some(db) => db,
+                None => return Ok(()),
+            },
+            None => self,
+        };
+        let writer = db.write_tx.as_ref().unwrap();
+        let reader = db.read_tx.as_ref().unwrap();
+        for tx in [
+            Some(writer),
+            (!reader.same_channel(writer)).then_some(reader),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            let (done, wait) = oneshot::channel();
+            tx.send(Command::Release(done))
+                .await
+                .map_err(|_| CoreError::Other("db thread gone".into()))?;
+            wait.await
+                .map_err(|_| CoreError::Other("db thread gone".into()))?;
+        }
+        Ok(())
+    }
+
     pub fn open(path: &Path) -> Result<Self> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
@@ -144,7 +267,11 @@ impl Db {
         })?;
         let write_tx = spawn_conn_thread(path.to_path_buf(), "writer", StoreKind::Mail, false)?;
         let read_tx = spawn_conn_thread(path.to_path_buf(), "reader", StoreKind::Mail, true)?;
-        Ok(Db { write_tx, read_tx })
+        Ok(Db {
+            write_tx: Some(write_tx),
+            read_tx: Some(read_tx),
+            lazy: None,
+        })
     }
 
     /// Open the physically separate calendar store.
@@ -161,8 +288,9 @@ impl Db {
         let write_tx =
             spawn_conn_thread(path.to_path_buf(), "calendar", StoreKind::Calendar, false)?;
         Ok(Db {
-            read_tx: write_tx.clone(),
-            write_tx,
+            read_tx: Some(write_tx.clone()),
+            write_tx: Some(write_tx),
+            lazy: None,
         })
     }
 
@@ -175,18 +303,22 @@ impl Db {
             spawn_conn_thread(path.to_path_buf(), "files-writer", StoreKind::Files, false)?;
         let read_tx =
             spawn_conn_thread(path.to_path_buf(), "files-reader", StoreKind::Files, true)?;
-        Ok(Self { write_tx, read_tx })
+        Ok(Self {
+            write_tx: Some(write_tx),
+            read_tx: Some(read_tx),
+            lazy: None,
+        })
     }
 
-    async fn call<T, F>(&self, tx: &mpsc::Sender<Job>, f: F) -> Result<T>
+    async fn call<T, F>(&self, tx: &mpsc::Sender<Command>, f: F) -> Result<T>
     where
         T: Send + 'static,
         F: FnOnce(&mut Connection) -> Result<T> + Send + 'static,
     {
         let (reply_tx, reply_rx) = oneshot::channel();
-        tx.send(Box::new(move |conn| {
-            let _ = reply_tx.send(f(conn));
-        }))
+        tx.send(Command::Run(Box::new(move |conn| {
+            let _ = reply_tx.send(conn.and_then(f));
+        })))
         .await
         .map_err(|_| CoreError::Other("db thread gone".into()))?;
         reply_rx
@@ -200,7 +332,8 @@ impl Db {
         T: Send + 'static,
         F: FnOnce(&mut Connection) -> Result<T> + Send + 'static,
     {
-        self.call(&self.write_tx, f).await
+        let db = self.ready().await?;
+        db.call(db.write_tx.as_ref().unwrap(), f).await
     }
 
     /// Run a read-only closure on the reader connection.
@@ -209,7 +342,8 @@ impl Db {
         T: Send + 'static,
         F: FnOnce(&mut Connection) -> Result<T> + Send + 'static,
     {
-        self.call(&self.read_tx, f).await
+        let db = self.ready().await?;
+        db.call(db.read_tx.as_ref().unwrap(), f).await
     }
 }
 
@@ -281,14 +415,93 @@ mod connection_profile_tests {
     use rusqlite::config::DbConfig;
 
     #[tokio::test]
+    async fn deferred_store_opens_once_and_releases_without_losing_writes() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("files.db");
+        let db = Db::deferred_files(path.clone());
+        db.release_idle_connections().await.unwrap();
+        assert!(!path.exists());
+        assert!(!db.is_open());
+        let (left, right) = tokio::join!(
+            db.read(|conn| Ok(conn.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))?)),
+            db.read(|conn| Ok(conn.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))?)),
+        );
+        assert_eq!(left.unwrap(), right.unwrap());
+        db.write(|conn| {
+            conn.execute_batch(
+                "CREATE TABLE lifecycle_test(value INTEGER); INSERT INTO lifecycle_test VALUES(7);",
+            )?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+        db.release_idle_connections().await.unwrap();
+        let value = db
+            .read(|conn| {
+                Ok(conn.query_row("SELECT value FROM lifecycle_test", [], |r| {
+                    r.get::<_, i64>(0)
+                })?)
+            })
+            .await
+            .unwrap();
+        assert_eq!(value, 7);
+        assert!(
+            db.read(|conn| {
+                conn.execute("DELETE FROM lifecycle_test", [])?;
+                Ok(())
+            })
+            .await
+            .is_err()
+        );
+        db.write(|conn| {
+            conn.execute("UPDATE lifecycle_test SET value=9", [])?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+        assert_eq!(
+            db.read(
+                |conn| Ok(conn.query_row("SELECT value FROM lifecycle_test", [], |r| r
+                    .get::<_, i64>(0))?)
+            )
+            .await
+            .unwrap(),
+            9
+        );
+    }
+
+    #[tokio::test]
+    async fn deferred_calendar_retries_after_an_open_failure() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("calendar.db");
+        std::fs::create_dir(&path).unwrap();
+        let db = Db::deferred_calendar(path.clone());
+        assert!(db.read(|_| Ok(())).await.is_err());
+        std::fs::remove_dir(&path).unwrap();
+        db.read(|conn| {
+            assert!(conn.is_autocommit());
+            Ok(())
+        })
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
     async fn mail_reader_is_query_only_and_uses_the_bounded_cache_profile() {
         let temp = tempfile::tempdir().unwrap();
         let db = Db::open(&temp.path().join("mail.db")).unwrap();
 
-        let (query_only, cache_size, defensive, trusted_schema): (i64, i64, bool, i64) = db
+        let (query_only, mmap_size, cache_size, defensive, trusted_schema): (
+            i64,
+            i64,
+            i64,
+            bool,
+            i64,
+        ) = db
             .read(|conn| {
                 Ok((
                     conn.pragma_query_value(None, "query_only", |row| row.get(0))?,
+                    conn.pragma_query_value(None, "mmap_size", |row| row.get(0))?,
                     conn.pragma_query_value(None, "cache_size", |row| row.get(0))?,
                     conn.set_db_config(DbConfig::SQLITE_DBCONFIG_DEFENSIVE, true)?,
                     conn.pragma_query_value(None, "trusted_schema", |row| row.get(0))?,
@@ -298,6 +511,7 @@ mod connection_profile_tests {
             .unwrap();
 
         assert_eq!(query_only, 1);
+        assert_eq!(mmap_size, 8_388_608);
         assert_eq!(cache_size, -8_192);
         assert!(defensive);
         assert_eq!(trusted_schema, 0);

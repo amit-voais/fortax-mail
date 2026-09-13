@@ -1033,14 +1033,13 @@ fn spawn_startup_load(
         let follow_up = result.as_ref().ok().map(|snapshot| {
             (
                 snapshot.core.clone(),
-                snapshot.accounts.clone(),
                 snapshot.scope.clone(),
             )
         });
         let _ = startup_tx
             .send(StartupUpdate::Ready(result.map(Box::new)))
             .await;
-        let Some((core, accounts, scope)) = follow_up else {
+        let Some((core, scope)) = follow_up else {
             return;
         };
 
@@ -1051,8 +1050,7 @@ fn spawn_startup_load(
             let _ = metadata_tx.send(StartupUpdate::MailMetadata(result)).await;
         });
 
-        let calendar = load_startup_calendar_snapshot(&core, &accounts).await;
-        let _ = startup_tx.send(StartupUpdate::Calendar(calendar)).await;
+
     });
 }
 
@@ -1952,7 +1950,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     let calendar_state = Rc::new(RefCell::new(LocalCalendarState::new(calendar_today)));
     app.set_calendar_sources(Rc::clone(&calendar_state.borrow().source_rows).into());
     let calendar_editing_event_id = Rc::new(Cell::new(None::<i64>));
-    apply_calendar(&app, &calendar_state.borrow(), calendar_today);
+
 
     let app_weak = app.as_weak();
     let calendar_for_navigation = Rc::clone(&calendar_state);
@@ -2777,6 +2775,8 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     let mail_metadata_refresh_requested_for_core = Rc::clone(&mail_metadata_refresh_requested);
     let mail_metadata_refresh_in_progress_for_core = Rc::clone(&mail_metadata_refresh_in_progress);
     let pending_body_for_events = body_pending.clone();
+    let metadata_last_started = Cell::new(None::<std::time::Instant>);
+    let metadata_refresh_timer = slint::Timer::default();
     app.on_drain_core_updates(move || {
         let pending = {
             let mut pending = pending_core_updates_for_ui
@@ -2788,7 +2788,22 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             mail_list_refresh_requested_for_core.set(true);
             mail_metadata_refresh_requested_for_core.set(true);
         }
-        if mail_metadata_refresh_requested_for_core.get()
+        let mail_active = mail_update_app.upgrade().is_some_and(|app| app.get_active_view() == "mail");
+        let metadata_interval = Duration::from_millis(500);
+        let metadata_delay = metadata_last_started.get()
+            .and_then(|started| metadata_interval.checked_sub(started.elapsed()));
+        if mail_active && mail_metadata_refresh_requested_for_core.get()
+            && !mail_metadata_refresh_in_progress_for_core.get()
+            && let Some(delay) = metadata_delay
+            && !metadata_refresh_timer.running()
+        {
+            let app = mail_update_app.clone();
+            metadata_refresh_timer.start(slint::TimerMode::SingleShot, delay, move || {
+                if let Some(app) = app.upgrade() { app.invoke_drain_core_updates(); }
+            });
+        }
+        if mail_active && mail_metadata_refresh_requested_for_core.get()
+            && metadata_delay.is_none()
             && !mail_metadata_refresh_in_progress_for_core.get()
             && !mail_work::actions_pending(&mail_update_state.borrow())
         {
@@ -2799,6 +2814,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             if using_core && let Some(core) = core {
                 mail_metadata_refresh_requested_for_core.set(false);
                 mail_metadata_refresh_in_progress_for_core.set(true);
+                metadata_last_started.set(Some(std::time::Instant::now()));
                 let updates = mail_metadata_tx.clone();
                 mail_update_runtime.spawn(async move {
                     let result = core.load_mail_metadata(&scope).await;
@@ -2806,7 +2822,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                 });
             }
         }
-        if mail_list_refresh_requested_for_core.get()
+        if mail_active && mail_list_refresh_requested_for_core.get()
             && !mail_list_refresh_in_progress_for_core.get()
             && !mail_work::actions_pending(&mail_update_state.borrow())
         {
@@ -2847,6 +2863,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         }
         if pending.calendar_changed
             && let Some(app) = mail_update_app.upgrade()
+            && app.get_active_view() == "calendar"
             && let Some(core) = mail_update_state.borrow().core.clone()
         {
             let today = Local::now().date_naive();
@@ -2862,6 +2879,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                 apply_calendar(&app, &calendar, today);
             }
         }
+        if !mail_active { return; }
         let selected_thread = {
             let state = mail_update_state.borrow();
             let selected = state.selected_id.and_then(|selected_id| {
@@ -3077,6 +3095,8 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         startup_raw_tx,
         UiWake::new(app.as_weak(), |app| app.invoke_drain_startup_updates()),
     );
+    let product_generation = Rc::new(Cell::new(0_u64));
+    let startup_product_generation = product_generation.clone();
     let startup_rx = Rc::new(RefCell::new(startup_rx));
     let startup_state = Rc::clone(&state);
     let startup_calendar = Rc::clone(&calendar_state);
@@ -3264,6 +3284,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                     refresh_list_metadata(&app, &startup_state);
                     app.set_startup_hydrated(true);
                     app.set_startup_ready(true);
+                    app.invoke_product_changed(app.get_active_view());
                     app.set_startup_failed(false);
                     app.set_list_status(UiMessage::plain("Loading local data…"));
                     schedule_profile_avatar_fetches(
@@ -3312,14 +3333,17 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                         refresh_list_metadata(&app, &startup_state);
                     }
                 },
-                StartupUpdate::Calendar(StartupCalendarSnapshot {
+                StartupUpdate::Calendar { generation, month, snapshot: StartupCalendarSnapshot {
                     calendar_connections,
                     calendar_events,
                     calendar_accounts,
                     calendar_sources,
-                }) => {
-                    startup_state.borrow_mut().calendar_connections =
-                        calendar_connections;
+                }} => {
+                    if generation != startup_product_generation.get() || app.get_active_view() != "calendar" || month != startup_calendar.borrow().visible_month { continue; }
+                    {
+                        let mut state = startup_state.borrow_mut();
+                        state.calendar_connections = calendar_connections;
+                    }
                     {
                         let mut calendar = startup_calendar.borrow_mut();
                         calendar.events = calendar_events;
@@ -3329,7 +3353,100 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                     }
                     refresh_connected_accounts(&app, &startup_state);
                 }
+                StartupUpdate::Connections { calendar } => {
+                    let mut state = startup_state.borrow_mut();
+                    state.calendar_connections = calendar;
+                    drop(state);
+                    refresh_connected_accounts(&app, &startup_state);
+                }
             }
+        }
+    });
+
+    let product_app = app.as_weak();
+    let product_state = state.clone();
+    let product_calendar = calendar_state.clone();
+    let product_runtime = runtime.clone();
+    let product_updates = startup_tx.clone();
+    let product_contacts = contact_state.clone();
+    let product_contacts_loaded = contacts_loaded.clone();
+    let product_contacts_loading = contacts_loading.clone();
+    let product_contact_generation = contact_load_generation.clone();
+    let product_body_generation = body_generation.clone();
+    let product_body_pending = body_pending.clone();
+    let product_body_requests = body_requests.clone();
+    let previous_product = Rc::new(RefCell::new(String::from("mail")));
+    app.on_product_changed(move |view| {
+        let Some(app) = product_app.upgrade() else { return; };
+        let generation = product_generation.get().wrapping_add(1);
+        product_generation.set(generation);
+        let previous = previous_product.replace(view.to_string());
+        if previous != view.as_str() {
+            if previous == "mail" {
+                product_body_generation.set(product_body_generation.get().wrapping_add(1));
+                product_body_pending.set(None);
+                product_body_requests.send_replace(None);
+                let mut state = product_state.borrow_mut();
+                state.email_renderer.borrow_mut().clear();
+                release_unselected_bodies(&mut state.messages, None);
+                clear_reader_projection(&app);
+                app.set_selected_source("".into());
+                app.set_selected_plain_text("".into());
+            }
+            if previous == "calendar" {
+                let mut calendar = product_calendar.borrow_mut();
+                calendar.events = Vec::new();
+                calendar.sources = Vec::new();
+                calendar.accounts = Vec::new();
+                app.set_calendar_events(Default::default());
+                app.set_calendar_month_days(Default::default());
+                app.set_calendar_week_days(Default::default());
+                calendar.source_rows.reconcile_by(Vec::new(), |row| row.id, |_, _| true);
+            }
+            if previous == "contacts" {
+                // Invalidate pending pages even when keeping a dirty editor.
+                product_contact_generation.set(product_contact_generation.get().wrapping_add(1));
+                product_contacts_loading.set(false);
+                app.set_contact_loading_more(false);
+                if contacts::release_directory(&app, &mut product_contacts.borrow_mut()) {
+                    product_contacts_loaded.set(false);
+                }
+            }
+            if previous == "files" {
+                app.global::<FilesUi>().invoke_command("release-view".into(), "".into(), "".into());
+            }
+        }
+        let Some(core) = product_state.borrow().core.clone() else { return; };
+        let store_core = core.file_core();
+        let active = view.to_string();
+        product_runtime.spawn(async move {
+            if active != "calendar" { let _ = store_core.calendar_db.release_idle_connections().await; }
+            if active != "files" { let _ = store_core.files_db.release_idle_connections().await; }
+            if active != "mail" { let _ = store_core.db.release_idle_connections().await; }
+        });
+        if app.get_settings_open() {
+            let updates = product_updates.clone();
+            product_runtime.spawn(async move {
+                let calendar = core.load_calendar_connections().await;
+                let _ = updates.send(StartupUpdate::Connections {
+                    calendar: calendar.unwrap_or_default(),
+                }).await;
+            });
+        } else if view == "calendar" {
+            let month = product_calendar.borrow().visible_month;
+            let accounts = product_state.borrow().connected_accounts.clone();
+            let updates = product_updates.clone();
+            product_runtime.spawn(async move {
+                let snapshot = load_startup_calendar_snapshot(&core, &accounts, month).await;
+                let _ = updates.send(StartupUpdate::Calendar { generation, month, snapshot }).await;
+            });
+        } else if view == "contacts" {
+            if !contacts::has_unsaved_edits(&app, &product_contacts.borrow()) { app.invoke_load_contacts(); }
+        } else if view == "files" {
+            app.global::<FilesUi>().invoke_command("load".into(), "".into(), "".into());
+        } else if view == "mail" {
+            app.invoke_drain_core_updates();
+            let _ = render_current(&app, &product_state, &product_runtime);
         }
     });
 

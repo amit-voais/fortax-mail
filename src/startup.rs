@@ -11,7 +11,6 @@ use crate::{
     theme::stored_color,
     ui_dispatch::UiWake,
 };
-use chrono::Local;
 use flectar_mail_core::{
     config::Paths,
     events::CoreEvent,
@@ -390,7 +389,10 @@ pub(crate) enum StartupUpdate {
     },
     Ready(Result<Box<StartupSnapshot>, String>),
     MailMetadata(Result<mail::MailMetadata, String>),
-    Calendar(StartupCalendarSnapshot),
+    Calendar { generation: u64, month: chrono::NaiveDate, snapshot: StartupCalendarSnapshot },
+    Connections {
+        calendar: Vec<CalendarConnection>,
+    },
 }
 
 const MAX_PENDING_THREAD_UPDATES: usize = 2_048;
@@ -475,8 +477,9 @@ pub(crate) async fn load_startup_mail_metadata(
 pub(crate) async fn load_startup_calendar_snapshot(
     core: &CoreMailSource,
     accounts: &[Account],
+    visible_month: chrono::NaiveDate,
 ) -> StartupCalendarSnapshot {
-    let calendar_range = calendar_range_millis(Local::now().date_naive());
+    let calendar_range = calendar_range_millis(visible_month);
     let (connections, events, calendars) = tokio::join!(
         core.load_calendar_connections(),
         async {

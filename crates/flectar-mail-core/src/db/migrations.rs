@@ -6,6 +6,9 @@ const MIGRATIONS: &[&str] = &[
     include_str!("migrations/001_init.sql"),
     include_str!("migrations/002_attachment_files.sql"),
     include_str!("migrations/003_attachment_content.sql"),
+    include_str!("migrations/004_carddav.sql"),
+    include_str!("migrations/005_mailbox_count_indexes.sql"),
+    include_str!("migrations/006_contact_recovery.sql"),
 ];
 pub const LATEST_VERSION: i64 = MIGRATIONS.len() as i64;
 
@@ -103,6 +106,9 @@ mod tests {
             "attachment_text_fts",
             "attachments",
             "contact_accounts",
+            "carddav_addressbooks",
+            "carddav_config",
+            "carddav_objects",
             "contacts",
             "cross_store_operations",
             "draft_attachments",
@@ -136,6 +142,25 @@ mod tests {
             conn.pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0))
                 .unwrap(),
             LATEST_VERSION
+        );
+
+        let index_columns = |name: &str| {
+            conn.prepare("SELECT name FROM pragma_index_info(?1) ORDER BY seqno")
+                .unwrap()
+                .query_map([name], |row| row.get::<_, String>(0))
+                .unwrap()
+                .collect::<rusqlite::Result<Vec<_>>>()
+                .unwrap()
+        };
+        assert_eq!(
+            index_columns("idx_messages_thread_folder_account"),
+            ["thread_id", "folder_id", "account_id"]
+        );
+        assert_eq!(index_columns("idx_messages_body_fetching"), ["id"]);
+        assert_eq!(index_columns("idx_contacts_unfolded"), ["id"]);
+        assert_eq!(
+            index_columns("idx_threads_unread"),
+            ["account_id", "starred_count"]
         );
 
         for forbidden in ["calendar_events", "calendars", "caldav_config"] {
@@ -210,6 +235,43 @@ mod tests {
                 [],
             )
             .is_err()
+        );
+    }
+
+    #[test]
+    fn memory_upgrade_repairs_legacy_contacts_in_multiple_batches() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
+        for sql in &MIGRATIONS[..3] {
+            conn.execute_batch(sql).unwrap();
+        }
+        conn.pragma_update(None, "user_version", 3).unwrap();
+        seed_mail_graph(&conn);
+        for id in 1..=600 {
+            conn.execute(
+                "INSERT INTO contacts(id, name, email) VALUES(?1, 'Café', ?2)",
+                params![id, format!("person-{id}@example.com")],
+            )
+            .unwrap();
+        }
+        run(&mut conn).unwrap();
+        crate::db::repo::contacts::backfill_folded(&conn).unwrap();
+        let repaired: i64 = conn
+            .query_row(
+                "SELECT count(*) FROM contacts WHERE folded LIKE 'cafe person-%'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(repaired, 600);
+        let changes = conn.total_changes();
+        run(&mut conn).unwrap();
+        crate::db::repo::contacts::backfill_folded(&conn).unwrap();
+        assert_eq!(conn.total_changes(), changes);
+        assert_eq!(
+            conn.query_row("SELECT count(*) FROM messages", [], |r| r.get::<_, i64>(0))
+                .unwrap(),
+            1
         );
     }
 

@@ -239,6 +239,14 @@ pub(super) fn render_current(
     state: &Rc<RefCell<InboxState>>,
     runtime: &tokio::runtime::Runtime,
 ) -> Result<(), String> {
+    if app.get_active_view() != "mail" {
+        let mut state = state.borrow_mut();
+        state.email_renderer.borrow_mut().clear();
+        release_unselected_bodies(&mut state.messages, None);
+        app.set_email_tiles(Default::default());
+        app.set_email_links(Default::default());
+        return Ok(());
+    }
     // Keep list rows lightweight. SQLite already owns the durable body cache.
     {
         let mut state = state.borrow_mut();

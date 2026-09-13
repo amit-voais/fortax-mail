@@ -18,6 +18,8 @@ export struct FileRow {
 }
 export struct OperationRow {id:string,action:string,state:string,error:string,bytes:string}
 export global FilesUi {
+    in-out property <bool> setup-open: false;
+    in-out property <bool> navigation-open: false;
     callback context-changed;
     in-out property <[OperationRow]> operations;
     in-out property <bool> transfers-open: false;
@@ -155,7 +157,7 @@ export component FilesView inherits Rectangle {
     in property <string> layout-mode: "default";
     in property <[AccountRow]> account-model;
     in-out property <bool> sidebar-collapsed: false;
-    private property <bool> navigation-open: false;
+    in-out property <bool> navigation-open <=> FilesUi.navigation-open;
     private property <bool> single-surface: root.compact || root.layout-mode == "minimal";
     private property <bool> list-visible: !root.single-surface || !FilesUi.preview-open;
     private property <bool> detail-visible: !root.single-surface || FilesUi.preview-open;
@@ -197,7 +199,7 @@ export component FilesView inherits Rectangle {
     }
 
     Timer { interval: 60s; running: root.active && FilesUi.connected && !FilesUi.attachments && !FilesUi.busy && FilesUi.dialog == "" && !FilesUi.preview-open; triggered => { FilesUi.command("poll", "", ""); } }
-    in-out property <bool> setup: false;
+    in-out property <bool> setup <=> FilesUi.setup-open;
     private property <bool> connection-attempted: false;
     changed setup => { root.connection-attempted = false; }
     private property <int> connection-revision: FilesUi.connection-revision;

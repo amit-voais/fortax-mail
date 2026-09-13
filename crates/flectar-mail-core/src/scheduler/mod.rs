@@ -58,11 +58,15 @@ pub fn spawn(
                 .await
                 .ok()
                 .flatten();
-            let calendar_due = calendar_db
-                .read(|conn| repo::actions::next_due_at(conn))
-                .await
-                .ok()
-                .flatten();
+            let calendar_due = if calendar_db.is_open() {
+                calendar_db
+                    .read(|conn| repo::actions::next_due_at(conn))
+                    .await
+                    .ok()
+                    .flatten()
+            } else {
+                None
+            };
             if let Some(due_at) = mail_due.into_iter().chain(calendar_due).min()
                 && due_at <= now
                 && due_at > nudged_until - 60_000
@@ -85,7 +89,7 @@ pub fn spawn(
                 .read(|conn| Ok(repo::settings::get(conn)?.meeting_notify_lead_minutes))
                 .await
                 .unwrap_or(0);
-            if lead_min > 0 {
+            if lead_min > 0 && calendar_db.is_open() {
                 let lead_ms = lead_min * 60_000;
                 if let Ok(due) = calendar_db
                     .read(move |conn| repo::calendar::upcoming_for_notify(conn, now, lead_ms))

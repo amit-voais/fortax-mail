@@ -505,5 +505,48 @@ fn automatic_selection_hydrates_and_reader_controls_are_responsive_and_keyboard_
     renderer_settings.invoke_choose("gpu".into());
     assert_eq!(renderer_settings.get_preferred(), "cpu");
     assert!(!renderer_settings.get_error().is_empty());
+    app.set_settings_open(false);
+    for view in ["calendar", "contacts", "files", "mail", "calendar", "mail"] {
+        app.set_active_view(view.into());
+        draw(&format!("product-switch-{view}"), 1280, 900);
+        if view == "mail" {
+            assert!(app.get_email_viewport_width() > 1.0);
+            assert!(app.get_email_viewport_height() > 1.0);
+        }
+    }
+    // Releasing a product must retain the source record of an edited contact.
+    let contact = ContactRecord {
+        id: 1,
+        name: "Original name".into(),
+        email: "contact@example.com".into(),
+        phone: String::new(),
+        company: String::new(),
+        job_title: String::new(),
+        website: String::new(),
+        birthday: String::new(),
+        postal_address: String::new(),
+        notes: String::new(),
+        tags: String::new(),
+        is_favorite: false,
+        interactions: 0,
+        last_interacted: None,
+        account_ids: Vec::new(),
+        is_managed: false,
+    };
+    let directory = Rc::new(RefCell::new(ContactDirectoryState::new(vec![contact], false)));
+    apply_contact_directory(&app, &directory);
+    app.set_contact_name("Unsaved name".into());
+    assert!(!contacts::release_directory(&app, &mut directory.borrow_mut()));
+    app.set_active_view("contacts".into());
+    draw("contact-edit-before-switch", 1280, 900);
+    app.set_active_view("mail".into());
+    draw("contact-edit-away", 1280, 900);
+    app.set_active_view("contacts".into());
+    draw("contact-edit-after-switch", 1280, 900);
+    assert_eq!(app.get_contact_name(), "Unsaved name");
+    assert_eq!(directory.borrow().contacts.len(), 1);
+    app.set_contact_name("Original name".into());
+    assert!(contacts::release_directory(&app, &mut directory.borrow_mut()));
+    assert!(directory.borrow().contacts.is_empty());
     app.hide().unwrap();
 }
