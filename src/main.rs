@@ -68,9 +68,9 @@ use favicon::{
 };
 use flectar_mail_core::config::Paths;
 use flectar_mail_core::models::{
-    Account, AccountConfig, AddPasswordAccountArgs, CalendarConnection, ContactRecord,
-    ContactRecordCursor, ContactRecordPage, CreateEventArgs, DraftAttachmentIn, Label,
-    MailProtocol, Provider, ThreadCursor, UpdateEventArgs,
+    Account, AccountConfig, AddPasswordAccountArgs, CalendarConnection, CardDavConnection,
+    ContactRecord, ContactRecordCursor, ContactRecordPage, CreateEventArgs, DraftAttachmentIn,
+    Label, MailProtocol, Provider, ThreadCursor, UpdateEventArgs,
 };
 #[cfg(test)]
 use mail::fixture_messages;
@@ -404,6 +404,7 @@ struct UiTaskUpdate {
     accounts: Option<mail::AccountSnapshot>,
     account_removal: Option<AccountRemovalUpdate>,
     calendar_connections: Option<Vec<CalendarConnection>>,
+    carddav_connections: Option<Vec<CardDavConnection>>,
     calendar_error: Option<(i64, Option<String>)>,
     clear_account_form: bool,
     finishes_account_setup: bool,
@@ -445,6 +446,7 @@ struct InboxState {
     connected_accounts: Vec<Account>,
     account_configs: Vec<AccountConfig>,
     calendar_connections: Vec<CalendarConnection>,
+    carddav_connections: Vec<CardDavConnection>,
     calendar_errors: HashMap<i64, String>,
     profile_avatar_loader: Option<ProfileAvatarLoader>,
     profile_avatar_images: HashMap<i64, ProfileAvatarImages>,
@@ -814,6 +816,7 @@ impl InboxState {
             connected_accounts: Vec::new(),
             account_configs: Vec::new(),
             calendar_connections: Vec::new(),
+            carddav_connections: Vec::new(),
             calendar_errors: HashMap::new(),
             profile_avatar_loader,
             profile_avatar_images: HashMap::new(),
@@ -1736,6 +1739,13 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                 .iter()
                 .find(|contact| contact.id == i64::from(id))
                 .cloned();
+            let new_contact_accounts = contacts_for_save
+                .borrow()
+                .scope
+                .strip_prefix("Account:")
+                .and_then(|value| value.parse::<i64>().ok())
+                .into_iter()
+                .collect::<Vec<_>>();
             let record = ContactRecord {
                 id: i64::from(id),
                 name: name.trim().to_owned(),
@@ -1756,7 +1766,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                 account_ids: previous
                     .as_ref()
                     .map(|contact| contact.account_ids.clone())
-                    .unwrap_or_default(),
+                    .unwrap_or(new_contact_accounts),
                 is_managed: true,
             };
             let using_core = contacts_for_save.borrow().using_core;
@@ -2777,6 +2787,9 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     let pending_body_for_events = body_pending.clone();
     let metadata_last_started = Cell::new(None::<std::time::Instant>);
     let metadata_refresh_timer = slint::Timer::default();
+    let contacts_loaded_for_core = Rc::clone(&contacts_loaded);
+    let contacts_loading_for_core = Rc::clone(&contacts_loading);
+    let contact_state_for_core_updates = Rc::clone(&contact_state);
     app.on_drain_core_updates(move || {
         let pending = {
             let mut pending = pending_core_updates_for_ui
@@ -2879,7 +2892,20 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                 apply_calendar(&app, &calendar, today);
             }
         }
-        if !mail_active { return; }
+        if pending.contacts_changed
+            && let Some(app) = mail_update_app.upgrade()
+        {
+            contacts_loaded_for_core.set(false);
+            if app.get_active_view() == "contacts"
+                && !contacts_loading_for_core.get()
+                && !contacts::has_unsaved_edits(&app, &contact_state_for_core_updates.borrow())
+            {
+                app.invoke_load_contacts();
+            }
+        }
+        if !mail_active {
+            return;
+        }
         let selected_thread = {
             let state = mail_update_state.borrow();
             let selected = state.selected_id.and_then(|selected_id| {
@@ -3335,14 +3361,21 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                 },
                 StartupUpdate::Calendar { generation, month, snapshot: StartupCalendarSnapshot {
                     calendar_connections,
+                    carddav_connections,
                     calendar_events,
                     calendar_accounts,
                     calendar_sources,
                 }} => {
-                    if generation != startup_product_generation.get() || app.get_active_view() != "calendar" || month != startup_calendar.borrow().visible_month { continue; }
+                    if generation != startup_product_generation.get()
+                        || app.get_active_view() != "calendar"
+                        || month != startup_calendar.borrow().visible_month
+                    {
+                        continue;
+                    }
                     {
                         let mut state = startup_state.borrow_mut();
                         state.calendar_connections = calendar_connections;
+                        state.carddav_connections = carddav_connections;
                     }
                     {
                         let mut calendar = startup_calendar.borrow_mut();
@@ -3353,9 +3386,10 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                     }
                     refresh_connected_accounts(&app, &startup_state);
                 }
-                StartupUpdate::Connections { calendar } => {
+                StartupUpdate::Connections { calendar, contacts } => {
                     let mut state = startup_state.borrow_mut();
                     state.calendar_connections = calendar;
+                    state.carddav_connections = contacts;
                     drop(state);
                     refresh_connected_accounts(&app, &startup_state);
                 }
@@ -3427,9 +3461,13 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         if app.get_settings_open() {
             let updates = product_updates.clone();
             product_runtime.spawn(async move {
-                let calendar = core.load_calendar_connections().await;
+                let (calendar, contacts) = tokio::join!(
+                    core.load_calendar_connections(),
+                    core.load_carddav_connections()
+                );
                 let _ = updates.send(StartupUpdate::Connections {
                     calendar: calendar.unwrap_or_default(),
+                    contacts: contacts.unwrap_or_default(),
                 }).await;
             });
         } else if view == "calendar" {
@@ -3603,6 +3641,10 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                 state.calendar_connections = connections;
                 refresh_account_rows = true;
             }
+            if let Some(connections) = update.carddav_connections {
+                ui_task_state.borrow_mut().carddav_connections = connections;
+                refresh_account_rows = true;
+            }
             if let Some((account_id, error)) = update.calendar_error {
                 let mut state = ui_task_state.borrow_mut();
                 match error.filter(|error| {
@@ -3769,6 +3811,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                     message,
                     accounts,
                     calendar_connections: None,
+                    carddav_connections: None,
                     calendar_error: None,
                     account_removal: None,
                     clear_account_form: false,
@@ -3879,6 +3922,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                         calendar_sources,
                     }),
                     calendar_connections: core.load_calendar_connections().await.ok(),
+                    carddav_connections: core.load_carddav_connections().await.ok(),
                     calendar_error: None,
                     clear_account_form: false,
                     finishes_account_setup: true,
@@ -3920,6 +3964,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                     message,
                     accounts,
                     calendar_connections: None,
+                    carddav_connections: None,
                     calendar_error: None,
                     account_removal: None,
                     clear_account_form: false,
@@ -5259,6 +5304,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                             ),
                             accounts,
                             calendar_connections: None,
+                            carddav_connections: None,
                             calendar_error: None,
                             account_removal: None,
                             clear_account_form: true,
@@ -5271,6 +5317,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                         message: UiMessage::detail("Account setup failed: {}", error),
                         accounts: None,
                         calendar_connections: None,
+                        carddav_connections: None,
                         calendar_error: None,
                         account_removal: None,
                         clear_account_form: false,
@@ -5344,6 +5391,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                         ),
                         accounts,
                         calendar_connections: core.load_calendar_connections().await.ok(),
+                        carddav_connections: core.load_carddav_connections().await.ok(),
                         calendar_error: None,
                         account_removal: None,
                         clear_account_form: false,
@@ -5356,6 +5404,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                     message: UiMessage::detail("OAuth failed: {}", error),
                     accounts: None,
                     calendar_connections: None,
+                    carddav_connections: None,
                     calendar_error: None,
                     account_removal: None,
                     clear_account_form: false,
@@ -5415,6 +5464,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                         ),
                         accounts,
                         calendar_connections: core.load_calendar_connections().await.ok(),
+                        carddav_connections: core.load_carddav_connections().await.ok(),
                         calendar_error: None,
                         account_removal: None,
                         clear_account_form: false,
@@ -5427,6 +5477,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                     message: UiMessage::detail("Reconnection failed: {}", error),
                     accounts: None,
                     calendar_connections: None,
+                    carddav_connections: None,
                     calendar_error: None,
                     account_removal: None,
                     clear_account_form: false,
@@ -5510,6 +5561,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                     message,
                     accounts: None,
                     calendar_connections: connections,
+                    carddav_connections: None,
                     calendar_error,
                     account_removal: None,
                     clear_account_form: false,
@@ -5549,6 +5601,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                     message,
                     accounts: None,
                     calendar_connections: connections,
+                    carddav_connections: None,
                     calendar_error: None,
                     account_removal: None,
                     clear_account_form: false,
@@ -5587,6 +5640,122 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                     message,
                     accounts: None,
                     calendar_connections: connections,
+                    carddav_connections: None,
+                    calendar_error: None,
+                    account_removal: None,
+                    clear_account_form: false,
+                    finishes_account_setup: false,
+                    finishes_oauth: false,
+                    close_to_tray: None,
+                })
+                .await;
+        });
+    });
+
+    let state_for_carddav = Rc::clone(&state);
+    let runtime_for_carddav = Rc::clone(&runtime);
+    let updates_for_carddav = ui_task_tx.clone();
+    let app_for_carddav = app.as_weak();
+    app.on_connect_carddav(move |account_id, url, username, password| {
+        let Some(core) = state_for_carddav.borrow().core.clone() else {
+            return;
+        };
+        let updates = updates_for_carddav.clone();
+        let app = app_for_carddav.clone();
+        runtime_for_carddav.spawn(async move {
+            let result = core
+                .connect_carddav(
+                    i64::from(account_id),
+                    url.to_string(),
+                    username.to_string(),
+                    password.to_string(),
+                )
+                .await;
+            let connected = result.is_ok();
+            let message = match result {
+                Ok(_) => UiMessage::plain("CardDAV connected and initial sync started."),
+                Err(error) => UiMessage::detail("Could not connect CardDAV: {}", error),
+            };
+            if connected {
+                let _ = app.upgrade_in_event_loop(|app| {
+                    app.set_carddav_account_id(-1);
+                    app.set_carddav_password("".into());
+                    app.set_carddav_manage_existing(false);
+                });
+            }
+            let connections = core.load_carddav_connections().await.ok();
+            let _ = updates
+                .send(UiTaskUpdate {
+                    message,
+                    accounts: None,
+                    calendar_connections: None,
+                    carddav_connections: connections,
+                    calendar_error: None,
+                    account_removal: None,
+                    clear_account_form: false,
+                    finishes_account_setup: false,
+                    finishes_oauth: false,
+                    close_to_tray: None,
+                })
+                .await;
+        });
+    });
+
+    let state_for_carddav_toggle = Rc::clone(&state);
+    let runtime_for_carddav_toggle = Rc::clone(&runtime);
+    let updates_for_carddav_toggle = ui_task_tx.clone();
+    app.on_set_account_carddav_enabled(move |account_id, enabled| {
+        let Some(core) = state_for_carddav_toggle.borrow().core.clone() else {
+            return;
+        };
+        let updates = updates_for_carddav_toggle.clone();
+        runtime_for_carddav_toggle.spawn(async move {
+            let message = match core
+                .set_account_carddav_enabled(i64::from(account_id), enabled)
+                .await
+            {
+                Ok(()) if enabled => UiMessage::plain("CardDAV sync enabled."),
+                Ok(()) => UiMessage::plain("CardDAV sync paused."),
+                Err(error) => UiMessage::detail("Could not update CardDAV sync: {}", error),
+            };
+            let connections = core.load_carddav_connections().await.ok();
+            let _ = updates
+                .send(UiTaskUpdate {
+                    message,
+                    accounts: None,
+                    calendar_connections: None,
+                    carddav_connections: connections,
+                    calendar_error: None,
+                    account_removal: None,
+                    clear_account_form: false,
+                    finishes_account_setup: false,
+                    finishes_oauth: false,
+                    close_to_tray: None,
+                })
+                .await;
+        });
+    });
+
+    let state_for_carddav_disconnect = Rc::clone(&state);
+    let runtime_for_carddav_disconnect = Rc::clone(&runtime);
+    let updates_for_carddav_disconnect = ui_task_tx.clone();
+    app.on_disconnect_carddav(move |account_id| {
+        let Some(core) = state_for_carddav_disconnect.borrow().core.clone() else {
+            return;
+        };
+        let updates = updates_for_carddav_disconnect.clone();
+        runtime_for_carddav_disconnect.spawn(async move {
+            let message = match core.disconnect_carddav(i64::from(account_id)).await {
+                Ok(()) => UiMessage::plain("CardDAV disconnected."),
+                Err(error) => UiMessage::detail("Could not disconnect CardDAV: {}", error),
+            };
+            let connections = core.load_carddav_connections().await.ok();
+            let _ = updates
+                .send(UiTaskUpdate {
+                    message,
+                    accounts: None,
+                    calendar_connections: None,
+                    carddav_connections: connections,
                     calendar_error: None,
                     account_removal: None,
                     clear_account_form: false,

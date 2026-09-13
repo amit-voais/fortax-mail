@@ -35,7 +35,7 @@ fraction of the memory of a typical web-based mail client.
 - **Offline by design.** Your mailbox and calendar are stored locally, so your
   synced data remains useful without a connection.
 - **Works with your accounts.** Connect Gmail, Outlook and Microsoft 365, or
-  standards-based IMAP/SMTP, JMAP, and CalDAV services.
+  standards-based IMAP/SMTP, JMAP, CalDAV, and CardDAV services.
 - **Privacy-conscious defaults.** Remote images are blocked until you allow
   them, helping prevent tracking pixels from reporting when you read a message.
 - **Security by architecture.** Email content is never opened in a WebView.

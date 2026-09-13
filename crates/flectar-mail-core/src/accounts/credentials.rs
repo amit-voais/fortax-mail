@@ -31,6 +31,9 @@ pub enum Slot {
     AiApiKey,
     /// Generic-CalDAV app password (Google CalDAV reuses the OAuth tokens).
     CaldavPassword,
+    /// CardDAV app password. Kept separate because a user may configure
+    /// different DAV providers for calendars and contacts.
+    CarddavPassword,
 }
 
 impl Slot {
@@ -44,6 +47,7 @@ impl Slot {
             Slot::OAuthBundle => "oauth_bundle",
             Slot::AiApiKey => "ai_api_key",
             Slot::CaldavPassword => "caldav_password",
+            Slot::CarddavPassword => "carddav_password",
         }
     }
 }
@@ -577,6 +581,7 @@ fn system_delete_all(account_id: i64) -> Result<()> {
             Slot::OAuthBundle,
             Slot::AiApiKey,
             Slot::CaldavPassword,
+            Slot::CarddavPassword,
         ] {
             system_delete(account_id, slot)?;
         }

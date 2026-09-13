@@ -219,6 +219,7 @@ pub(super) fn register_data_management_callbacks(
                     message,
                     accounts: None,
                     calendar_connections: None,
+                    carddav_connections: None,
                     calendar_error: None,
                     account_removal: None,
                     clear_account_form: false,

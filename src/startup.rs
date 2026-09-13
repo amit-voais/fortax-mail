@@ -14,7 +14,9 @@ use crate::{
 use flectar_mail_core::{
     config::Paths,
     events::CoreEvent,
-    models::{Account, AccountConfig, CalendarConnection, Settings, ThreadCursor},
+    models::{
+        Account, AccountConfig, CalendarConnection, CardDavConnection, Settings, ThreadCursor,
+    },
 };
 use serde::{Deserialize, Serialize};
 use slint::ComponentHandle;
@@ -377,6 +379,7 @@ pub(crate) struct StartupSnapshot {
 
 pub(crate) struct StartupCalendarSnapshot {
     pub(crate) calendar_connections: Vec<CalendarConnection>,
+    pub(crate) carddav_connections: Vec<CardDavConnection>,
     pub(crate) calendar_events: Vec<LocalCalendarEvent>,
     pub(crate) calendar_accounts: Vec<LocalCalendarAccount>,
     pub(crate) calendar_sources: Vec<LocalCalendarSource>,
@@ -392,6 +395,7 @@ pub(crate) enum StartupUpdate {
     Calendar { generation: u64, month: chrono::NaiveDate, snapshot: StartupCalendarSnapshot },
     Connections {
         calendar: Vec<CalendarConnection>,
+        contacts: Vec<CardDavConnection>,
     },
 }
 
@@ -406,6 +410,7 @@ pub(crate) struct PendingCoreUpdates {
     pub(crate) all_mail_changed: bool,
     pub(crate) account_states: HashMap<i64, (String, Option<String>)>,
     pub(crate) calendar_changed: bool,
+    pub(crate) contacts_changed: bool,
 }
 
 impl PendingCoreUpdates {
@@ -480,8 +485,9 @@ pub(crate) async fn load_startup_calendar_snapshot(
     visible_month: chrono::NaiveDate,
 ) -> StartupCalendarSnapshot {
     let calendar_range = calendar_range_millis(visible_month);
-    let (connections, events, calendars) = tokio::join!(
+    let (connections, carddav_connections, events, calendars) = tokio::join!(
         core.load_calendar_connections(),
+        core.load_carddav_connections(),
         async {
             match calendar_range {
                 Ok((start_ms, end_ms)) => core.load_events(start_ms, end_ms).await,
@@ -493,6 +499,7 @@ pub(crate) async fn load_startup_calendar_snapshot(
 
     StartupCalendarSnapshot {
         calendar_connections: connections.unwrap_or_default(),
+        carddav_connections: carddav_connections.unwrap_or_default(),
         calendar_events: events
             .unwrap_or_default()
             .into_iter()
@@ -542,12 +549,21 @@ pub(crate) fn spawn_core_event_listener(
                         .calendar_changed = true;
                     true
                 }
+                Ok(CoreEvent::ContactsUpdated { .. }) => {
+                    pending
+                        .lock()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner())
+                        .contacts_changed = true;
+                    true
+                }
                 Err(RecvError::Lagged(_)) => {
                     let mut pending = pending
                         .lock()
                         .unwrap_or_else(|poisoned| poisoned.into_inner());
                     pending.changed_threads.clear();
                     pending.all_mail_changed = true;
+                    pending.calendar_changed = true;
+                    pending.contacts_changed = true;
                     true
                 }
                 Ok(_) => false,

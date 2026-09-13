@@ -3,7 +3,7 @@ use crate::models::{
     Address, ContactRecord, ContactRecordCursor, ContactRecordPage, ContactSuggestion,
 };
 use crate::search::fold;
-use rusqlite::{Connection, Row, params};
+use rusqlite::{Connection, OptionalExtension, Row, params};
 
 fn record_from_row(row: &Row<'_>) -> rusqlite::Result<ContactRecord> {
     let account_ids = row
@@ -520,6 +520,22 @@ pub fn delete_record(conn: &Connection, id: i64) -> Result<()> {
         return Err(crate::error::CoreError::Other("contact not found".into()));
     }
     Ok(())
+}
+
+pub fn get_record(conn: &Connection, id: i64) -> Result<Option<ContactRecord>> {
+    conn.query_row(
+        "SELECT id, COALESCE(name, ''), email, phone, company, job_title,
+                website, birthday, postal_address, notes, tags, is_favorite,
+                send_count * 3 + recv_count, last_interacted, is_managed,
+                COALESCE((SELECT GROUP_CONCAT(ca.account_id)
+                          FROM contact_accounts ca
+                          WHERE ca.contact_id = contacts.id), '')
+         FROM contacts WHERE id = ?1",
+        [id],
+        record_from_row,
+    )
+    .optional()
+    .map_err(Into::into)
 }
 
 /// Affinity score (send_count*3 + recv_count) per email, for the given

@@ -97,6 +97,10 @@ pub enum CoreEvent {
         event_id: i64,
         summary: Option<String>,
     },
+    /// CardDAV pull or push changed the unified contact directory.
+    ContactsUpdated {
+        account_id: i64,
+    },
 }
 
 #[derive(Clone)]

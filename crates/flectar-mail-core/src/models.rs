@@ -424,6 +424,41 @@ pub struct ContactRecordPage {
     pub account_counts: Vec<(i64, usize)>,
 }
 
+/// A CardDAV address-book collection discovered for one mail account.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AddressBook {
+    pub id: i64,
+    pub account_id: i64,
+    pub url: String,
+    pub display_name: Option<String>,
+    pub read_only: bool,
+    pub enabled: bool,
+    pub is_default: bool,
+    pub last_synced_at: Option<i64>,
+}
+
+/// Per-account CardDAV connection shown by account settings.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CardDavConnection {
+    pub account_id: i64,
+    pub base_url: String,
+    pub username: String,
+    pub enabled: bool,
+    pub last_error: Option<String>,
+}
+
+// Deliberately no `Debug`: it would print the CardDAV app password.
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectCardDavArgs {
+    pub account_id: i64,
+    pub url: String,
+    pub username: String,
+    pub password: String,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum View {

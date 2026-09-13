@@ -100,6 +100,11 @@ export component SettingsDialog inherits Rectangle {
     in-out property <string> caldav_url: "";
     in-out property <string> caldav_username: "";
     in-out property <string> caldav_password: "";
+    in-out property <int> carddav_account_id: -1;
+    in-out property <string> carddav_url: "";
+    in-out property <string> carddav_username: "";
+    in-out property <string> carddav_password: "";
+    in-out property <bool> carddav_manage_existing: false;
     in-out property <string> imap_security: "auto";
     in-out property <string> smtp_security: "auto";
     in-out property <string> trusted_certificate_pem;
@@ -151,6 +156,9 @@ export component SettingsDialog inherits Rectangle {
     callback connect_account_calendar(int);
     callback set_account_calendar_enabled(int, bool);
     callback connect_caldav(int, string, string, string);
+    callback connect_carddav(int, string, string, string);
+    callback set_account_carddav_enabled(int, bool);
+    callback disconnect_carddav(int);
     callback export_account_backup();
     callback import_account_backup();
     callback export_database_snapshot();
@@ -844,6 +852,25 @@ export component SettingsDialog inherits Rectangle {
                                                 root.caldav_username = account.username;
                                             }
                                         }
+                                        if !root.compact && account.carddav_connected : HorizontalBox {
+                                            width: 122px;
+                                            spacing: 8px;
+                                            Text { text: @tr("Contacts"); color: root.body-text; font-size: TypeScale.caption; vertical-alignment: center; }
+                                            Rectangle { horizontal-stretch: 1; }
+                                            Switch { checked: account.carddav_enabled; toggled => { root.set_account_carddav_enabled(account.id, self.checked); } }
+                                        }
+                                        if !root.compact : Button {
+                                            width: 98px;
+                                            height: 30px;
+                                            text: account.carddav_connected ? (account.carddav_status == "" ? @tr("Manage") : @tr("Fix CardDAV")) : @tr("CardDAV");
+                                            clicked => {
+                                                root.carddav_account_id = account.id;
+                                                root.carddav_url = account.carddav_url;
+                                                root.carddav_username = account.carddav_username;
+                                                root.carddav_password = "";
+                                                root.carddav_manage_existing = account.carddav_connected;
+                                            }
+                                        }
                                     }
                                     if drop-target.separate-actions : AccountActions {
                                             edit-label: account.provider == "imap" ? @tr("Edit") : @tr("Reconnect");
@@ -905,6 +932,17 @@ export component SettingsDialog inherits Rectangle {
                                     LineEdit { text: root.caldav_url; placeholder-text: @tr("https://calendar.example.com/"); edited(value) => { root.caldav_url = value; } }
                                     HorizontalBox { spacing: 8px; LineEdit { text: root.caldav_username; placeholder-text: @tr("Username"); edited(value) => { root.caldav_username = value; } } LineEdit { text: root.caldav_password; input-type: password; placeholder-text: @tr("App password"); edited(value) => { root.caldav_password = value; } } }
                                     HorizontalBox { spacing: 8px; Rectangle { horizontal-stretch: 1; } Button { text: @tr("Cancel"); clicked => { root.caldav_account_id = -1; } } Button { text: @tr("Connect"); primary: true; clicked => { root.connect_caldav(root.caldav_account_id, root.caldav_url, root.caldav_username, root.caldav_password); } } }
+                                }
+                            }
+                            Rectangle {
+                                visible: root.carddav_account_id > 0;
+                                height: 206px;
+                                SettingsCard { title: @tr("Connect CardDAV"); description: @tr("Sync contacts with a standards-compliant CardDAV server."); surface: root.surface; card-border-color: root.border-subtle; heading: root.heading; secondary-text: root.faint-text; }
+                                VerticalBox {
+                                    padding-top: 70px; padding-right: 20px; padding-bottom: 16px; padding-left: 20px; spacing: 8px;
+                                    LineEdit { text: root.carddav_url; placeholder-text: @tr("https://contacts.example.com/"); edited(value) => { root.carddav_url = value; } }
+                                    HorizontalBox { spacing: 8px; LineEdit { text: root.carddav_username; placeholder-text: @tr("Username"); edited(value) => { root.carddav_username = value; } } LineEdit { text: root.carddav_password; input-type: password; placeholder-text: @tr("App password"); edited(value) => { root.carddav_password = value; } } }
+                                    HorizontalBox { spacing: 8px; if root.carddav_manage_existing : Button { text: @tr("Disconnect"); clicked => { root.disconnect_carddav(root.carddav_account_id); root.carddav_account_id = -1; root.carddav_password = ""; root.carddav_manage_existing = false; } } Rectangle { horizontal-stretch: 1; } Button { text: @tr("Cancel"); clicked => { root.carddav_account_id = -1; root.carddav_password = ""; root.carddav_manage_existing = false; } } Button { text: root.carddav_manage_existing ? @tr("Reconnect") : @tr("Connect"); primary: true; clicked => { root.connect_carddav(root.carddav_account_id, root.carddav_url, root.carddav_username, root.carddav_password); } } }
                                 }
                             }
                         }

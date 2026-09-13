@@ -108,12 +108,17 @@ pub(super) fn apply_connected_accounts(
     accounts: &[Account],
     configs: &[AccountConfig],
     calendar_connections: &[CalendarConnection],
+    carddav_connections: &[CardDavConnection],
     calendar_errors: &HashMap<i64, String>,
     avatars: &HashMap<i64, ProfileAvatarImages>,
 ) {
     let configs: HashMap<i64, &AccountConfig> =
         configs.iter().map(|config| (config.id, config)).collect();
     let calendar_connections: HashMap<i64, &CalendarConnection> = calendar_connections
+        .iter()
+        .map(|connection| (connection.account_id, connection))
+        .collect();
+    let carddav_connections: HashMap<i64, &CardDavConnection> = carddav_connections
         .iter()
         .map(|connection| (connection.account_id, connection))
         .collect();
@@ -129,6 +134,7 @@ pub(super) fn apply_connected_accounts(
                 .clone();
             let avatar = avatars.get(&account.id);
             let calendar = calendar_connections.get(&account.id);
+            let carddav = carddav_connections.get(&account.id);
             Some(AccountRow {
                 id: i32::try_from(account.id).ok()?,
                 drag_key: account.id.to_string().into(),
@@ -168,6 +174,20 @@ pub(super) fn apply_connected_accounts(
                     .or_else(|| calendar_errors.get(&account.id).cloned())
                     .unwrap_or_default()
                     .into(),
+                carddav_connected: carddav.is_some(),
+                carddav_enabled: carddav.is_some_and(|connection| connection.enabled),
+                carddav_status: carddav
+                    .and_then(|connection| connection.last_error.clone())
+                    .unwrap_or_default()
+                    .into(),
+                carddav_url: carddav
+                    .map(|connection| connection.base_url.clone())
+                    .unwrap_or_default()
+                    .into(),
+                carddav_username: carddav
+                    .map(|connection| connection.username.clone())
+                    .unwrap_or_else(|| config.username.clone())
+                    .into(),
             })
         })
         .collect::<Vec<_>>();
@@ -181,6 +201,7 @@ pub(super) fn refresh_connected_accounts(app: &AppWindow, state: &Rc<RefCell<Inb
         &state.connected_accounts,
         &state.account_configs,
         &state.calendar_connections,
+        &state.carddav_connections,
         &state.calendar_errors,
         &state.profile_avatar_images,
     );

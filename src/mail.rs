@@ -6,11 +6,11 @@ use flectar_mail_core::{
     events::CoreEvent,
     models::{
         Account, AccountConfig, ActionKind, ActionParams, AddPasswordAccountArgs, Address,
-        CalendarConnection, CalendarEvent, ConnectCalendarArgs, ContactRecordCursor,
-        ContactRecordPage, CreateEventArgs, CustomTheme, DraftAttachmentIn, FolderInfo, Label,
-        MailHistory, MailboxBadgeCounts, MessageDetail, PerformActionArgs, PortableAccountConfig,
-        Provider, QueueSendArgs, QueueSendResult, SaveDraftArgs, Settings, ThreadCursor,
-        ThreadSummary, View,
+        CalendarConnection, CalendarEvent, CardDavConnection, ConnectCalendarArgs,
+        ConnectCardDavArgs, ContactRecordCursor, ContactRecordPage, CreateEventArgs, CustomTheme,
+        DraftAttachmentIn, FolderInfo, Label, MailHistory, MailboxBadgeCounts, MessageDetail,
+        PerformActionArgs, PortableAccountConfig, Provider, QueueSendArgs, QueueSendResult,
+        SaveDraftArgs, Settings, ThreadCursor, ThreadSummary, View,
     },
 };
 #[cfg(test)]
@@ -837,6 +837,50 @@ impl CoreMailSource {
     pub async fn delete_contact(&self, id: i64) -> Result<(), String> {
         self.core
             .delete_contact(id)
+            .await
+            .map_err(|error| error.to_string())
+    }
+
+    pub async fn connect_carddav(
+        &self,
+        account_id: i64,
+        url: String,
+        username: String,
+        password: String,
+    ) -> Result<(), String> {
+        self.core
+            .connect_carddav(ConnectCardDavArgs {
+                account_id,
+                url,
+                username,
+                password,
+            })
+            .await
+            .map(|_| ())
+            .map_err(|error| error.to_string())
+    }
+
+    pub async fn load_carddav_connections(&self) -> Result<Vec<CardDavConnection>, String> {
+        self.core
+            .list_carddav_connections()
+            .await
+            .map_err(|error| error.to_string())
+    }
+
+    pub async fn set_account_carddav_enabled(
+        &self,
+        account_id: i64,
+        enabled: bool,
+    ) -> Result<(), String> {
+        self.core
+            .set_account_carddav_enabled(account_id, enabled)
+            .await
+            .map_err(|error| error.to_string())
+    }
+
+    pub async fn disconnect_carddav(&self, account_id: i64) -> Result<(), String> {
+        self.core
+            .disconnect_carddav(account_id)
             .await
             .map_err(|error| error.to_string())
     }
