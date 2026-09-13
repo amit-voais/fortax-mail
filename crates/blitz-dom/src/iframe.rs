@@ -55,6 +55,7 @@ impl BaseDocument {
         abort_signal: AbortSignal,
     ) -> DocumentConfig {
         DocumentConfig {
+            image_decode_limits: self.image_decode_limits,
             viewport: None,
             base_url,
             ua_stylesheets: None,

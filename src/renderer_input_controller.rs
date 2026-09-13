@@ -10,12 +10,26 @@ fn banner_height(app: &AppWindow) -> f32 {
 }
 
 fn repaint_reader(app: &AppWindow, renderer: &Rc<RefCell<GpuEmailRenderer>>, gpu: bool) {
+    repaint_reader_inner(app, renderer, gpu, false);
+}
+
+fn repaint_reader_inner(
+    app: &AppWindow,
+    renderer: &Rc<RefCell<GpuEmailRenderer>>,
+    gpu: bool,
+    incremental: bool,
+) {
     if !gpu {
         let (width, height) = email_viewport_size(app);
-        let result =
+        let result = if incremental {
             renderer
                 .borrow_mut()
-                .render_cpu_if_needed(width, height, app.window().scale_factor());
+                .render_cpu_scroll_step(width, height, app.window().scale_factor())
+        } else {
+            renderer
+                .borrow_mut()
+                .render_cpu_if_needed(width, height, app.window().scale_factor())
+        };
         match result {
             Ok(Some(frame)) => apply_cpu_frame(app, frame),
             Ok(None) => {}
@@ -31,6 +45,29 @@ fn repaint_reader(app: &AppWindow, renderer: &Rc<RefCell<GpuEmailRenderer>>, gpu
         update_email_selection(app, renderer);
     }
     app.window().request_redraw();
+}
+
+fn schedule_scroll_frame(
+    app: &AppWindow,
+    renderer: &Rc<RefCell<GpuEmailRenderer>>,
+    gpu: bool,
+    pending: &Rc<Cell<bool>>,
+) {
+    if pending.replace(true) {
+        return;
+    }
+    let weak = app.as_weak();
+    let renderer = renderer.clone();
+    let pending = pending.clone();
+    Timer::single_shot(Duration::from_millis(16), move || {
+        pending.set(false);
+        if let Some(app) = weak.upgrade() {
+            repaint_reader_inner(&app, &renderer, gpu, true);
+            if !gpu && renderer.borrow().needs_repaint() {
+                schedule_scroll_frame(&app, &renderer, gpu, &pending);
+            }
+        }
+    });
 }
 
 pub(super) fn register_renderer_input_callbacks(
@@ -114,6 +151,7 @@ pub(super) fn register_renderer_input_callbacks(
     });
     let weak = app.as_weak();
     let r = renderer.clone();
+    let scroll_pending = Rc::new(Cell::new(false));
     app.on_email_scroll(move |y, height| {
         let Some(app) = weak.upgrade() else {
             return;
@@ -122,7 +160,7 @@ pub(super) fn register_renderer_input_callbacks(
             .borrow_mut()
             .set_visible_region((y - banner_height(&app)).max(0.0), height);
         if dirty {
-            repaint_reader(&app, &r, gpu);
+            schedule_scroll_frame(&app, &r, gpu, &scroll_pending);
         }
     });
     let weak = app.as_weak();

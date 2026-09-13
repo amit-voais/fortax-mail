@@ -260,6 +260,100 @@ pub(crate) struct DrawTextContext {
     path_scratch: Vec<NodeId>,
     deco_boxes: Vec<LineDecoration>,
     win_ascent_ratios: WinAscentCache,
+    outline_bounds: HashMap<(u64, u32), Option<Rect>>,
+}
+
+// The font-wide outline bounds include accents and overhangs which line-height
+// does not. Unknown, variable and color fonts keep the normal paint path.
+fn font_outline_bounds(font: &parley::FontData) -> Option<Rect> {
+    use skrifa::raw::{FontRef, TableProvider as _};
+    let font = FontRef::from_index(font.data.as_ref(), font.index).ok()?;
+    if font.fvar().is_ok()
+        || font.colr().is_ok()
+        || font.cbdt().is_ok()
+        || font.sbix().is_ok()
+        || font.svg().is_ok()
+    {
+        return None;
+    }
+    let head = font.head().ok()?;
+    let units = f64::from(head.units_per_em());
+    if units == 0.0 || head.x_min() >= head.x_max() || head.y_min() >= head.y_max() {
+        return None;
+    }
+    Some(Rect::new(
+        f64::from(head.x_min()) / units,
+        -f64::from(head.y_max()) / units,
+        f64::from(head.x_max()) / units,
+        -f64::from(head.y_min()) / units,
+    ))
+}
+
+/// Local paint bounds for each line, computed once per layout. Unknown font
+/// bounds and authored decorations conservatively retain the original path.
+pub(crate) fn line_paint_bounds(
+    layout: &Layout<TextBrush>,
+    doc: &BaseDocument,
+    root: NodeId,
+) -> Vec<Option<Rect>> {
+    let mut fonts = HashMap::new();
+    let mut decorated = HashMap::new();
+    layout
+        .lines()
+        .map(|line| {
+            let mut bounds: Option<Rect> = None;
+            for item in line.items() {
+                let PositionedLayoutItem::GlyphRun(glyph_run) = item else {
+                    continue;
+                };
+                let id = glyph_run.style().brush.id;
+                let has_decoration = *decorated.entry(id).or_insert_with(|| {
+                    let mut ancestor = Some(id);
+                    while let Some(id) = ancestor {
+                        if resolve_decoration_entry(doc, id).decoration.is_some() {
+                            return true;
+                        }
+                        if id == root {
+                            break;
+                        }
+                        ancestor = doc.get_node(id).and_then(|node| node.parent);
+                    }
+                    false
+                });
+                if has_decoration {
+                    return None;
+                }
+                let run = glyph_run.run();
+                let font = run.font();
+                let font_bounds = (*fonts
+                    .entry((font.data.id(), font.index))
+                    .or_insert_with(|| font_outline_bounds(font)))?;
+                let glyph_bounds = Affine::scale(run.font_size() as f64)
+                    .transform_rect_bbox(font_bounds)
+                    .inflate(2.0, 2.0);
+                let synthesis = run
+                    .synthesis()
+                    .skew()
+                    .map(|angle| Affine::skew(angle.to_radians().tan() as f64, 0.0))
+                    .unwrap_or(Affine::IDENTITY);
+                let glyph_bounds = synthesis.transform_rect_bbox(glyph_bounds);
+                let metrics = run.metrics();
+                // Inline backgrounds may extend past the glyph outlines.
+                let mut run_bounds = Rect::new(
+                    glyph_run.offset() as f64,
+                    (glyph_run.baseline() - metrics.ascent) as f64,
+                    (glyph_run.offset() + glyph_run.advance()) as f64,
+                    (glyph_run.baseline() + metrics.descent) as f64,
+                );
+                for glyph in glyph_run.positioned_glyphs() {
+                    run_bounds = run_bounds
+                        .union(glyph_bounds + kurbo::Vec2::new(glyph.x as f64, glyph.y as f64));
+                }
+                bounds = Some(bounds.map_or(run_bounds, |bounds| bounds.union(run_bounds)));
+            }
+            bounds.filter(|bounds| bounds.is_finite())
+        })
+        .collect()
 }
 
 /// Resolve the CSS `text-decoration-thickness` to a device-pixel size.
@@ -555,6 +649,7 @@ fn flush_line_decorations(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn stroke_text<'a>(
     scene: &mut impl PaintScene,
     lines: impl Iterator<Item = Line<'a, TextBrush>>,
@@ -563,12 +658,14 @@ pub(crate) fn stroke_text<'a>(
     scale: f64,
     inline_root_id: NodeId,
     context: &mut DrawTextContext,
+    viewport: Option<Rect>,
 ) {
     let DrawTextContext {
         stack,
         path_scratch,
         deco_boxes,
         win_ascent_ratios,
+        outline_bounds,
     } = context;
     stack.clear();
     path_scratch.clear();
@@ -637,23 +734,65 @@ pub(crate) fn stroke_text<'a>(
                     kurbo::Vec2::default()
                 };
 
-                scene.draw_glyphs(
-                    font,
-                    font_size,
-                    !FONT_EMBOLDEN_ENABLED, // hint
-                    run.normalized_coords(),
-                    embolden,
-                    Fill::NonZero,
-                    &anyrender::Paint::from(text_color),
-                    1.0, // alpha
-                    transform,
-                    glyph_xform,
-                    glyph_run.positioned_glyphs().map(|glyph| anyrender::Glyph {
-                        id: glyph.id as _,
-                        x: glyph.x,
-                        y: glyph.y,
-                    }),
-                );
+                let outside = viewport.is_some_and(|viewport| {
+                    let bounds = *outline_bounds
+                        .entry((font.data.id(), font.index))
+                        .or_insert_with(|| font_outline_bounds(font));
+                    let Some(bounds) = bounds else {
+                        return false;
+                    };
+                    // Include hinting and synthetic emboldening before applying
+                    // italic synthesis and the complete CSS transform.
+                    let bounds = Affine::scale(font_size as f64)
+                        .transform_rect_bbox(bounds)
+                        .inflate(2.0, 2.0);
+                    let bounds = glyph_xform
+                        .unwrap_or(Affine::IDENTITY)
+                        .transform_rect_bbox(bounds);
+                    let mut glyphs = glyph_run.positioned_glyphs();
+                    let Some(first) = glyphs.next() else {
+                        return true;
+                    };
+                    let mut positions = Rect::new(
+                        first.x as f64,
+                        first.y as f64,
+                        first.x as f64,
+                        first.y as f64,
+                    );
+                    for glyph in glyphs {
+                        positions = positions.union_pt((glyph.x as f64, glyph.y as f64));
+                    }
+                    let painted = transform.transform_rect_bbox(Rect::new(
+                        positions.x0 + bounds.x0,
+                        positions.y0 + bounds.y0,
+                        positions.x1 + bounds.x1,
+                        positions.y1 + bounds.y1,
+                    ));
+                    painted.is_finite()
+                        && (painted.x1 < viewport.x0
+                            || painted.x0 > viewport.x1
+                            || painted.y1 < viewport.y0
+                            || painted.y0 > viewport.y1)
+                });
+                if !outside {
+                    scene.draw_glyphs(
+                        font,
+                        font_size,
+                        !FONT_EMBOLDEN_ENABLED, // hint
+                        run.normalized_coords(),
+                        embolden,
+                        Fill::NonZero,
+                        &anyrender::Paint::from(text_color),
+                        1.0, // alpha
+                        transform,
+                        glyph_xform,
+                        glyph_run.positioned_glyphs().map(|glyph| anyrender::Glyph {
+                            id: glyph.id as _,
+                            x: glyph.x,
+                            y: glyph.y,
+                        }),
+                    );
+                }
 
                 // Accumulate this run's contribution to each decorating box on its ancestor
                 // path. The decoration is drawn once per box after the whole line has been

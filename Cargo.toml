@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/flectar-mail-core"]
+members = ["crates/flectar-mail-core", "crates/renderer-probe"]
 exclude = ["crates/blitz-dom", "crates/blitz-paint"]
 resolver = "3"
 

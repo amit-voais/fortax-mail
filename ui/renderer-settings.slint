@@ -1,0 +1,9 @@
+export global RendererSettings {
+    in property <string> preferred: "cpu";
+    in property <string> active: "cpu";
+    in property <bool> gpu-supported: false;
+    in property <bool> available: true;
+    in property <string> error;
+    out property <bool> restart-required: RendererSettings.gpu-supported && RendererSettings.preferred != RendererSettings.active;
+    callback choose(string);
+}

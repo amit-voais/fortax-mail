@@ -7,7 +7,9 @@ use anyrender::ImageRenderer;
 use anyrender::render_to_buffer;
 use blitz_dom::{Document, DocumentConfig, Point as DomPoint, local_name};
 use blitz_html::HtmlDocument;
+#[cfg(test)]
 use blitz_paint::paint_scene;
+use blitz_paint::{PaintCache, paint_scene_cached};
 use blitz_traits::net::NetWaker;
 use blitz_traits::{
     SmolStr,
@@ -31,7 +33,7 @@ use std::{
 
 #[cfg(feature = "gpu-renderer")]
 use anyrender_vello::VelloScenePainter;
-use anyrender_vello_cpu::VelloCpuImageRenderer;
+use anyrender_vello_cpu::{ImageCacheConfig, VelloCpuImageRenderer};
 #[cfg(feature = "gpu-renderer")]
 use std::num::NonZeroUsize;
 
@@ -42,6 +44,11 @@ const EMAIL_SURFACE_BOTTOM_PAD: f32 = 12.0;
 const EMAIL_TILE_HEIGHT: f32 = 512.0;
 const EMAIL_TILE_OVERSCAN: u32 = 1;
 const MAX_EMAIL_SURFACE_HEIGHT: f32 = 100_000.0;
+
+pub(crate) fn render_timings_enabled() -> bool {
+    static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ENABLED.get_or_init(|| std::env::var_os("FLECTAR_RENDER_TIMINGS").is_some())
+}
 
 const EMAIL_FONT_FALLBACK_STYLE: &str = r#"
 <style data-flectar-mail="font-fallback">
@@ -87,6 +94,7 @@ impl InputModifiers {
 
 pub struct PreparedEmail {
     document: HtmlDocument,
+    paint_cache: PaintCache,
     pub links: Vec<EmailLink>,
     pub plain_text: String,
     pub notice: Option<String>,
@@ -122,6 +130,8 @@ pub struct GpuEmailRenderer {
     #[cfg(feature = "gpu-renderer")]
     renderer: Option<vello::Renderer>,
     #[cfg(feature = "gpu-renderer")]
+    gpu_context: Option<(wgpu::Device, wgpu::Queue)>,
+    #[cfg(feature = "gpu-renderer")]
     scene: vello::Scene,
     last_size: Option<(u32, u32, u32, u32, u32)>,
     dirty: bool,
@@ -129,6 +139,7 @@ pub struct GpuEmailRenderer {
     painted_selection: Vec<(NodeId, usize, usize)>,
     cpu_painter: Option<VelloCpuImageRenderer>,
     cpu_size: (u32, u32),
+    tile_work_limit: usize,
     pub preparation_viewport: (u32, u32, f32),
     pub loaded_key: Option<(u64, bool)>,
     pub zoom: f32,
@@ -141,6 +152,8 @@ pub struct GpuEmailRenderer {
     pub tile_count: u64,
     active_document: Arc<AtomicUsize>,
     resources: crate::remote::ResourceLedger,
+    resource_priorities: crate::remote::ResourcePriorities,
+    image_priority_window: Option<(usize, u64, u32, u32)>,
     pub(crate) press_link: Option<(f32, f32, String)>,
     pub(crate) activation: Option<String>,
     pub(crate) selection_anchor: Option<(NodeId, usize)>,
@@ -173,6 +186,8 @@ impl Default for GpuEmailRenderer {
             #[cfg(feature = "gpu-renderer")]
             renderer: None,
             #[cfg(feature = "gpu-renderer")]
+            gpu_context: None,
+            #[cfg(feature = "gpu-renderer")]
             scene: vello::Scene::new(),
             last_size: None,
             dirty: false,
@@ -180,6 +195,7 @@ impl Default for GpuEmailRenderer {
             painted_selection: Vec::new(),
             cpu_painter: None,
             cpu_size: (0, 0),
+            tile_work_limit: usize::MAX,
             preparation_viewport: (INITIAL_WIDTH, INITIAL_HEIGHT, 1.0),
             loaded_key: None,
             zoom: 1.0,
@@ -192,6 +208,8 @@ impl Default for GpuEmailRenderer {
             tile_count: 0,
             active_document: Arc::new(AtomicUsize::new(usize::MAX)),
             resources: Arc::default(),
+            resource_priorities: Arc::default(),
+            image_priority_window: None,
             press_link: None,
             activation: None,
             selection_anchor: None,
@@ -246,10 +264,11 @@ impl GpuEmailRenderer {
                 notifier();
             }
         });
-        self.net_provider = Some(crate::remote::email_image_provider_tracked(
+        self.net_provider = Some(crate::remote::email_image_provider_prioritized(
             Arc::clone(&waker),
             allow_remote,
             self.resources.clone(),
+            self.resource_priorities.clone(),
         )?);
         self.net_waker = Some(waker);
         self.remote_resources_enabled = allow_remote;
@@ -270,10 +289,11 @@ impl GpuEmailRenderer {
             self.net_waker
                 .as_ref()
                 .map(|waker| {
-                    crate::remote::email_image_provider_tracked(
+                    crate::remote::email_image_provider_prioritized(
                         Arc::clone(waker),
                         true,
                         self.resources.clone(),
+                        self.resource_priorities.clone(),
                     )
                 })
                 .transpose()?
@@ -313,11 +333,16 @@ impl GpuEmailRenderer {
             .map(tokio::runtime::Handle::enter);
         if let Some(email) = self.email.as_mut() {
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                email.document.drain_pending_messages()
+                drain_email_updates(
+                    email,
+                    &mut self.dirty,
+                    &mut self.region_dirty,
+                    &mut self.tiles,
+                    &mut self.metadata_revision,
+                )
             }));
             match result {
-                Ok(changed) => {
-                    self.dirty |= changed;
+                Ok(_) => {
                     self.metadata_revision += 1;
                 }
                 Err(_) => {
@@ -369,11 +394,20 @@ impl GpuEmailRenderer {
         self.activation = None;
         self.click_count = 0;
         self.last_pointer_down = None;
+        self.update_image_priorities();
     }
 
     pub fn clear(&mut self) {
+        #[cfg(feature = "gpu-renderer")]
+        if self.email.is_some() {
+            self.teardown_gpu();
+        }
         self.active_document.store(usize::MAX, Ordering::Release);
         self.email = None;
+        self.resource_priorities
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clear();
         self.resources
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -399,12 +433,53 @@ impl GpuEmailRenderer {
         self.last_pointer_down = None;
     }
 
+    #[cfg(feature = "gpu-renderer")]
+    pub fn shares_gpu(&self, device: &wgpu::Device, queue: &wgpu::Queue) -> bool {
+        self.gpu_context
+            .as_ref()
+            .is_some_and(|(active_device, active_queue)| {
+                active_device == device && active_queue == queue
+            })
+    }
+
+    #[cfg(feature = "gpu-renderer")]
+    pub fn initialize_gpu(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+    ) -> Result<(), String> {
+        if self.gpu_context.is_some() && !self.shares_gpu(device, queue) {
+            self.teardown_gpu();
+        }
+        if self.renderer.is_none() {
+            self.renderer = Some(
+                vello::Renderer::new(
+                    device,
+                    vello::RendererOptions {
+                        use_cpu: false,
+                        // Area AA is the lowest-memory Vello pipeline and is
+                        // sufficient for email text and vector decoration.
+                        antialiasing_support: vello::AaSupport::area_only(),
+                        num_init_threads: NonZeroUsize::new(1),
+                        pipeline_cache: None,
+                    },
+                )
+                .map_err(|error| format!("could not initialize Vello GPU renderer: {error:?}"))?,
+            );
+            self.gpu_context = Some((device.clone(), queue.clone()));
+        }
+
+        Ok(())
+    }
+
     /// Drop resources tied to Slint's WGPU device. The next frame will build
     /// the small Vello pipeline again against the new device after a suspend,
     /// display change, or Android surface recreation.
     #[cfg(feature = "gpu-renderer")]
     pub fn teardown_gpu(&mut self) {
         self.renderer = None;
+        self.gpu_context = None;
+        self.scene = vello::Scene::new();
         self.last_size = None;
         self.dirty = self.email.is_some();
         self.region_dirty = self.email.is_some();
@@ -418,6 +493,7 @@ impl GpuEmailRenderer {
         let viewport_height = (viewport_height / self.zoom).max(1.0);
         self.visible_scroll_y = scroll_y;
         self.visible_height = viewport_height;
+        self.update_image_priorities();
 
         let desired = desired_tile_range(scroll_y, viewport_height, self.content_height);
         let missing = desired
@@ -429,6 +505,67 @@ impl GpuEmailRenderer {
             .any(|index| !desired.clone().any(|wanted| wanted == *index));
         self.region_dirty |= missing || stale;
         self.region_dirty
+    }
+
+    fn update_image_priorities(&mut self) {
+        let Some(email) = self.email.as_ref() else {
+            return;
+        };
+        let range = desired_tile_range(
+            self.visible_scroll_y,
+            self.visible_height,
+            self.content_height,
+        );
+        let window = (
+            email.document.id(),
+            self.metadata_revision,
+            *range.start(),
+            *range.end(),
+        );
+        if self.image_priority_window == Some(window) {
+            return;
+        }
+        self.image_priority_window = Some(window);
+        let top = self.visible_scroll_y - EMAIL_TILE_HEIGHT;
+        let bottom = self.visible_scroll_y + self.visible_height + EMAIL_TILE_HEIGHT;
+        let mut priorities = std::collections::HashSet::new();
+        // Only image elements are inspected; the shared scheduler holds no DOM
+        // or image buffers and reorders requests that have not started yet.
+        email.document.visit(|_, node| {
+            let Some(element) = node.element_data() else {
+                return;
+            };
+            if element.name.local.as_ref() != "img" && element.background_images.is_empty() {
+                return;
+            }
+            let y = node.absolute_position(0.0, 0.0).y;
+            if y > bottom || y + node.final_layout().size.height < top {
+                return;
+            }
+            if let Some(src) = node.attr(local_name!("src"))
+                && let Ok(url) = email.document.base_url().join(src)
+            {
+                priorities.insert(crate::remote::resource_key(
+                    email.document.id(),
+                    url.as_str(),
+                ));
+            }
+            for image in element.background_images.iter().flatten() {
+                priorities.insert(crate::remote::resource_key(
+                    email.document.id(),
+                    image.url.as_str(),
+                ));
+            }
+        });
+        let mut current = self
+            .resource_priorities
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if *current != priorities {
+            *current = priorities;
+            drop(current);
+            crate::remote::reprioritize_images();
+        }
     }
 
     /// Forward a Slint pointer event into Blitz's normal DOM event driver.
@@ -525,9 +662,7 @@ impl GpuEmailRenderer {
         self.dirty || self.paint_dirty || self.region_dirty
     }
 
-    /// Render the retained document through the compatibility CPU painter.
-    /// This is used only when Slint could not create a WGPU device, but it
-    /// shares the same DOM and selection state as the GPU path.
+    /// Configure automatic fitting for either renderer.
     pub fn set_auto_fit(&mut self, enabled: bool) {
         self.auto_fit = enabled;
         self.fit_viewport = None;
@@ -545,7 +680,13 @@ impl GpuEmailRenderer {
         let Some(email) = self.email.as_mut() else {
             return;
         };
-        self.dirty |= email.document.drain_pending_messages();
+        drain_email_updates(
+            email,
+            &mut self.dirty,
+            &mut self.region_dirty,
+            &mut self.tiles,
+            &mut self.metadata_revision,
+        );
         if !self.dirty && self.fit_viewport == Some((width, height)) {
             return;
         }
@@ -558,6 +699,7 @@ impl GpuEmailRenderer {
             ColorScheme::Light,
         ));
         email.document.resolve(0.0);
+        email.paint_cache.clear();
         let natural = content_surface_width(&email.document, width.max(1) as f32);
         self.zoom = ((width.max(1) as f32) / natural.max(1.0)).clamp(0.1, 1.0);
         self.fit_viewport = Some((width, height));
@@ -571,7 +713,10 @@ impl GpuEmailRenderer {
         height: u32,
         scale: f32,
     ) -> Result<Option<RenderedEmail>, String> {
-        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let start = render_timings_enabled().then(Instant::now);
+        let layouts = self.layout_count;
+        let tiles = self.tile_count;
+        let result = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             self.fit_to_viewport(width, height);
             self.render_cpu_inner(width, height, scale)
         })) {
@@ -582,7 +727,41 @@ impl GpuEmailRenderer {
                     Some("This message could not be rendered. Use the plain text view.".into());
                 Err(self.notice.clone().unwrap())
             }
+        };
+        self.update_image_priorities();
+        if let Some(start) = start
+            && matches!(&result, Ok(Some(_)))
+        {
+            let tile_bytes: u64 = self
+                .tiles
+                .values()
+                .map(|tile| {
+                    let size = tile.image.size();
+                    u64::from(size.width) * u64::from(size.height) * 4
+                })
+                .sum();
+            eprintln!(
+                "email cpu frame: total={:.2}ms layouts={} new_tiles={} retained_tile_bytes={tile_bytes}",
+                start.elapsed().as_secs_f64() * 1000.0,
+                self.layout_count - layouts,
+                self.tile_count - tiles
+            );
         }
+        result
+    }
+
+    /// Yield between new tiles during interactive scrolling. Existing pixels
+    /// remain usable and visible tiles are always rendered before overscan.
+    pub fn render_cpu_scroll_step(
+        &mut self,
+        width: u32,
+        height: u32,
+        scale: f32,
+    ) -> Result<Option<RenderedEmail>, String> {
+        self.tile_work_limit = 1;
+        let result = self.render_cpu_if_needed(width, height, scale);
+        self.tile_work_limit = usize::MAX;
+        result
     }
 
     fn render_cpu_inner(
@@ -598,7 +777,13 @@ impl GpuEmailRenderer {
         let Some(email) = self.email.as_mut() else {
             return Ok(None);
         };
-        self.dirty |= email.document.drain_pending_messages();
+        drain_email_updates(
+            email,
+            &mut self.dirty,
+            &mut self.region_dirty,
+            &mut self.tiles,
+            &mut self.metadata_revision,
+        );
 
         let logical_width = ((logical_width as f32 / self.zoom).max(1.0)).ceil() as u32;
         let logical_height = ((logical_height as f32 / self.zoom).max(1.0)).ceil() as u32;
@@ -612,7 +797,6 @@ impl GpuEmailRenderer {
             (logical_width as f32).to_bits(),
             (logical_height as f32).to_bits(),
         );
-        self.dirty |= email.document.drain_pending_messages();
         let needs_layout = self.dirty || self.last_size != Some(size);
         if !needs_layout && !self.paint_dirty && !self.region_dirty {
             return Ok(None);
@@ -622,6 +806,7 @@ impl GpuEmailRenderer {
             invalidate_selection_tiles(&email.document, &self.painted_selection, &mut self.tiles);
         }
         if needs_layout {
+            let start = render_timings_enabled().then(Instant::now);
             self.layout_count += 1;
             self.metadata_revision += 1;
             email.document.set_viewport(Viewport::new(
@@ -631,6 +816,7 @@ impl GpuEmailRenderer {
                 ColorScheme::Light,
             ));
             email.document.resolve(0.0);
+            email.paint_cache.clear();
             email.links = collect_email_links(&email.document, logical_width.max(1) as f32);
             self.content_height = content_surface_height(&email.document);
             self.layout_width =
@@ -641,6 +827,12 @@ impl GpuEmailRenderer {
                 self.notice = Some("Large message surface limited. Reader or plain text view contains the complete text.".into());
             }
             self.tiles.clear();
+            if let Some(start) = start {
+                eprintln!(
+                    "email layout + metadata: {:.2}ms",
+                    start.elapsed().as_secs_f64() * 1000.0
+                );
+            }
         }
 
         let canvas_width = (self.layout_width / self.zoom).max(logical_width as f32);
@@ -652,9 +844,20 @@ impl GpuEmailRenderer {
         );
         self.tiles
             .retain(|index, _| wanted.clone().any(|wanted| wanted == *index));
-        for index in wanted {
+        let mut ordered: Vec<_> = wanted.clone().collect();
+        let top = self.visible_scroll_y;
+        let bottom = top + self.visible_height.min(logical_height as f32);
+        ordered.sort_by_key(|index| {
+            let y = *index as f32 * EMAIL_TILE_HEIGHT;
+            (y + EMAIL_TILE_HEIGHT <= top || y >= bottom, *index)
+        });
+        let mut rendered = 0;
+        for index in ordered {
             if self.tiles.contains_key(&index) {
                 continue;
+            }
+            if rendered >= self.tile_work_limit {
+                break;
             }
             let tile = render_cpu_tile_cached(
                 &mut self.cpu_painter,
@@ -666,6 +869,7 @@ impl GpuEmailRenderer {
                 scale_factor,
             )?;
             self.tile_count += 1;
+            rendered += 1;
             self.tiles.insert(index, tile);
         }
 
@@ -673,7 +877,7 @@ impl GpuEmailRenderer {
         self.dirty = false;
         self.paint_dirty = false;
         self.painted_selection = email.document.get_text_selection_ranges();
-        self.region_dirty = false;
+        self.region_dirty = wanted.clone().any(|index| !self.tiles.contains_key(&index));
         Ok(Some(RenderedEmail {
             tiles: self.tiles.values().cloned().collect(),
             width: physical_width,
@@ -691,7 +895,14 @@ impl GpuEmailRenderer {
         height: f32,
         scale: f32,
     ) -> Result<Option<RenderedEmail>, String> {
-        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if self.email.is_none() {
+            return Ok(None);
+        }
+        let start = render_timings_enabled().then(Instant::now);
+        let layouts = self.layout_count;
+        let tiles = self.tile_count;
+        let result = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            self.initialize_gpu(device, queue)?;
             self.fit_to_viewport(width.max(1.0) as u32, height.max(1.0) as u32);
             self.render_gpu_inner(device, queue, width, height, scale)
         })) {
@@ -702,7 +913,22 @@ impl GpuEmailRenderer {
                     Some("This message could not be rendered. Use the plain text view.".into());
                 Err(self.notice.clone().unwrap())
             }
+        };
+        if let Some(start) = start
+            && matches!(&result, Ok(Some(_)))
+        {
+            eprintln!(
+                "email gpu frame: cpu_encode_submit={:.2}ms layouts={} new_tiles={}",
+                start.elapsed().as_secs_f64() * 1000.0,
+                self.layout_count - layouts,
+                self.tile_count - tiles
+            );
+            queue.on_submitted_work_done(move || {
+                eprintln!("email gpu queue completion callback: {:.2}ms (includes queue wait and polling)", start.elapsed().as_secs_f64() * 1000.0);
+            });
         }
+        self.update_image_priorities();
+        result
     }
 
     #[cfg(feature = "gpu-renderer")]
@@ -731,7 +957,13 @@ impl GpuEmailRenderer {
             logical_height.to_bits(),
         );
 
-        self.dirty |= email.document.drain_pending_messages();
+        drain_email_updates(
+            email,
+            &mut self.dirty,
+            &mut self.region_dirty,
+            &mut self.tiles,
+            &mut self.metadata_revision,
+        );
         let needs_layout = self.dirty || self.last_size != Some(size);
         if !needs_layout && !self.paint_dirty && !self.region_dirty {
             return Ok(None);
@@ -753,6 +985,7 @@ impl GpuEmailRenderer {
                 ColorScheme::Light,
             ));
             email.document.resolve(0.0);
+            email.paint_cache.clear();
             email.links = collect_email_links(&email.document, logical_width);
             self.content_height = content_surface_height(&email.document);
             self.layout_width = content_surface_width(&email.document, logical_width) * self.zoom;
@@ -766,22 +999,6 @@ impl GpuEmailRenderer {
 
         let logical_width = (self.layout_width / self.zoom).max(logical_width);
         physical_width = (logical_width * scale_factor).ceil() as u32;
-        if self.renderer.is_none() {
-            self.renderer = Some(
-                vello::Renderer::new(
-                    device,
-                    vello::RendererOptions {
-                        use_cpu: false,
-                        // Area AA is the lowest-memory Vello pipeline and is
-                        // sufficient for email text and vector decoration.
-                        antialiasing_support: vello::AaSupport::area_only(),
-                        num_init_threads: NonZeroUsize::new(1),
-                        pipeline_cache: None,
-                    },
-                )
-                .map_err(|error| format!("could not initialize Vello GPU renderer: {error:?}"))?,
-            );
-        }
 
         let wanted = desired_tile_range(
             self.visible_scroll_y,
@@ -826,8 +1043,9 @@ impl GpuEmailRenderer {
                 x: 0.0,
                 y: logical_y as f64,
             });
+            let scene_start = render_timings_enabled().then(Instant::now);
             let mut painter = VelloScenePainter::new(&mut self.scene);
-            paint_scene(
+            paint_scene_cached(
                 &mut painter,
                 &mut email.document,
                 scale_factor as f64,
@@ -835,8 +1053,11 @@ impl GpuEmailRenderer {
                 physical_tile_height,
                 0,
                 0,
+                &email.paint_cache,
             );
             email.document.set_viewport_scroll(DomPoint::ZERO);
+
+            let scene_elapsed = scene_start.map(|start| start.elapsed());
 
             let render_result = self
                 .renderer
@@ -854,6 +1075,13 @@ impl GpuEmailRenderer {
                         antialiasing_method: vello::AaConfig::Area,
                     },
                 );
+            if let (Some(start), Some(scene_elapsed)) = (scene_start, scene_elapsed) {
+                eprintln!(
+                    "email gpu tile {index}: scene={:.2}ms submit_cpu={:.2}ms",
+                    scene_elapsed.as_secs_f64() * 1000.0,
+                    start.elapsed().saturating_sub(scene_elapsed).as_secs_f64() * 1000.0
+                );
+            }
             self.scene.reset();
             if let Err(error) = render_result {
                 self.renderer = None;
@@ -861,6 +1089,7 @@ impl GpuEmailRenderer {
             }
             let image = slint::Image::try_from(texture)
                 .map_err(|error| format!("could not import email tile into Slint: {error}"))?;
+            self.tile_count += 1;
             self.tiles.insert(
                 index,
                 RenderedEmailTile {
@@ -930,6 +1159,7 @@ pub fn render_prepared_cpu(
         ColorScheme::Light,
     ));
     email.document.resolve(0.0);
+    email.paint_cache.clear();
     email.links = collect_email_links(&email.document, logical_width.max(1) as f32);
     let rendered_height = content_surface_height(&email.document);
     let rendered_physical_height = (rendered_height * scale_factor).ceil().max(1.0) as u32;
@@ -990,15 +1220,30 @@ fn render_cpu_tile_cached(
     }
     let mut pixels =
         slint::SharedPixelBuffer::<slint::Rgba8Pixel>::new(physical_width, physical_tile_height);
-    if painter.is_none() || *size != (physical_width, physical_tile_height) {
-        *painter = Some(VelloCpuImageRenderer::new(
+    if painter.is_none() {
+        *painter = Some(VelloCpuImageRenderer::with_image_cache_config(
             physical_width,
             physical_tile_height,
+            ImageCacheConfig {
+                max_bytes: 8 * 1024 * 1024,
+                max_age: 8,
+                prune_interval: 1,
+            },
         ));
+        *size = (physical_width, physical_tile_height);
+    } else if *size != (physical_width, physical_tile_height) {
+        // Resizing preserves prepared glyphs and converted images. Replacing
+        // the renderer threw both away for the final, shorter tile.
+        painter
+            .as_mut()
+            .unwrap()
+            .resize(physical_width, physical_tile_height);
         *size = (physical_width, physical_tile_height);
     }
     let renderer = painter.as_mut().unwrap();
     renderer.reset();
+    let start = render_timings_enabled().then(Instant::now);
+    let mut scene_time = Duration::ZERO;
 
     email.document.set_viewport_scroll(DomPoint {
         x: 0.0,
@@ -1006,7 +1251,7 @@ fn render_cpu_tile_cached(
     });
     renderer.render(
         |scene| {
-            paint_scene(
+            paint_scene_cached(
                 scene,
                 &mut email.document,
                 scale_factor as f64,
@@ -1014,15 +1259,28 @@ fn render_cpu_tile_cached(
                 physical_tile_height,
                 0,
                 0,
+                &email.paint_cache,
             );
+            if let Some(start) = start {
+                scene_time = start.elapsed();
+            }
         },
         pixels.make_mut_bytes(),
     );
     email.document.set_viewport_scroll(DomPoint::ZERO);
+    let rendered = start.map(|start| start.elapsed());
 
     // Blitz may leave pixels beyond the document's own painted boxes
     // transparent. Every tile represents an opaque browser canvas.
     composite_over_white(pixels.make_mut_bytes());
+    if let (Some(start), Some(rendered)) = (start, rendered) {
+        eprintln!(
+            "email tile {index}: scene+encode={:.2}ms raster+cache={:.2}ms composite={:.2}ms",
+            scene_time.as_secs_f64() * 1000.0,
+            rendered.saturating_sub(scene_time).as_secs_f64() * 1000.0,
+            start.elapsed().saturating_sub(rendered).as_secs_f64() * 1000.0
+        );
+    }
     Ok(RenderedEmailTile {
         image: slint::Image::from_rgba8(pixels),
         y: logical_y / logical_width,
@@ -1054,6 +1312,72 @@ fn invalidate_selection_tiles(
     }
 }
 
+fn drain_email_updates(
+    email: &mut PreparedEmail,
+    dirty: &mut bool,
+    region_dirty: &mut bool,
+    tiles: &mut BTreeMap<u32, RenderedEmailTile>,
+    metadata_revision: &mut u64,
+) -> bool {
+    let updates = email.document.drain_pending_updates();
+    *dirty |= updates.layout;
+    if updates.changed {
+        *metadata_revision += 1;
+    }
+    if updates.layout {
+        return true;
+    }
+    for id in updates.paint_nodes {
+        let Some(node) = email.document.get_node(id) else {
+            continue;
+        };
+        // Transforms, masks and filters can affect pixels beyond the image box.
+        // Fall back to repainting cached tiles, while still retaining layout.
+        let mut ancestor = Some(id);
+        let mut bounded = true;
+        while let Some(id) = ancestor {
+            let Some(node) = email.document.get_node(id) else {
+                break;
+            };
+            if node.stylo_element_data_opt().is_some()
+                && (node.transform().is_some()
+                    || node
+                        .element_data()
+                        .is_some_and(|element| element.mask_images.iter().any(Option::is_some))
+                    || node.primary_styles().is_some_and(|style| {
+                        let effects = style.get_effects();
+                        !effects.filter.0.is_empty() || !effects.backdrop_filter.0.is_empty()
+                    }))
+            {
+                bounded = false;
+                break;
+            }
+            ancestor = node.parent;
+        }
+        if !bounded {
+            tiles.clear();
+            *region_dirty = true;
+            break;
+        }
+        let origin = node.absolute_position(0.0, 0.0).y;
+        let overflow = node.scrollable_overflow();
+        let y = origin + (overflow.y0 as f32).min(0.0);
+        let bottom = origin + node.final_layout().size.height.max(overflow.y1 as f32);
+        if !y.is_finite() || !bottom.is_finite() {
+            tiles.clear();
+            *region_dirty = true;
+            break;
+        }
+        let before = tiles.len();
+        tiles.retain(|index, _| {
+            let top = *index as f32 * EMAIL_TILE_HEIGHT;
+            top + EMAIL_TILE_HEIGHT < y - 1.0 || top > bottom + 1.0
+        });
+        *region_dirty |= before != tiles.len();
+    }
+    updates.changed
+}
+
 fn desired_tile_range(
     scroll_y: f32,
     viewport_height: f32,
@@ -1061,8 +1385,9 @@ fn desired_tile_range(
 ) -> std::ops::RangeInclusive<u32> {
     let last = ((content_height.max(1.0) / EMAIL_TILE_HEIGHT).ceil() as u32).saturating_sub(1);
     let first_visible = (scroll_y.max(0.0) / EMAIL_TILE_HEIGHT).floor() as u32;
-    let last_visible =
-        ((scroll_y.max(0.0) + viewport_height.max(1.0)) / EMAIL_TILE_HEIGHT).floor() as u32;
+    let last_visible = (((scroll_y.max(0.0) + viewport_height.max(1.0)) / EMAIL_TILE_HEIGHT).ceil()
+        as u32)
+        .saturating_sub(1);
     let first = first_visible.saturating_sub(EMAIL_TILE_OVERSCAN).min(last);
     let end = last_visible.saturating_add(EMAIL_TILE_OVERSCAN).min(last);
     first..=end.max(first)
@@ -1211,6 +1536,7 @@ fn prepare_email_html_at(
     height: u32,
     scale: f32,
 ) -> Result<PreparedEmail, String> {
+    let started = render_timings_enabled().then(Instant::now);
     let (html, notice) = crate::email_document::bounded_html(html);
     let html = with_email_font_fallback(&html);
     struct PreparationAbort(Option<blitz_traits::net::AbortController>);
@@ -1225,6 +1551,7 @@ fn prepare_email_html_at(
     let mut document = HtmlDocument::from_html(
         &html,
         DocumentConfig {
+            image_decode_limits: Some(crate::remote::image_decode_limits()),
             viewport: Some(Viewport::new(width, height, scale, ColorScheme::Light)),
             net_provider,
             abort_signal: Some(abort.0.as_ref().unwrap().signal.clone()),
@@ -1248,8 +1575,16 @@ fn prepare_email_html_at(
     let links = collect_email_links(&document, width as f32 / scale);
     let plain_text = collect_plain_text(&document);
 
+    if let Some(started) = started {
+        eprintln!(
+            "email prepare + initial layout: {:.2}ms",
+            started.elapsed().as_secs_f64() * 1000.0
+        );
+    }
+
     Ok(PreparedEmail {
         document,
+        paint_cache: PaintCache::default(),
         links,
         plain_text,
         notice,

@@ -24,6 +24,9 @@ use blitz_traits::shell::ShellProvider;
 
 use url::Url;
 
+mod image_decode;
+pub use image_decode::ImageDecodeLimits;
+
 use crate::{document::DocumentEvent, util::ImageType};
 
 pub(crate) fn stamped_request(url: Url, signal: Option<&AbortSignal>) -> Request {
@@ -56,6 +59,7 @@ pub struct FontFaceOverrides {
 
 #[derive(Clone, Debug)]
 pub enum Resource {
+    Raster(ImageType, crate::node::RasterImageData),
     Image(ImageType, u32, u32, Arc<Vec<u8>>),
     #[cfg(feature = "svg")]
     Svg(ImageType, crate::node::SvgImageData),
@@ -516,10 +520,15 @@ impl NetHandler for ResourceHandler<DocumentSrcHandler> {
 
 pub struct ImageHandler {
     kind: ImageType,
+    limits: Option<ImageDecodeLimits>,
 }
 impl ImageHandler {
     pub fn new(kind: ImageType) -> Self {
-        Self { kind }
+        Self { kind, limits: None }
+    }
+    pub fn with_limits(mut self, limits: Option<ImageDecodeLimits>) -> Self {
+        self.limits = limits;
+        self
     }
 }
 
@@ -532,6 +541,11 @@ impl NetHandler for ResourceHandler<ImageHandler> {
 
 impl ImageHandler {
     fn parse(&self, bytes: Bytes) -> Result<Resource, String> {
+        if let Some(limits) = self.limits {
+            return limits
+                .decode(&bytes)
+                .map(|image| Resource::Raster(self.kind, image));
+        }
         let image_err = match image::ImageReader::new(Cursor::new(&bytes))
             .with_guessed_format()
             .expect("IO errors impossible with Cursor")

@@ -416,11 +416,94 @@ fn automatic_selection_hydrates_and_reader_controls_are_responsive_and_keyboard_
         !attachments.get_open(),
         "Escape must close a preview while its zoom editor is focused"
     );
+    // High-frequency scroll input updates the final position immediately,
+    // but raster work is deferred and coalesced into one timer callback.
+    app.set_remote_images_blocked(false);
+    app.set_text_mode(false);
+    let html = format!(
+        "<body>{}</body>",
+        "<p style='height:110px'>Scroll integration</p>".repeat(100)
+    );
+    renderer.borrow_mut().set_zoom(1.0);
+    renderer.borrow_mut().set_auto_fit(false);
+    renderer
+        .borrow_mut()
+        .set_email(renderer::prepare_email_html(&html).unwrap());
+    let (width, height) = email_viewport_size(&app);
+    let frame = renderer
+        .borrow_mut()
+        .render_cpu_if_needed(width, height, 1.0)
+        .unwrap()
+        .unwrap();
+    apply_cpu_frame(&app, frame);
+    let tiles_model = app.get_email_tiles();
+    let tiles_before = renderer.borrow().tile_count;
+    let layouts_before = renderer.borrow().layout_count;
+    for y in [600.0, 1500.0, 3000.0] {
+        app.invoke_email_scroll(y, height as f32);
+    }
+    assert_eq!(
+        renderer.borrow().tile_count,
+        tiles_before,
+        "input must not rasterize synchronously"
+    );
+    std::thread::sleep(Duration::from_millis(25));
+    slint::platform::update_timers_and_animations();
+    assert!(renderer.borrow().tile_count > tiles_before);
+    assert!(renderer.borrow().tile_count <= tiles_before + 5);
+    assert_eq!(renderer.borrow().layout_count, layouts_before);
+    assert_eq!(
+        app.get_email_tiles(),
+        tiles_model,
+        "scroll must retain Slint's tile model"
+    );
+
     state.borrow_mut().messages.clear();
     render_current(&app, &state, &runtime).unwrap();
     assert_eq!(app.global::<MailAttachments>().get_rows().row_count(), 0);
     assert_eq!(app.global::<EmailReader>().get_message_id(), -1);
     assert!(app.global::<EmailReader>().get_notice().is_empty());
     assert!(!app.global::<EmailReader>().get_available());
+    // Renderer preferences persist independently of database startup and take
+    // effect only after restart. This test never initializes a GPU.
+    let preferences = tempfile::tempdir().unwrap();
+    let preference_path = preferences.path().join("renderer.json");
+    crate::renderer_preferences::register(
+        &app,
+        preference_path.clone(),
+        crate::renderer_preferences::RendererMode::Cpu,
+        false,
+        true,
+    );
+    let renderer_settings = app.global::<RendererSettings>();
+    renderer_settings.invoke_choose("gpu".into());
+    assert_eq!(
+        crate::renderer_preferences::load(&preference_path),
+        crate::renderer_preferences::RendererMode::Gpu
+    );
+    assert_eq!(renderer_settings.get_active(), "cpu");
+    assert!(renderer_settings.get_restart_required());
+    app.set_theme_mode("light".into());
+    app.set_settings_tab("General".into());
+    app.set_settings_open(true);
+    draw("renderer-settings-desktop", 1280, 900);
+    draw("renderer-settings-phone", 390, 844);
+    renderer_settings.invoke_choose("cpu".into());
+    assert!(!renderer_settings.get_restart_required());
+    assert_eq!(
+        crate::renderer_preferences::load(&preference_path),
+        crate::renderer_preferences::RendererMode::Cpu
+    );
+    // A failed atomic write must retain the actual saved choice.
+    crate::renderer_preferences::register(
+        &app,
+        preferences.path().to_owned(),
+        crate::renderer_preferences::RendererMode::Cpu,
+        false,
+        true,
+    );
+    renderer_settings.invoke_choose("gpu".into());
+    assert_eq!(renderer_settings.get_preferred(), "cpu");
+    assert!(!renderer_settings.get_error().is_empty());
     app.hide().unwrap();
 }

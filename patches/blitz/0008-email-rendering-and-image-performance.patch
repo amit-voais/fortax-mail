@@ -1,0 +1,886 @@
+diff --git a/crates/blitz-dom/Cargo.toml b/crates/blitz-dom/Cargo.toml
+index 37c5683..571931c 100644
+--- a/crates/blitz-dom/Cargo.toml
++++ b/crates/blitz-dom/Cargo.toml
+@@ -108,6 +108,10 @@ version = "0.2.13"
+ version = "0.25.6"
+ default-features = false
+ 
++[dependencies.jpeg-decoder]
++version = "0.3.2"
++default-features = false
++
+ [dependencies.keyboard-types]
+ version = "0.7"
+ 
+diff --git a/crates/blitz-dom/Cargo.toml.orig b/crates/blitz-dom/Cargo.toml.orig
+index ab86c3b..9f3507e 100644
+--- a/crates/blitz-dom/Cargo.toml.orig
++++ b/crates/blitz-dom/Cargo.toml.orig
+@@ -77,6 +77,7 @@ rayon = { workspace = true }
+ 
+ # Media & Decoding
+ image = { workspace = true }
++jpeg-decoder = { version = "0.3.2", default-features = false }
+ usvg = { workspace = true, optional = true }
+ svgtypes = { workspace = true, optional = true }
+ wuff = { workspace = true, optional = true }
+diff --git a/crates/blitz-dom/src/config.rs b/crates/blitz-dom/src/config.rs
+index f85c958..335a502 100644
+--- a/crates/blitz-dom/src/config.rs
++++ b/crates/blitz-dom/src/config.rs
+@@ -31,6 +31,8 @@ pub enum StyleThreading {
+ /// Options used when constructing a [`BaseDocument`](crate::BaseDocument)
+ #[derive(Default)]
+ pub struct DocumentConfig {
++    /// Optional bounded raster decoding for untrusted email content.
++    pub image_decode_limits: Option<crate::net::ImageDecodeLimits>,
+     /// The initial `Viewport`
+     pub viewport: Option<Viewport>,
+     /// The base url which relative URLs are resolved against
+diff --git a/crates/blitz-dom/src/document.rs b/crates/blitz-dom/src/document.rs
+index 6341aa3..90fd76e 100644
+--- a/crates/blitz-dom/src/document.rs
++++ b/crates/blitz-dom/src/document.rs
+@@ -195,7 +195,27 @@ pub enum DocumentEvent {
+     },
+ }
+ 
++/// Damage from delivered resources. Paint-only updates preserve resolved layout.
++#[derive(Default, Debug)]
++pub struct ResourceUpdates {
++    pub changed: bool,
++    pub layout: bool,
++    pub paint_nodes: Vec<NodeId>,
++}
++
++fn image_has_fixed_size(node: &Node) -> bool {
++    let size = node.style().size;
++    size.width
++        .into_option()
++        .is_some_and(|v| v.is_finite() && v > 0.0)
++        && size
++            .height
++            .into_option()
++            .is_some_and(|v| v.is_finite() && v > 0.0)
++}
++
+ pub struct BaseDocument {
++    pub(crate) image_decode_limits: Option<crate::net::ImageDecodeLimits>,
+     /// ID of the document
+     id: usize,
+ 
+@@ -455,6 +475,7 @@ impl BaseDocument {
+         let (tx, rx) = sync_channel(DOCUMENT_EVENT_QUEUE_CAPACITY);
+ 
+         let mut doc = Self {
++            image_decode_limits: config.image_decode_limits,
+             id,
+             tx,
+             rx: Some(rx),
+@@ -1248,19 +1269,53 @@ impl BaseDocument {
+ 
+     /// Drain resource events, reporting whether layout may have changed.
+     pub fn drain_pending_messages(&mut self) -> bool {
+-        let mut changed = false;
++        self.drain_pending_updates().changed
++    }
++
++    pub fn drain_pending_updates(&mut self) -> ResourceUpdates {
++        let mut updates = ResourceUpdates::default();
+         // Remove event Reciever from the Document so that we can process events
+         // without holding a borrow to the Document
+         let rx = self.rx.take().unwrap();
+ 
+         while let Ok(msg) = rx.try_recv() {
+-            changed = true;
++            updates.changed = true;
++            match &msg {
++                DocumentEvent::ResourceLoad(res) => {
++                    updates.layout |= self.pending_critical_resources.contains(&res.request_id);
++                    match &res.result {
++                        Ok(Resource::Image(..) | Resource::Raster(..)) => {
++                            if let Some(waiting) = res
++                                .resolved_url
++                                .as_ref()
++                                .and_then(|url| self.pending_images.get(url))
++                            {
++                                for &(id, kind) in waiting {
++                                    if matches!(kind, ImageType::Image)
++                                        && self
++                                            .get_node(id)
++                                            .is_some_and(|node| !image_has_fixed_size(node))
++                                    {
++                                        updates.layout = true;
++                                    }
++                                    updates.paint_nodes.push(id);
++                                }
++                            }
++                        }
++                        Ok(Resource::None) | Err(_) => {}
++                        _ => updates.layout = true,
++                    }
++                }
++                _ => updates.layout = true,
++            }
+             self.handle_message(msg);
+         }
+ 
+         // Put Reciever back
+         self.rx = Some(rx);
+-        changed
++        updates.paint_nodes.sort_unstable();
++        updates.paint_nodes.dedup();
++        updates
+     }
+ 
+     pub fn handle_message(&mut self, msg: DocumentEvent) {
+@@ -1303,6 +1358,11 @@ impl BaseDocument {
+         };
+ 
+         match resource {
++            Resource::Raster(_, image) => {
++                if let Some(url) = res.resolved_url.as_ref() {
++                    self.apply_loaded_image(url, ImageData::Raster(image));
++                }
++            }
+             Resource::Css(css) => {
+                 let node_id = res.node_id.unwrap();
+                 self.add_stylesheet_for_node(css, node_id);
+@@ -1402,12 +1462,15 @@ impl BaseDocument {
+ 
+             match image_type {
+                 ImageType::Image => {
++                    let fixed_size = image_has_fixed_size(node);
+                     node.element_data_mut().unwrap().special_data =
+                         SpecialElementData::Image(Box::new(image.clone()));
+ 
+                     // Clear layout cache
+-                    node.cache_mut().clear();
+-                    node.insert_damage(ALL_DAMAGE);
++                    if !fixed_size {
++                        node.cache_mut().clear();
++                        node.insert_damage(ALL_DAMAGE);
++                    }
+                 }
+                 ImageType::Background(idx) | ImageType::Mask(idx) => {
+                     let layer_image = node.element_data_mut().and_then(|el| {
+diff --git a/crates/blitz-dom/src/iframe.rs b/crates/blitz-dom/src/iframe.rs
+index 6fa0f02..03520ae 100644
+--- a/crates/blitz-dom/src/iframe.rs
++++ b/crates/blitz-dom/src/iframe.rs
+@@ -55,6 +55,7 @@ impl BaseDocument {
+         abort_signal: AbortSignal,
+     ) -> DocumentConfig {
+         DocumentConfig {
++            image_decode_limits: self.image_decode_limits,
+             viewport: None,
+             base_url,
+             ua_stylesheets: None,
+diff --git a/crates/blitz-dom/src/layout/damage.rs b/crates/blitz-dom/src/layout/damage.rs
+index 9957254..f913ea2 100644
+--- a/crates/blitz-dom/src/layout/damage.rs
++++ b/crates/blitz-dom/src/layout/damage.rs
+@@ -516,7 +516,8 @@ impl BaseDocument {
+                                 doc_id,
+                                 None, // Don't pass node_id, we'll handle via pending_images
+                                 self.shell_provider.clone(),
+-                                ImageHandler::new(kind.image_type(idx)),
++                                ImageHandler::new(kind.image_type(idx))
++                                    .with_limits(self.image_decode_limits),
+                             ),
+                         );
+ 
+diff --git a/crates/blitz-dom/src/mutator.rs b/crates/blitz-dom/src/mutator.rs
+index 7ad1428..38c1733 100644
+--- a/crates/blitz-dom/src/mutator.rs
++++ b/crates/blitz-dom/src/mutator.rs
+@@ -1141,7 +1141,8 @@ impl<'doc> DocumentMutator<'doc> {
+                         self.doc.id(),
+                         None, // Don't pass node_id, we'll handle it via pending_images
+                         self.doc.shell_provider.clone(),
+-                        ImageHandler::new(ImageType::Image),
++                        ImageHandler::new(ImageType::Image)
++                            .with_limits(self.doc.image_decode_limits),
+                     ),
+                 );
+             }
+diff --git a/crates/blitz-dom/src/net.rs b/crates/blitz-dom/src/net.rs
+index 15f5be0..72e6a12 100644
+--- a/crates/blitz-dom/src/net.rs
++++ b/crates/blitz-dom/src/net.rs
+@@ -24,6 +24,9 @@ use blitz_traits::shell::ShellProvider;
+ 
+ use url::Url;
+ 
++mod image_decode;
++pub use image_decode::ImageDecodeLimits;
++
+ use crate::{document::DocumentEvent, util::ImageType};
+ 
+ pub(crate) fn stamped_request(url: Url, signal: Option<&AbortSignal>) -> Request {
+@@ -56,6 +59,7 @@ pub struct FontFaceOverrides {
+ 
+ #[derive(Clone, Debug)]
+ pub enum Resource {
++    Raster(ImageType, crate::node::RasterImageData),
+     Image(ImageType, u32, u32, Arc<Vec<u8>>),
+     #[cfg(feature = "svg")]
+     Svg(ImageType, crate::node::SvgImageData),
+@@ -516,10 +520,15 @@ impl NetHandler for ResourceHandler<DocumentSrcHandler> {
+ 
+ pub struct ImageHandler {
+     kind: ImageType,
++    limits: Option<ImageDecodeLimits>,
+ }
+ impl ImageHandler {
+     pub fn new(kind: ImageType) -> Self {
+-        Self { kind }
++        Self { kind, limits: None }
++    }
++    pub fn with_limits(mut self, limits: Option<ImageDecodeLimits>) -> Self {
++        self.limits = limits;
++        self
+     }
+ }
+ 
+@@ -532,6 +541,11 @@ impl NetHandler for ResourceHandler<ImageHandler> {
+ 
+ impl ImageHandler {
+     fn parse(&self, bytes: Bytes) -> Result<Resource, String> {
++        if let Some(limits) = self.limits {
++            return limits
++                .decode(&bytes)
++                .map(|image| Resource::Raster(self.kind, image));
++        }
+         let image_err = match image::ImageReader::new(Cursor::new(&bytes))
+             .with_guessed_format()
+             .expect("IO errors impossible with Cursor")
+diff --git a/crates/blitz-dom/src/node/element.rs b/crates/blitz-dom/src/node/element.rs
+index 724984e..a1b3881 100644
+--- a/crates/blitz-dom/src/node/element.rs
++++ b/crates/blitz-dom/src/node/element.rs
+@@ -760,6 +760,9 @@ impl ElementData {
+ 
+ #[derive(Debug, Clone, PartialEq)]
+ pub struct RasterImageData {
++    /// Decoded pixel dimensions may be smaller than the intrinsic CSS size.
++    pub pixel_width: u32,
++    pub pixel_height: u32,
+     /// The width of the image
+     pub width: u32,
+     /// The height of the image
+@@ -770,6 +773,8 @@ pub struct RasterImageData {
+ impl RasterImageData {
+     pub fn new(width: u32, height: u32, data: Arc<Vec<u8>>) -> Self {
+         Self {
++            pixel_width: width,
++            pixel_height: height,
+             width,
+             height,
+             data: Blob::new(data),
+diff --git a/crates/blitz-paint/src/lib.rs b/crates/blitz-paint/src/lib.rs
+index afae3e2..9705020 100644
+--- a/crates/blitz-paint/src/lib.rs
++++ b/crates/blitz-paint/src/lib.rs
+@@ -19,6 +19,22 @@ use anyrender::{PaintScene, Scene};
+ use blitz_dom::{BaseDocument, NodeId, util::Color};
+ use render::BlitzDomPainter;
+ 
++/// Bounded line geometry retained between tile paints. Clear after resolving
++/// layout or styles; selection and viewport translation do not invalidate it.
++#[derive(Default)]
++pub struct PaintCache {
++    pub(crate) lines: std::cell::RefCell<HashMap<NodeId, Vec<Option<kurbo::Rect>>>>,
++}
++
++impl PaintCache {
++    pub fn clear(&mut self) {
++        self.lines.get_mut().clear();
++    }
++    pub fn line_count(&self) -> usize {
++        self.lines.borrow().values().map(Vec::len).sum()
++    }
++}
++
+ const FONT_EMBOLDEN_ENABLED: bool = cfg!(any(
+     feature = "font-embolden",
+     all(feature = "apple-font-embolden", target_os = "macos"),
+@@ -48,6 +64,43 @@ pub fn paint_scene(
+     height: u32,
+     x_offset: u32,
+     y_offset: u32,
++) {
++    paint_scene_impl(scene, doc, scale, width, height, x_offset, y_offset, None);
++}
++
++#[allow(clippy::too_many_arguments)]
++pub fn paint_scene_cached(
++    scene: &mut impl PaintScene,
++    doc: &mut BaseDocument,
++    scale: f64,
++    width: u32,
++    height: u32,
++    x_offset: u32,
++    y_offset: u32,
++    cache: &PaintCache,
++) {
++    paint_scene_impl(
++        scene,
++        doc,
++        scale,
++        width,
++        height,
++        x_offset,
++        y_offset,
++        Some(cache),
++    );
++}
++
++#[allow(clippy::too_many_arguments)]
++fn paint_scene_impl(
++    scene: &mut impl PaintScene,
++    doc: &mut BaseDocument,
++    scale: f64,
++    width: u32,
++    height: u32,
++    x_offset: u32,
++    y_offset: u32,
++    cache: Option<&PaintCache>,
+ ) {
+     // Run `.paint()` on every custom widget in the document (and all subdocuments) ahead of time.
+     // This helps us avoid borrow-checker issues as we recurse down the tree (`.paint()` require `&mut self`).
+@@ -58,7 +111,7 @@ pub fn paint_scene(
+     #[cfg(feature = "custom-widget")]
+     build_custom_widget_scenes(&mut custom_widget_scenes, doc, scene, scale);
+ 
+-    let generator = BlitzDomPainter::new(
++    let mut generator = BlitzDomPainter::new(
+         doc,
+         scale,
+         width,
+@@ -67,6 +120,7 @@ pub fn paint_scene(
+         y_offset as f64,
+         &custom_widget_scenes,
+     );
++    generator.paint_cache = cache;
+     generator.paint_scene(scene);
+ 
+     // println!(
+diff --git a/crates/blitz-paint/src/render.rs b/crates/blitz-paint/src/render.rs
+index cdfe6db..aefeb3f 100644
+--- a/crates/blitz-paint/src/render.rs
++++ b/crates/blitz-paint/src/render.rs
+@@ -104,6 +104,7 @@ impl<'a> PhysicalTracks<'a> {
+ /// A short-lived struct which holds a bunch of parameters for rendering a scene so
+ /// that we don't have to pass them down as parameters
+ pub struct BlitzDomPainter<'dom, 'a> {
++    pub(crate) paint_cache: Option<&'a crate::PaintCache>,
+     /// Input parameters (read only) for generating the Scene
+     pub(crate) dom: &'dom BaseDocument,
+     pub(crate) scale: f64,
+@@ -149,6 +150,7 @@ impl<'dom, 'a> BlitzDomPainter<'dom, 'a> {
+         let root_element_id = dom.try_root_element().map(|el| el.id);
+ 
+         Self {
++            paint_cache: None,
+             dom,
+             scale,
+             width,
+@@ -639,8 +641,8 @@ fn to_peniko_image(image: &RasterImageData, quality: peniko::ImageQuality) -> pe
+         image: ImageData {
+             data: image.data.clone(),
+             format: peniko::ImageFormat::Rgba8,
+-            width: image.width,
+-            height: image.height,
++            width: image.pixel_width,
++            height: image.pixel_height,
+             alpha_type: peniko::ImageAlphaType::Alpha,
+         },
+         sampler: ImageSampler {
+@@ -813,16 +815,79 @@ impl ElementCx<'_, '_> {
+             let transform =
+                 self.transform * Affine::translate((pos.x * self.scale, pos.y * self.scale));
+ 
+-            // Render inline element backgrounds (e.g. `<span style="background: ...">`)
+-            // behind the text and selection highlight.
++            // Render text
++            // Filters can bring offscreen source pixels into the viewport.
++            // Keep their source intact, including filters on ancestor boxes.
++            let mut ancestor = Some(self.node.id);
++            let mut viewport = Some(Rect::new(
++                0.0,
++                0.0,
++                self.context.width as f64,
++                self.context.height as f64,
++            ));
++            while let Some(id) = ancestor {
++                let Some(node) = self.context.dom.get_node(id) else {
++                    break;
++                };
++                if node.primary_styles().is_some_and(|style| {
++                    let effects = style.get_effects();
++                    !effects.filter.0.is_empty() || !effects.backdrop_filter.0.is_empty()
++                }) {
++                    viewport = None;
++                    break;
++                }
++                ancestor = node.parent;
++            }
++            let mut cached = self
++                .context
++                .paint_cache
++                .map(|cache| cache.lines.borrow_mut());
++            if let Some(cache) = cached.as_mut() {
++                // Bound auxiliary geometry to ~640 KiB even for huge messages.
++                let count = text_layout.layout.len();
++                if viewport.is_some()
++                    && count >= 16
++                    && !cache.contains_key(&self.node.id)
++                    && cache.values().map(Vec::len).sum::<usize>() + count <= 16_000
++                {
++                    cache.insert(
++                        self.node.id,
++                        crate::text::line_paint_bounds(
++                            &text_layout.layout,
++                            self.context.dom,
++                            self.node.id,
++                        ),
++                    );
++                }
++            }
++            let bounds = cached.as_ref().and_then(|cache| cache.get(&self.node.id));
++            let lines = text_layout
++                .layout
++                .lines()
++                .enumerate()
++                .filter_map(|(index, line)| {
++                    let outside = viewport
++                        .zip(bounds)
++                        .and_then(|(viewport, bounds)| {
++                            bounds[index].map(|bounds| {
++                                let bounds = transform.transform_rect_bbox(bounds);
++                                bounds.is_finite()
++                                    && (bounds.x1 < viewport.x0
++                                        || bounds.x0 > viewport.x1
++                                        || bounds.y1 < viewport.y0
++                                        || bounds.y0 > viewport.y1)
++                            })
++                        })
++                        .unwrap_or(false);
++                    (!outside).then_some(line)
++                });
+             crate::text::draw_inline_backgrounds(
+                 scene,
+-                text_layout.layout.lines(),
++                lines.clone(),
+                 self.context.dom,
+                 transform,
+                 self.node.id,
+             );
+-
+             // Render text selection highlight (if any) using cached selection ranges
+             if let Some(&(sel_start, sel_end)) = self.context.selection_ranges.get(&self.node.id) {
+                 crate::text::draw_text_selection(
+@@ -834,16 +899,16 @@ impl ElementCx<'_, '_> {
+                 );
+             }
+ 
+-            // Render text
+             let mut draw_text_context = self.context.draw_text_context.borrow_mut();
+             crate::text::stroke_text(
+                 scene,
+-                text_layout.layout.lines(),
++                lines,
+                 self.context.dom,
+                 transform,
+                 self.scale,
+                 self.node.id,
+                 &mut draw_text_context,
++                viewport,
+             );
+         }
+     }
+@@ -910,6 +975,7 @@ impl ElementCx<'_, '_> {
+                 self.scale,
+                 self.node.id,
+                 &mut draw_text_context,
++                None,
+             );
+         }
+     }
+@@ -958,6 +1024,7 @@ impl ElementCx<'_, '_> {
+                 self.scale,
+                 self.node.id,
+                 &mut draw_text_context,
++                None,
+             );
+         }
+     }
+@@ -1092,8 +1159,8 @@ impl ElementCx<'_, '_> {
+             let x = x + x_offset.px() as f64;
+             let y = y + y_offset.px() as f64;
+ 
+-            let x_scale = paint_size.width as f64 / object_size.width as f64;
+-            let y_scale = paint_size.height as f64 / object_size.height as f64;
++            let x_scale = paint_size.width as f64 / image.pixel_width as f64;
++            let y_scale = paint_size.height as f64 / image.pixel_height as f64;
+             let transform = self
+                 .transform
+                 .pre_translate(Vec2 { x, y })
+diff --git a/crates/blitz-paint/src/render/background.rs b/crates/blitz-paint/src/render/background.rs
+index 239c96b..b771d05 100644
+--- a/crates/blitz-paint/src/render/background.rs
++++ b/crates/blitz-paint/src/render/background.rs
+@@ -454,7 +454,10 @@ impl ElementCx<'_, '_> {
+                     peniko::Fill::NonZero,
+                     transform,
+                     to_peniko_image(image_data, quality).as_ref(),
+-                    None,
++                    Some(Affine::scale_non_uniform(
++                        image_data.width as f64 / image_data.pixel_width as f64,
++                        image_data.height as f64 / image_data.pixel_height as f64,
++                    )),
+                     &tile_rect,
+                 );
+             }
+diff --git a/crates/blitz-paint/src/text.rs b/crates/blitz-paint/src/text.rs
+index ec2d8cf..7f3f4fb 100644
+--- a/crates/blitz-paint/src/text.rs
++++ b/crates/blitz-paint/src/text.rs
+@@ -260,6 +260,100 @@ pub(crate) struct DrawTextContext {
+     path_scratch: Vec<NodeId>,
+     deco_boxes: Vec<LineDecoration>,
+     win_ascent_ratios: WinAscentCache,
++    outline_bounds: HashMap<(u64, u32), Option<Rect>>,
++}
++
++// The font-wide outline bounds include accents and overhangs which line-height
++// does not. Unknown, variable and color fonts keep the normal paint path.
++fn font_outline_bounds(font: &parley::FontData) -> Option<Rect> {
++    use skrifa::raw::{FontRef, TableProvider as _};
++    let font = FontRef::from_index(font.data.as_ref(), font.index).ok()?;
++    if font.fvar().is_ok()
++        || font.colr().is_ok()
++        || font.cbdt().is_ok()
++        || font.sbix().is_ok()
++        || font.svg().is_ok()
++    {
++        return None;
++    }
++    let head = font.head().ok()?;
++    let units = f64::from(head.units_per_em());
++    if units == 0.0 || head.x_min() >= head.x_max() || head.y_min() >= head.y_max() {
++        return None;
++    }
++    Some(Rect::new(
++        f64::from(head.x_min()) / units,
++        -f64::from(head.y_max()) / units,
++        f64::from(head.x_max()) / units,
++        -f64::from(head.y_min()) / units,
++    ))
++}
++
++/// Local paint bounds for each line, computed once per layout. Unknown font
++/// bounds and authored decorations conservatively retain the original path.
++pub(crate) fn line_paint_bounds(
++    layout: &Layout<TextBrush>,
++    doc: &BaseDocument,
++    root: NodeId,
++) -> Vec<Option<Rect>> {
++    let mut fonts = HashMap::new();
++    let mut decorated = HashMap::new();
++    layout
++        .lines()
++        .map(|line| {
++            let mut bounds: Option<Rect> = None;
++            for item in line.items() {
++                let PositionedLayoutItem::GlyphRun(glyph_run) = item else {
++                    continue;
++                };
++                let id = glyph_run.style().brush.id;
++                let has_decoration = *decorated.entry(id).or_insert_with(|| {
++                    let mut ancestor = Some(id);
++                    while let Some(id) = ancestor {
++                        if resolve_decoration_entry(doc, id).decoration.is_some() {
++                            return true;
++                        }
++                        if id == root {
++                            break;
++                        }
++                        ancestor = doc.get_node(id).and_then(|node| node.parent);
++                    }
++                    false
++                });
++                if has_decoration {
++                    return None;
++                }
++                let run = glyph_run.run();
++                let font = run.font();
++                let font_bounds = (*fonts
++                    .entry((font.data.id(), font.index))
++                    .or_insert_with(|| font_outline_bounds(font)))?;
++                let glyph_bounds = Affine::scale(run.font_size() as f64)
++                    .transform_rect_bbox(font_bounds)
++                    .inflate(2.0, 2.0);
++                let synthesis = run
++                    .synthesis()
++                    .skew()
++                    .map(|angle| Affine::skew(angle.to_radians().tan() as f64, 0.0))
++                    .unwrap_or(Affine::IDENTITY);
++                let glyph_bounds = synthesis.transform_rect_bbox(glyph_bounds);
++                let metrics = run.metrics();
++                // Inline backgrounds may extend past the glyph outlines.
++                let mut run_bounds = Rect::new(
++                    glyph_run.offset() as f64,
++                    (glyph_run.baseline() - metrics.ascent) as f64,
++                    (glyph_run.offset() + glyph_run.advance()) as f64,
++                    (glyph_run.baseline() + metrics.descent) as f64,
++                );
++                for glyph in glyph_run.positioned_glyphs() {
++                    run_bounds = run_bounds
++                        .union(glyph_bounds + kurbo::Vec2::new(glyph.x as f64, glyph.y as f64));
++                }
++                bounds = Some(bounds.map_or(run_bounds, |bounds| bounds.union(run_bounds)));
++            }
++            bounds.filter(|bounds| bounds.is_finite())
++        })
++        .collect()
+ }
+ 
+ /// Resolve the CSS `text-decoration-thickness` to a device-pixel size.
+@@ -555,6 +649,7 @@ fn flush_line_decorations(
+     }
+ }
+ 
++#[allow(clippy::too_many_arguments)]
+ pub(crate) fn stroke_text<'a>(
+     scene: &mut impl PaintScene,
+     lines: impl Iterator<Item = Line<'a, TextBrush>>,
+@@ -563,12 +658,14 @@ pub(crate) fn stroke_text<'a>(
+     scale: f64,
+     inline_root_id: NodeId,
+     context: &mut DrawTextContext,
++    viewport: Option<Rect>,
+ ) {
+     let DrawTextContext {
+         stack,
+         path_scratch,
+         deco_boxes,
+         win_ascent_ratios,
++        outline_bounds,
+     } = context;
+     stack.clear();
+     path_scratch.clear();
+@@ -637,23 +734,65 @@ pub(crate) fn stroke_text<'a>(
+                     kurbo::Vec2::default()
+                 };
+ 
+-                scene.draw_glyphs(
+-                    font,
+-                    font_size,
+-                    !FONT_EMBOLDEN_ENABLED, // hint
+-                    run.normalized_coords(),
+-                    embolden,
+-                    Fill::NonZero,
+-                    &anyrender::Paint::from(text_color),
+-                    1.0, // alpha
+-                    transform,
+-                    glyph_xform,
+-                    glyph_run.positioned_glyphs().map(|glyph| anyrender::Glyph {
+-                        id: glyph.id as _,
+-                        x: glyph.x,
+-                        y: glyph.y,
+-                    }),
+-                );
++                let outside = viewport.is_some_and(|viewport| {
++                    let bounds = *outline_bounds
++                        .entry((font.data.id(), font.index))
++                        .or_insert_with(|| font_outline_bounds(font));
++                    let Some(bounds) = bounds else {
++                        return false;
++                    };
++                    // Include hinting and synthetic emboldening before applying
++                    // italic synthesis and the complete CSS transform.
++                    let bounds = Affine::scale(font_size as f64)
++                        .transform_rect_bbox(bounds)
++                        .inflate(2.0, 2.0);
++                    let bounds = glyph_xform
++                        .unwrap_or(Affine::IDENTITY)
++                        .transform_rect_bbox(bounds);
++                    let mut glyphs = glyph_run.positioned_glyphs();
++                    let Some(first) = glyphs.next() else {
++                        return true;
++                    };
++                    let mut positions = Rect::new(
++                        first.x as f64,
++                        first.y as f64,
++                        first.x as f64,
++                        first.y as f64,
++                    );
++                    for glyph in glyphs {
++                        positions = positions.union_pt((glyph.x as f64, glyph.y as f64));
++                    }
++                    let painted = transform.transform_rect_bbox(Rect::new(
++                        positions.x0 + bounds.x0,
++                        positions.y0 + bounds.y0,
++                        positions.x1 + bounds.x1,
++                        positions.y1 + bounds.y1,
++                    ));
++                    painted.is_finite()
++                        && (painted.x1 < viewport.x0
++                            || painted.x0 > viewport.x1
++                            || painted.y1 < viewport.y0
++                            || painted.y0 > viewport.y1)
++                });
++                if !outside {
++                    scene.draw_glyphs(
++                        font,
++                        font_size,
++                        !FONT_EMBOLDEN_ENABLED, // hint
++                        run.normalized_coords(),
++                        embolden,
++                        Fill::NonZero,
++                        &anyrender::Paint::from(text_color),
++                        1.0, // alpha
++                        transform,
++                        glyph_xform,
++                        glyph_run.positioned_glyphs().map(|glyph| anyrender::Glyph {
++                            id: glyph.id as _,
++                            x: glyph.x,
++                            y: glyph.y,
++                        }),
++                    );
++                }
+ 
+                 // Accumulate this run's contribution to each decorating box on its ancestor
+                 // path. The decoration is drawn once per box after the whole line has been
+diff --git a/crates/blitz-dom/src/net/image_decode.rs b/crates/blitz-dom/src/net/image_decode.rs
+new file mode 100644
+index 0000000..b845293
+--- /dev/null
++++ b/crates/blitz-dom/src/net/image_decode.rs
+@@ -0,0 +1,98 @@
++use crate::node::RasterImageData;
++use image::{DynamicImage, ImageFormat, ImageReader};
++use std::{io::Cursor, sync::Arc};
++
++#[derive(Clone, Copy, Debug)]
++pub struct ImageDecodeLimits {
++    pub max_source_dimension: u32,
++    pub max_source_pixels: u64,
++    pub max_alloc: u64,
++    pub target_dimension: u32,
++}
++
++impl ImageDecodeLimits {
++    /// Bound decoding and retain intrinsic dimensions independently of pixels.
++    /// JPEG uses native IDCT scaling; other formats are resized after their
++    /// bounded decode. The first frame is used for animated formats.
++    pub fn decode(self, bytes: &[u8]) -> Result<RasterImageData, String> {
++        let reader = ImageReader::new(Cursor::new(bytes))
++            .with_guessed_format()
++            .map_err(|e| e.to_string())?;
++        let format = reader.format();
++        let (width, height) = reader.into_dimensions().map_err(|e| e.to_string())?;
++        if width == 0
++            || height == 0
++            || width > self.max_source_dimension
++            || height > self.max_source_dimension
++            || u64::from(width) * u64::from(height) > self.max_source_pixels
++            || self.target_dimension == 0
++        {
++            return Err("Image dimensions exceed the document decoder limits".into());
++        }
++
++        let target = self.target_dimension;
++        let scaled_jpeg = if format == Some(ImageFormat::Jpeg) && width.max(height) > target {
++            let mut decoder = jpeg_decoder::Decoder::new(Cursor::new(bytes));
++            decoder.set_max_decoding_buffer_size(self.max_alloc.min(usize::MAX as u64) as usize);
++            decoder.read_info().map_err(|e| e.to_string())?;
++            let info = decoder.info().ok_or("Missing JPEG dimensions")?;
++            if matches!(
++                info.pixel_format,
++                jpeg_decoder::PixelFormat::RGB24 | jpeg_decoder::PixelFormat::L8
++            ) {
++                let divisor = width
++                    .max(height)
++                    .div_ceil(target)
++                    .next_power_of_two()
++                    .min(8);
++                let (w, h) = decoder
++                    .scale(
++                        width.div_ceil(divisor) as u16,
++                        height.div_ceil(divisor) as u16,
++                    )
++                    .map_err(|e| e.to_string())?;
++                let pixels = decoder.decode().map_err(|e| e.to_string())?;
++                Some(match info.pixel_format {
++                    jpeg_decoder::PixelFormat::RGB24 => DynamicImage::ImageRgb8(
++                        image::RgbImage::from_raw(w.into(), h.into(), pixels)
++                            .ok_or("Invalid JPEG pixels")?,
++                    ),
++                    _ => DynamicImage::ImageLuma8(
++                        image::GrayImage::from_raw(w.into(), h.into(), pixels)
++                            .ok_or("Invalid JPEG pixels")?,
++                    ),
++                })
++            } else {
++                None
++            }
++        } else {
++            None
++        };
++        let decoded = match scaled_jpeg {
++            Some(image) => image,
++            None => {
++                let mut reader = ImageReader::new(Cursor::new(bytes))
++                    .with_guessed_format()
++                    .map_err(|e| e.to_string())?;
++                let mut limits = image::Limits::default();
++                limits.max_image_width = Some(self.max_source_dimension);
++                limits.max_image_height = Some(self.max_source_dimension);
++                limits.max_alloc = Some(self.max_alloc);
++                reader.limits(limits);
++                reader.decode().map_err(|e| e.to_string())?
++            }
++        };
++        let decoded = if decoded.width().max(decoded.height()) > target {
++            decoded.thumbnail(target, target)
++        } else {
++            decoded
++        };
++        let pixel_width = decoded.width();
++        let pixel_height = decoded.height();
++        let mut image =
++            RasterImageData::new(width, height, Arc::new(decoded.into_rgba8().into_raw()));
++        image.pixel_width = pixel_width;
++        image.pixel_height = pixel_height;
++        Ok(image)
++    }
++}
+diff --git a/crates/blitz-dom/Cargo.lock b/crates/blitz-dom/Cargo.lock
+index 1df5fce..7b9068d 100644
+--- a/crates/blitz-dom/Cargo.lock
++++ b/crates/blitz-dom/Cargo.lock
+@@ -101,6 +101,7 @@ dependencies = [
+  "euclid",
+  "html-escape",
+  "image",
++ "jpeg-decoder",
+  "keyboard-types",
+  "kurbo",
+  "linebender_resource_handle",
+@@ -797,6 +798,12 @@ version = "1.0.18"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
+ 
++[[package]]
++name = "jpeg-decoder"
++version = "0.3.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "00810f1d8b74be64b13dbf3db89ac67740615d6c891f0e7b6179326533011a07"
++
+ [[package]]
+ name = "js-sys"
+ version = "0.3.104"

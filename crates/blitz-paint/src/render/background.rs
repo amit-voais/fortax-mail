@@ -454,7 +454,10 @@ impl ElementCx<'_, '_> {
                     peniko::Fill::NonZero,
                     transform,
                     to_peniko_image(image_data, quality).as_ref(),
-                    None,
+                    Some(Affine::scale_non_uniform(
+                        image_data.width as f64 / image_data.pixel_width as f64,
+                        image_data.height as f64 / image_data.pixel_height as f64,
+                    )),
                     &tile_rect,
                 );
             }

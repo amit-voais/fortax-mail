@@ -1,0 +1,14 @@
+[package]
+name = "flectar-renderer-probe"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "AGPL-3.0-only"
+
+[dependencies]
+anyrender = "0.13"
+anyrender_vello_cpu = "0.17"
+blitz-dom = { version = "=0.3.0-beta.2", features = ["floats"] }
+blitz-html = "=0.3.0-beta.2"
+blitz-paint = "=0.3.0-beta.2"
+blitz-traits = "=0.3.0-beta.2"

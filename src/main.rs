@@ -31,6 +31,7 @@ mod reader_validation;
 mod remote;
 mod renderer;
 mod renderer_input_controller;
+mod renderer_preferences;
 mod retained_model;
 mod rich_compose;
 mod settings_controller;
@@ -923,7 +924,7 @@ fn isolated_container_without_secret_service() -> bool {
     )
 }
 
-#[cfg(all(target_os = "linux", debug_assertions))]
+#[cfg(all(target_os = "linux", any(debug_assertions, test)))]
 fn isolated_container_without_secret_service_values(
     container: &str,
     has_session_bus: bool,
@@ -1055,59 +1056,39 @@ fn spawn_startup_load(
     });
 }
 
+/// Slint installs one backend per process. Retry failed GPU startup in a fresh
+/// CPU process, releasing the failed device and keeping the saved choice intact.
+pub fn run_desktop(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> {
+    let result = run(platform);
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    if let Err(error) = &result
+        && error.is::<renderer_preferences::GpuStartupError>()
+        && std::env::var_os("FLECTAR_GPU_FALLBACK").is_none()
+    {
+        return renderer_preferences::restart_cpu(error.as_ref());
+    }
+    result
+}
+
 pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> {
     let startup_metrics = StartupMetrics::from_environment();
     let benchmark_disable_background =
         std::env::var("FLECTAR_BENCHMARK_DISABLE_SYNC").as_deref() == Ok("1");
     normalize_appimage_environment();
 
-    #[cfg(all(
-        feature = "gpu-renderer",
-        not(any(target_os = "android", target_os = "ios"))
-    ))]
-    let use_wgpu = {
-        // Keep Slint and the Blitz email surface on the same WGPU 29 device. The
-        // email renderer imports its render target as a Slint image, so selecting
-        // the software backend here would put the CPU bitmap bridge back in the
-        // hot path.
-        let mut wgpu_settings = slint::wgpu_29::WGPUSettings::default();
-        // Slint's automatic configuration intentionally starts with WebGL2
-        // limits. Vello is a compute renderer and needs native storage buffers;
-        // without these limits its first bind-group layout is rejected with
-        // `max_storage_buffers_per_shader_stage = 0`.
-        wgpu_settings.device_required_limits = slint::wgpu_29::wgpu::Limits::default();
-        let wgpu_configuration = slint::wgpu_29::WGPUConfiguration::Automatic(wgpu_settings);
-
-        match slint::BackendSelector::new()
-            .require_wgpu_29(wgpu_configuration)
-            .select()
-        {
-            Ok(()) => true,
-            Err(error) => {
-                eprintln!("WGPU unavailable; using the software email fallback: {error}");
-                // The software renderer is compiled as a compatibility path for
-                // machines without a GPU adapter (remote desktops and CI). The
-                // normal path remains the shared WGPU surface above.
-                slint::BackendSelector::new()
-                    .backend_name("winit".to_owned())
-                    .renderer_name("software".to_owned())
-                    .select()?;
-                false
-            }
-        }
-    };
-
-    #[cfg(all(
-        not(feature = "gpu-renderer"),
-        not(any(target_os = "android", target_os = "ios"))
-    ))]
-    let use_wgpu = {
-        slint::BackendSelector::new()
-            .backend_name("winit".to_owned())
-            .renderer_name("software".to_owned())
-            .select()?;
-        false
-    };
+    let renderer_preference_path = platform.paths.data_dir.join("renderer.json");
+    let preferred_renderer = renderer_preferences::load(&renderer_preference_path);
+    let requested_renderer = renderer_preferences::requested(preferred_renderer);
+    eprintln!(
+        "FLECTAR_RENDERER {}",
+        serde_json::json!({
+            "event": "requested", "pid": std::process::id(),
+            "preferred": preferred_renderer.key(), "requested": requested_renderer.key(),
+            "gpu_supported": renderer_preferences::GPU_SUPPORTED,
+        })
+    );
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    let use_wgpu = renderer_preferences::select_backend(requested_renderer)?;
 
     // Android installs its backend in android_main before entering this shared
     // function. iOS uses Slint's documented winit + Skia combination.
@@ -1122,6 +1103,19 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             .select()?;
         false
     };
+
+    eprintln!(
+        "FLECTAR_RENDERER {}",
+        serde_json::json!({
+            "event": "selected", "pid": std::process::id(),
+            "preferred": preferred_renderer.key(), "requested": requested_renderer.key(),
+            "active": if use_wgpu { "gpu" } else { "cpu" },
+            "slint": if use_wgpu { "femtovg-wgpu" } else if cfg!(target_os = "ios") { "platform" } else { "software" },
+            "blitz": if use_wgpu { "vello-gpu" } else { "vello-cpu" },
+            "wgpu_initialized": if use_wgpu { serde_json::Value::Null } else { serde_json::json!(false) },
+            "shared_device": if use_wgpu { serde_json::Value::Null } else { serde_json::json!(false) },
+        })
+    );
 
     // Match resources/com.flectar.mail.desktop so Wayland compositors and XDG
     // window managers can associate the native window with the installed icon.
@@ -1148,7 +1142,14 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     // Construct and map the window before opening or migrating either database.
     // Until startup completes it paints the inert mailbox shell; mapping now
     // avoids making callback wiring part of first-window latency.
-    let app = AppWindow::new()?;
+    let app = renderer_preferences::initialize_step(use_wgpu, AppWindow::new)?;
+    renderer_preferences::register(
+        &app,
+        renderer_preference_path,
+        preferred_renderer,
+        use_wgpu,
+        renderer_preferences::GPU_SUPPORTED,
+    );
     app.global::<ZoomApi>()
         .on_resolve(|action, current, minimum, maximum| {
             crate::preview_controls::zoom(&action, current, minimum, maximum)
@@ -1156,7 +1157,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     theme::register_theme_utilities(&app);
     app.set_print_supported(!cfg!(any(target_os = "android", target_os = "ios")));
     app.set_document_apis_supported(!cfg!(any(target_os = "android", target_os = "ios")));
-    app.show()?;
+    renderer_preferences::initialize_step(use_wgpu, || app.show())?;
     startup_metrics.emit(
         "window_shown",
         serde_json::json!({
@@ -1229,14 +1230,20 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     let tray = create_and_register_window_lifecycle(&app)?;
     let email_renderer = Rc::clone(&initial_state.email_renderer);
 
+    let gpu_startup_error = Rc::new(RefCell::new(None::<String>));
+    let gpu_startup_completed = Rc::new(Cell::new(false));
     #[cfg(feature = "gpu-renderer")]
     if use_wgpu {
         let email_renderer_for_notifier = Rc::clone(&email_renderer);
         let app_weak_for_notifier = app.as_weak();
+        let startup_error = gpu_startup_error.clone();
+        let startup_completed = gpu_startup_completed.clone();
+        let mut reported_device = false;
         app.window()
             .set_rendering_notifier(move |state, graphics_api| {
                 if matches!(&state, slint::RenderingState::RenderingTeardown) {
                     email_renderer_for_notifier.borrow_mut().teardown_gpu();
+                    reported_device = false;
                     return;
                 }
 
@@ -1246,6 +1253,39 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                 let slint::GraphicsAPI::WGPU29 { device, queue, .. } = graphics_api else {
                     return;
                 };
+                if !reported_device {
+                    let initialized = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        email_renderer_for_notifier.borrow_mut().initialize_gpu(device, queue)
+                    })).unwrap_or_else(|_| Err("GPU initialization panicked".into()));
+                    if let Err(error) = initialized {
+                        *startup_error.borrow_mut() = Some(error);
+                        let _ = slint::quit_event_loop();
+                        return;
+                    }
+                    let info = device.adapter_info();
+                    eprintln!("FLECTAR_RENDERER {}", serde_json::json!({
+                        "event": "gpu_ready", "wgpu_version": 29,
+                        "backend": format!("{:?}", info.backend), "adapter": info.name,
+                        "device_type": format!("{:?}", info.device_type),
+                        "wgpu_initialized": true, "instance_owner": "slint",
+                        "shared_device": email_renderer_for_notifier.borrow().shares_gpu(device, queue),
+                        "slint": "femtovg-wgpu", "blitz": "vello-gpu",
+                    }));
+                    reported_device = true;
+                    startup_completed.set(true);
+                }
+                // Reinitialization after closing a message/device teardown can
+                // also fail. Use the full CPU backend fallback for init errors.
+                if email_renderer_for_notifier.borrow().has_document() {
+                    let initialized = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        email_renderer_for_notifier.borrow_mut().initialize_gpu(device, queue)
+                    })).unwrap_or_else(|_| Err("GPU initialization panicked".into()));
+                    if let Err(error) = initialized {
+                        *startup_error.borrow_mut() = Some(error);
+                        let _ = slint::quit_event_loop();
+                        return;
+                    }
+                }
                 let Some(app) = app_weak_for_notifier.upgrade() else {
                     return;
                 };
@@ -1267,6 +1307,10 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                     }
                     Ok(None) => {}
                     Err(gpu_error) => {
+                        eprintln!("FLECTAR_RENDERER {}", serde_json::json!({
+                            "event": "email_render_fallback", "slint": "femtovg-wgpu",
+                            "blitz": "vello-cpu", "error": gpu_error,
+                        }));
                         let fallback = email_renderer_for_notifier
                             .borrow_mut()
                             .render_cpu_if_needed(
@@ -1300,7 +1344,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                         }
                     }
                 }
-            })?;
+            }).map_err(|error| renderer_preferences::startup_error(error, true))?;
     }
 
     app.set_emails(Rc::clone(&initial_state.email_rows).into());
@@ -5671,11 +5715,32 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         }
     });
 
+    if use_wgpu {
+        // Slint 1.17 can retain a deferred window-surface error without
+        // immediately exiting its event loop. Bound that otherwise blank-window
+        // startup; normal GPU rendering marks completion in the notifier above.
+        let completed = gpu_startup_completed.clone();
+        let error = gpu_startup_error.clone();
+        Timer::single_shot(Duration::from_secs(15), move || {
+            if !completed.get() {
+                error.borrow_mut().get_or_insert_with(|| {
+                    "GPU did not produce its first frame within 15 seconds".into()
+                });
+                let _ = slint::quit_event_loop();
+            }
+        });
+    }
+
     // The main window is already shown above and the independently compiled
     // tray participates in the same process-wide event loop. This is Slint's
     // documented multi-component pattern; calling AppWindow::run() here would
     // redundantly show the main window a second time.
-    slint::run_event_loop()?;
+    slint::run_event_loop().map_err(|error| {
+        renderer_preferences::startup_error(error, use_wgpu && !gpu_startup_completed.get())
+    })?;
+    if let Some(error) = gpu_startup_error.borrow_mut().take() {
+        return Err(Box::new(renderer_preferences::GpuStartupError(error)));
+    }
     Ok(())
 }
 

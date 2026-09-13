@@ -35,6 +35,7 @@ notices and license texts; the Apache-2.0 license is also included in
 | unicode-segmentation | 1.13.3 | [unicode-rs/unicode-segmentation](https://github.com/unicode-rs/unicode-segmentation) | Unicode word selection |
 | percent-encoding | 2.3.2 | [servo/rust-url](https://github.com/servo/rust-url/) | Fragment and mailto decoding |
 | base64 | 0.22.1 | [marshallpierce/rust-base64](https://github.com/marshallpierce/rust-base64) | Export CSP hash encoding |
+| jpeg-decoder | 0.3.2 | [image-rs/jpeg-decoder](https://github.com/image-rs/jpeg-decoder) | Bounded native JPEG downsampling for email images |
 
 ## PDF preview
 

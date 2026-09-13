@@ -18,16 +18,29 @@ use std::{
     net::{IpAddr, SocketAddr},
     time::Duration,
 };
-use tokio::sync::Semaphore;
+mod scheduler;
+pub type ResourcePriorities = Arc<Mutex<std::collections::HashSet<(usize, u64)>>>;
+pub fn reprioritize_images() {
+    scheduler::shared().reprioritize();
+}
 
 const MAX_RESOURCE_BYTES: usize = 5 * 1024 * 1024;
 const MAX_IMAGE_DIMENSION: u32 = 4_096;
 const MAX_IMAGE_PIXELS: u64 = 8 * 1024 * 1024;
+const MAX_DECODED_DIMENSION: u32 = 2048;
 const MAX_DOCUMENT_BYTES: u64 = 20 * 1024 * 1024;
 const MAX_DOCUMENT_PIXELS: u64 = 16 * 1024 * 1024;
-const MAX_DOCUMENT_REQUESTS: u8 = 32;
-const MAX_CONCURRENT_REQUESTS: usize = 4;
+const MAX_DOCUMENT_REQUESTS: u8 = 64;
 const MAX_TRACKED_DOCUMENTS: usize = 128;
+
+pub(crate) fn image_decode_limits() -> blitz_dom::net::ImageDecodeLimits {
+    blitz_dom::net::ImageDecodeLimits {
+        max_source_dimension: MAX_IMAGE_DIMENSION,
+        max_source_pixels: MAX_IMAGE_PIXELS,
+        max_alloc: MAX_IMAGE_PIXELS * 4,
+        target_dimension: MAX_DECODED_DIMENSION,
+    }
+}
 
 #[derive(Default)]
 struct DocumentBudget {
@@ -67,26 +80,35 @@ struct LimitedImageProvider {
     #[cfg(feature = "remote-content")]
     allow_remote: bool,
     waker: Arc<dyn NetWaker>,
-    permits: Arc<Semaphore>,
+    scheduler: Arc<scheduler::Scheduler>,
+    priorities: ResourcePriorities,
     budgets: Arc<Mutex<HashMap<usize, DocumentBudget>>>,
 }
 
+#[cfg(test)]
 pub fn email_image_provider_tracked(
     waker: Arc<dyn NetWaker>,
     allow_remote: bool,
     ledger: ResourceLedger,
 ) -> Result<Arc<dyn NetProvider>, String> {
+    email_image_provider_prioritized(waker, allow_remote, ledger, ResourcePriorities::default())
+}
+
+pub fn email_image_provider_prioritized(
+    waker: Arc<dyn NetWaker>,
+    allow_remote: bool,
+    ledger: ResourceLedger,
+    priorities: ResourcePriorities,
+) -> Result<Arc<dyn NetProvider>, String> {
     #[cfg(not(feature = "remote-content"))]
     let _ = allow_remote;
-    static IMAGE_WORK: std::sync::OnceLock<Arc<Semaphore>> = std::sync::OnceLock::new();
     Ok(Arc::new(LimitedImageProvider {
         ledger,
         #[cfg(feature = "remote-content")]
         allow_remote: allow_remote && cfg!(feature = "remote-content"),
         waker,
-        permits: IMAGE_WORK
-            .get_or_init(|| Arc::new(Semaphore::new(MAX_CONCURRENT_REQUESTS)))
-            .clone(),
+        scheduler: scheduler::shared(),
+        priorities,
         budgets: Arc::new(Mutex::new(HashMap::new())),
     }))
 }
@@ -137,24 +159,45 @@ impl NetProvider for LimitedImageProvider {
         );
         let ledger = self.ledger.clone();
         let waker = Arc::clone(&self.waker);
-        let permits = Arc::clone(&self.permits);
+        let scheduler = self.scheduler.clone();
+        let priorities = self.priorities.clone();
         let budgets = Arc::clone(&self.budgets);
         tokio::spawn(async move {
+            let started = crate::renderer::render_timings_enabled().then(std::time::Instant::now);
             let work = async {
-                let permit = permits.acquire_owned().await.ok()?;
-                let bytes = match request.url.scheme() {
-                    "data" => load_data_image(request.url.as_str()),
-                    #[cfg(feature = "remote-content")]
-                    "http" | "https" => load_http_image(&request).await,
-                    _ => None,
-                }?;
+                let permit = scheduler
+                    .acquire(document_id, request.url.as_str(), embedded, priorities)
+                    .await;
+                let queued = started.map(|start| start.elapsed());
+                // Queueing behind other images must not consume the download
+                // deadline. A newsletter can use all 64 request slots.
+                let bytes = tokio::time::timeout(std::time::Duration::from_secs(16), async {
+                    match request.url.scheme() {
+                        "data" => load_data_image(request.url.as_str()),
+                        #[cfg(feature = "remote-content")]
+                        "http" | "https" => load_http_image(&request).await,
+                        _ => None,
+                    }
+                })
+                .await
+                .ok()??;
+                if let (Some(start), Some(queued)) = (started, queued) {
+                    eprintln!(
+                        "email image: queue={:.2}ms transfer={:.2}ms bytes={}",
+                        queued.as_secs_f64() * 1000.0,
+                        start.elapsed().saturating_sub(queued).as_secs_f64() * 1000.0,
+                        bytes.len()
+                    );
+                }
                 let signal = request.signal.clone();
                 let url = request.url.to_string();
                 let ledger = ledger.clone();
+                let decode_waker = waker.clone();
                 // Decode and the bounded Blitz response queue may block. Keep
                 // both off Tokio's async executor and hold the work permit.
                 tokio::task::spawn_blocking(move || {
                     let _permit = permit;
+                    let decode_start = started.map(|_| std::time::Instant::now());
                     if signal.as_ref().is_some_and(|s| s.aborted()) {
                         return;
                     }
@@ -178,6 +221,16 @@ impl NetProvider for LimitedImageProvider {
                     } else {
                         record(&ledger, document_id, &url, ResourceState::Limited);
                     }
+                    // Blocking work is not aborted when its JoinHandle is
+                    // dropped. Always wake after delivery, even if the async
+                    // caller was cancelled while a decode was finishing.
+                    decode_waker.wake(document_id);
+                    if let Some(start) = decode_start {
+                        eprintln!(
+                            "email image decode + delivery: {:.2}ms",
+                            start.elapsed().as_secs_f64() * 1000.0
+                        );
+                    }
                 })
                 .await
                 .ok()
@@ -192,7 +245,7 @@ impl NetProvider for LimitedImageProvider {
             };
             tokio::select! {
                 _ = cancelled => {},
-                _ = tokio::time::timeout(std::time::Duration::from_secs(16), work) => {},
+                _ = work => {},
             }
             let mut states = ledger
                 .lock()
@@ -260,7 +313,14 @@ async fn consume_http_image(
         .and_then(|value| value.to_str().ok())
         .unwrap_or("")
         .to_ascii_lowercase();
-    if !content_type.starts_with("image/") || content_type.starts_with("image/svg") {
+    let media_type = content_type.split(';').next().unwrap_or("").trim();
+    // Some image CDNs return generic or absent MIME types. Accept those only
+    // after the raster decoder recognizes and validates the payload below.
+    if !(media_type.starts_with("image/")
+        || media_type.is_empty()
+        || media_type == "application/octet-stream")
+        || media_type.starts_with("image/svg")
+    {
         return None;
     }
 
@@ -278,10 +338,10 @@ async fn consume_http_image(
         }
         bytes.extend_from_slice(&chunk);
     }
-    Some(bytes)
+    validated_pixel_count(&bytes).map(|_| bytes)
 }
 
-/// Resolve and pin one public address before opening the connection. This
+/// Resolve and pin public addresses before opening the connection. This
 /// prevents a hostname or redirect from reaching loopback, LAN, link-local, or
 /// metadata services through DNS rebinding.
 #[cfg(feature = "remote-content")]
@@ -290,7 +350,7 @@ async fn pinned_public_client(url: &reqwest::Url) -> Option<reqwest::Client> {
         return None;
     }
     let port = url.port_or_known_default()?;
-    let (addresses, resolve_host): (Vec<SocketAddr>, Option<String>) = match url.host()? {
+    let (mut addresses, resolve_host): (Vec<SocketAddr>, Option<String>) = match url.host()? {
         url::Host::Domain(host) => (
             tokio::net::lookup_host((host, port)).await.ok()?.collect(),
             Some(host.to_owned()),
@@ -305,11 +365,15 @@ async fn pinned_public_client(url: &reqwest::Url) -> Option<reqwest::Client> {
     {
         return None;
     }
-    let pinned = addresses[0];
+    // Keep both address families so the HTTP connector can race/fall back
+    // when IPv6 or one CDN endpoint is unreachable. Every address is vetted.
+    addresses.sort_unstable();
+    addresses.dedup();
+    addresses.truncate(32);
     static CLIENTS: std::sync::OnceLock<Mutex<HashMap<String, reqwest::Client>>> =
         std::sync::OnceLock::new();
     let cache = CLIENTS.get_or_init(Default::default);
-    let key = format!("{}|{}|{}", url.scheme(), url.host_str()?, pinned);
+    let key = format!("{}|{}|{:?}", url.scheme(), url.host_str()?, addresses);
     if let Some(client) = cache.lock().ok()?.get(&key) {
         return Some(client.clone());
     }
@@ -318,9 +382,11 @@ async fn pinned_public_client(url: &reqwest::Url) -> Option<reqwest::Client> {
         .user_agent("Flectar Mail bounded remote image loader/0.1")
         .connect_timeout(Duration::from_secs(4))
         .timeout(Duration::from_secs(12))
+        .pool_max_idle_per_host(2)
+        .pool_idle_timeout(Duration::from_secs(30))
         .redirect(Policy::none());
     if let Some(host) = resolve_host {
-        builder = builder.resolve(&host, pinned);
+        builder = builder.resolve_to_addrs(&host, &addresses);
     }
     let client = builder.build().ok()?;
     let mut clients = cache.lock().ok()?;
@@ -361,7 +427,13 @@ fn validated_pixel_count(bytes: &[u8]) -> Option<u64> {
         && width <= MAX_IMAGE_DIMENSION
         && height <= MAX_IMAGE_DIMENSION
         && pixels <= MAX_IMAGE_PIXELS)
-        .then_some(pixels)
+        .then(|| {
+            // Charge a conservative upper bound on retained decoded pixels,
+            // rather than the source pixels discarded by downsampling.
+            let longest = width.max(height).max(MAX_DECODED_DIMENSION) as u64;
+            (u64::from(width) * u64::from(MAX_DECODED_DIMENSION)).div_ceil(longest)
+                * (u64::from(height) * u64::from(MAX_DECODED_DIMENSION)).div_ceil(longest)
+        })
 }
 
 fn reserve_request(
@@ -506,6 +578,90 @@ mod tests {
             self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         }
     }
+
+    #[test]
+    fn queued_images_keep_their_download_deadline() {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        rt.block_on(async {
+            let scheduler = scheduler::Scheduler::new(1, 1);
+            let held = scheduler
+                .clone()
+                .acquire(9, "held", true, ResourcePriorities::default())
+                .await;
+            let ledger = ResourceLedger::default();
+            let count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+            let (done, mut completions) = tokio::sync::mpsc::unbounded_channel();
+            let provider = LimitedImageProvider {
+                ledger: ledger.clone(),
+                #[cfg(feature = "remote-content")]
+                allow_remote: false,
+                waker: Arc::new(move |_| {
+                    let _ = done.send(());
+                }),
+                scheduler,
+                priorities: ResourcePriorities::default(),
+                budgets: Arc::default(),
+            };
+            provider.fetch(
+                9,
+                Request::get(url::Url::parse(PIXEL).unwrap()),
+                Box::new(Counter(count.clone())),
+            );
+            // Deliberately longer than the production transfer deadline.
+            tokio::time::sleep(std::time::Duration::from_secs(17)).await;
+            assert_eq!(
+                ledger.lock().unwrap().get(&resource_key(9, PIXEL)),
+                Some(&ResourceState::Loading)
+            );
+            drop(held);
+            tokio::time::timeout(std::time::Duration::from_secs(3), completions.recv())
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(count.load(std::sync::atomic::Ordering::SeqCst), 1);
+            assert_eq!(
+                ledger.lock().unwrap().get(&resource_key(9, PIXEL)),
+                Some(&ResourceState::Ready)
+            );
+        });
+    }
+
+    #[test]
+    fn pixel_budget_covers_retained_downsampled_images() {
+        for (width, height) in [(3000, 301), (301, 3000), (2049, 3), (17, 29)] {
+            for format in [image::ImageFormat::Png, image::ImageFormat::Jpeg] {
+                let mut bytes = Cursor::new(Vec::new());
+                image::RgbImage::new(width, height)
+                    .write_to(&mut bytes, format)
+                    .unwrap();
+                let budget = validated_pixel_count(bytes.get_ref()).unwrap();
+                let decoded = image_decode_limits().decode(bytes.get_ref()).unwrap();
+                let retained = u64::from(decoded.pixel_width) * u64::from(decoded.pixel_height);
+                assert!(
+                    budget >= retained,
+                    "{width}x{height} {format:?}: {budget} < {retained}"
+                );
+                assert!(budget <= u64::from(width) * u64::from(height));
+            }
+        }
+    }
+
+    #[test]
+    fn raster_limits_reject_oversized_dimensions_and_non_images() {
+        let mut bytes = Cursor::new(Vec::new());
+        image::RgbaImage::new(1, MAX_IMAGE_DIMENSION + 1)
+            .write_to(&mut bytes, image::ImageFormat::Png)
+            .unwrap();
+        assert!(validated_pixel_count(bytes.get_ref()).is_none());
+        assert!(validated_pixel_count(b"<html>error</html>").is_none());
+        assert_eq!(
+            validated_pixel_count(&load_data_image(PIXEL).unwrap()),
+            Some(1)
+        );
+    }
     #[test]
     fn blocked_trackers_leave_embedded_budget_available_and_cancelled_requests_do_not_decode() {
         let rt = tokio::runtime::Builder::new_current_thread()
@@ -596,7 +752,23 @@ mod tests {
         // Only this transport fixture uses localhost; the provider and its
         // production resolver are tested separately with their policy intact.
         for (header, body, accepted) in [
-            ("200 OK\r\nContent-Type: image/png", vec![1, 2, 3], true),
+            (
+                "200 OK\r\nContent-Type: image/png",
+                load_data_image(PIXEL).unwrap(),
+                true,
+            ),
+            (
+                "200 OK\r\nContent-Type: application/octet-stream",
+                load_data_image(PIXEL).unwrap(),
+                true,
+            ),
+            ("200 OK", load_data_image(PIXEL).unwrap(), true),
+            ("200 OK\r\nContent-Type: image/png", vec![1, 2, 3], false),
+            (
+                "200 OK\r\nContent-Type: application/octet-stream",
+                b"<svg/>".to_vec(),
+                false,
+            ),
             ("404 Not Found\r\nContent-Type: image/png", vec![1], false),
             ("200 OK\r\nContent-Type: text/html", vec![1], false),
             ("200 OK\r\nContent-Type: image/svg+xml", vec![1], false),

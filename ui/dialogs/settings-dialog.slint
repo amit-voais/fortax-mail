@@ -1,4 +1,5 @@
 import { AccountMailPreferencesPanel } from "../components/account-mail-preferences.slint";
+import { RendererSettings } from "../renderer-settings.slint";
 import { MailSecurityFields } from "../components/mail-security-fields.slint";
 import { OAuthBrowserHelp } from "../components/oauth-browser-help.slint";
 import { HorizontalBox, ScrollView, VerticalBox } from "std-widgets.slint";
@@ -328,6 +329,44 @@ export component SettingsDialog inherits Rectangle {
                             Text { text: @tr("General"); color: root.title-color; font-size: TypeScale.display; font-weight: 700; }
                             Text { height: root.compact ? 34px : 17px; text: @tr("Manage appearance, privacy, and synchronization."); color: root.secondary-text; font-size: TypeScale.secondary; wrap: word-wrap; }
 
+                            if RendererSettings.available : Rectangle {
+                                height: root.compact ? 176px : 114px;
+                                background: root.surface;
+                                border-radius: 8px;
+                                border-width: 1px;
+                                border-color: root.border-subtle;
+                                VerticalBox {
+                                    padding: 16px;
+                                    spacing: 6px;
+                                    SettingsSelectRow {
+                                        height: root.compact ? 120px : 58px;
+                                        compact: root.compact;
+                                        title: @tr("Renderer");
+                                        description: RendererSettings.gpu-supported ? @tr("Changes take effect after restarting Flectar Mail.") : @tr("GPU mode is unavailable in this build.");
+                                        choices: RendererSettings.gpu-supported ? [@tr("CPU — Low Memory"), @tr("GPU — WGPU")] : [@tr("CPU — Low Memory")];
+                                        selected-index: RendererSettings.gpu-supported && RendererSettings.preferred == "gpu" ? 1 : 0;
+                                        title-color: root.body-text;
+                                        description-color: root.faint-text;
+                                        selected(index, value) => {
+                                            RendererSettings.choose(index == 1 ? "gpu" : "cpu");
+                                            self.selected-index = RendererSettings.gpu-supported && RendererSettings.preferred == "gpu" ? 1 : 0;
+                                        }
+                                    }
+                                    HorizontalBox {
+                                        height: 18px;
+                                        padding: 0px;
+                                        padding-left: root.compact ? 8px : 16px;
+                                        Text {
+                                        text: RendererSettings.error != "" ? RendererSettings.error : RendererSettings.restart-required ? @tr("Restart required. Your current renderer is still active.") : RendererSettings.active == "gpu" ? @tr("Active: GPU — WGPU") : @tr("Active: CPU — Low Memory");
+                                        color: root.faint-text;
+                                        font-size: TypeScale.caption;
+                                        overflow: elide;
+                                        }
+                                    }
+                                }
+                            }
+
+
                             theme-editor := ThemeEditor {
                                 compact: root.compact;
                                 theme-mode <=> root.theme_mode;
@@ -550,6 +589,7 @@ export component SettingsDialog inherits Rectangle {
                                     }
                                 }
                             }
+
 
                             Rectangle {
                                 height: root.compact ? 360px : 246px;

@@ -195,7 +195,27 @@ pub enum DocumentEvent {
     },
 }
 
+/// Damage from delivered resources. Paint-only updates preserve resolved layout.
+#[derive(Default, Debug)]
+pub struct ResourceUpdates {
+    pub changed: bool,
+    pub layout: bool,
+    pub paint_nodes: Vec<NodeId>,
+}
+
+fn image_has_fixed_size(node: &Node) -> bool {
+    let size = node.style().size;
+    size.width
+        .into_option()
+        .is_some_and(|v| v.is_finite() && v > 0.0)
+        && size
+            .height
+            .into_option()
+            .is_some_and(|v| v.is_finite() && v > 0.0)
+}
+
 pub struct BaseDocument {
+    pub(crate) image_decode_limits: Option<crate::net::ImageDecodeLimits>,
     /// ID of the document
     id: usize,
 
@@ -455,6 +475,7 @@ impl BaseDocument {
         let (tx, rx) = sync_channel(DOCUMENT_EVENT_QUEUE_CAPACITY);
 
         let mut doc = Self {
+            image_decode_limits: config.image_decode_limits,
             id,
             tx,
             rx: Some(rx),
@@ -1248,19 +1269,53 @@ impl BaseDocument {
 
     /// Drain resource events, reporting whether layout may have changed.
     pub fn drain_pending_messages(&mut self) -> bool {
-        let mut changed = false;
+        self.drain_pending_updates().changed
+    }
+
+    pub fn drain_pending_updates(&mut self) -> ResourceUpdates {
+        let mut updates = ResourceUpdates::default();
         // Remove event Reciever from the Document so that we can process events
         // without holding a borrow to the Document
         let rx = self.rx.take().unwrap();
 
         while let Ok(msg) = rx.try_recv() {
-            changed = true;
+            updates.changed = true;
+            match &msg {
+                DocumentEvent::ResourceLoad(res) => {
+                    updates.layout |= self.pending_critical_resources.contains(&res.request_id);
+                    match &res.result {
+                        Ok(Resource::Image(..) | Resource::Raster(..)) => {
+                            if let Some(waiting) = res
+                                .resolved_url
+                                .as_ref()
+                                .and_then(|url| self.pending_images.get(url))
+                            {
+                                for &(id, kind) in waiting {
+                                    if matches!(kind, ImageType::Image)
+                                        && self
+                                            .get_node(id)
+                                            .is_some_and(|node| !image_has_fixed_size(node))
+                                    {
+                                        updates.layout = true;
+                                    }
+                                    updates.paint_nodes.push(id);
+                                }
+                            }
+                        }
+                        Ok(Resource::None) | Err(_) => {}
+                        _ => updates.layout = true,
+                    }
+                }
+                _ => updates.layout = true,
+            }
             self.handle_message(msg);
         }
 
         // Put Reciever back
         self.rx = Some(rx);
-        changed
+        updates.paint_nodes.sort_unstable();
+        updates.paint_nodes.dedup();
+        updates
     }
 
     pub fn handle_message(&mut self, msg: DocumentEvent) {
@@ -1303,6 +1358,11 @@ impl BaseDocument {
         };
 
         match resource {
+            Resource::Raster(_, image) => {
+                if let Some(url) = res.resolved_url.as_ref() {
+                    self.apply_loaded_image(url, ImageData::Raster(image));
+                }
+            }
             Resource::Css(css) => {
                 let node_id = res.node_id.unwrap();
                 self.add_stylesheet_for_node(css, node_id);
@@ -1402,12 +1462,15 @@ impl BaseDocument {
 
             match image_type {
                 ImageType::Image => {
+                    let fixed_size = image_has_fixed_size(node);
                     node.element_data_mut().unwrap().special_data =
                         SpecialElementData::Image(Box::new(image.clone()));
 
                     // Clear layout cache
-                    node.cache_mut().clear();
-                    node.insert_damage(ALL_DAMAGE);
+                    if !fixed_size {
+                        node.cache_mut().clear();
+                        node.insert_damage(ALL_DAMAGE);
+                    }
                 }
                 ImageType::Background(idx) | ImageType::Mask(idx) => {
                     let layer_image = node.element_data_mut().and_then(|el| {

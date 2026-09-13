@@ -660,6 +660,7 @@ dependencies = [
  "euclid",
  "html-escape",
  "image",
+ "jpeg-decoder",
  "keyboard-types",
  "kurbo",
  "linebender_resource_handle",

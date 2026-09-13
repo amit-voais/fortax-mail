@@ -760,6 +760,9 @@ impl ElementData {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct RasterImageData {
+    /// Decoded pixel dimensions may be smaller than the intrinsic CSS size.
+    pub pixel_width: u32,
+    pub pixel_height: u32,
     /// The width of the image
     pub width: u32,
     /// The height of the image
@@ -770,6 +773,8 @@ pub struct RasterImageData {
 impl RasterImageData {
     pub fn new(width: u32, height: u32, data: Arc<Vec<u8>>) -> Self {
         Self {
+            pixel_width: width,
+            pixel_height: height,
             width,
             height,
             data: Blob::new(data),

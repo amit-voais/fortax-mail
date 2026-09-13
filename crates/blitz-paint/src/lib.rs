@@ -19,6 +19,22 @@ use anyrender::{PaintScene, Scene};
 use blitz_dom::{BaseDocument, NodeId, util::Color};
 use render::BlitzDomPainter;
 
+/// Bounded line geometry retained between tile paints. Clear after resolving
+/// layout or styles; selection and viewport translation do not invalidate it.
+#[derive(Default)]
+pub struct PaintCache {
+    pub(crate) lines: std::cell::RefCell<HashMap<NodeId, Vec<Option<kurbo::Rect>>>>,
+}
+
+impl PaintCache {
+    pub fn clear(&mut self) {
+        self.lines.get_mut().clear();
+    }
+    pub fn line_count(&self) -> usize {
+        self.lines.borrow().values().map(Vec::len).sum()
+    }
+}
+
 const FONT_EMBOLDEN_ENABLED: bool = cfg!(any(
     feature = "font-embolden",
     all(feature = "apple-font-embolden", target_os = "macos"),
@@ -49,6 +65,43 @@ pub fn paint_scene(
     x_offset: u32,
     y_offset: u32,
 ) {
+    paint_scene_impl(scene, doc, scale, width, height, x_offset, y_offset, None);
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn paint_scene_cached(
+    scene: &mut impl PaintScene,
+    doc: &mut BaseDocument,
+    scale: f64,
+    width: u32,
+    height: u32,
+    x_offset: u32,
+    y_offset: u32,
+    cache: &PaintCache,
+) {
+    paint_scene_impl(
+        scene,
+        doc,
+        scale,
+        width,
+        height,
+        x_offset,
+        y_offset,
+        Some(cache),
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+fn paint_scene_impl(
+    scene: &mut impl PaintScene,
+    doc: &mut BaseDocument,
+    scale: f64,
+    width: u32,
+    height: u32,
+    x_offset: u32,
+    y_offset: u32,
+    cache: Option<&PaintCache>,
+) {
     // Run `.paint()` on every custom widget in the document (and all subdocuments) ahead of time.
     // This helps us avoid borrow-checker issues as we recurse down the tree (`.paint()` require `&mut self`).
     //
@@ -58,7 +111,7 @@ pub fn paint_scene(
     #[cfg(feature = "custom-widget")]
     build_custom_widget_scenes(&mut custom_widget_scenes, doc, scene, scale);
 
-    let generator = BlitzDomPainter::new(
+    let mut generator = BlitzDomPainter::new(
         doc,
         scale,
         width,
@@ -67,6 +120,7 @@ pub fn paint_scene(
         y_offset as f64,
         &custom_widget_scenes,
     );
+    generator.paint_cache = cache;
     generator.paint_scene(scene);
 
     // println!(

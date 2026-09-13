@@ -335,34 +335,21 @@ pub(super) fn slint_email_tile(tile: renderer::RenderedEmailTile) -> EmailTile {
 
 #[cfg(feature = "gpu-renderer")]
 pub(super) fn apply_gpu_frame(app: &AppWindow, rendered: RenderedEmail) {
-    app.set_email_content_aspect(rendered.height as f32 / rendered.width.max(1) as f32);
-    app.set_email_tiles(ModelRc::new(VecModel::from(
-        rendered
-            .tiles
-            .into_iter()
-            .map(slint_email_tile)
-            .collect::<Vec<_>>(),
-    )));
-    let links = rendered
-        .links
-        .into_iter()
-        .map(slint_email_link)
-        .collect::<Vec<_>>();
-    if app.get_email_links().iter().collect::<Vec<_>>() != links {
-        app.set_email_links(ModelRc::new(VecModel::from(links)));
-    }
-    app.set_render_status(UiMessage::plain("Message ready."));
+    apply_cpu_frame(app, rendered);
 }
 
 pub(super) fn apply_cpu_frame(app: &AppWindow, rendered: RenderedEmail) {
+    let start = renderer::render_timings_enabled().then(std::time::Instant::now);
     app.set_email_content_aspect(rendered.height as f32 / rendered.width.max(1) as f32);
-    app.set_email_tiles(ModelRc::new(VecModel::from(
-        rendered
-            .tiles
-            .into_iter()
-            .map(slint_email_tile)
-            .collect::<Vec<_>>(),
-    )));
+    let tiles: Vec<_> = rendered.tiles.into_iter().map(slint_email_tile).collect();
+    let retained = app.get_email_tiles();
+    if let Some(model) = retained.as_any().downcast_ref::<VecModel<EmailTile>>() {
+        // Keep Slint image items (and their software-renderer caches) alive
+        // when scrolling only adds or removes tiles at the viewport edges.
+        crate::reconcile_model_rows_by(model, tiles, |tile| tile.y.to_bits(), PartialEq::eq);
+    } else {
+        app.set_email_tiles(ModelRc::new(VecModel::from(tiles)));
+    }
     let links = rendered
         .links
         .into_iter()
@@ -372,6 +359,12 @@ pub(super) fn apply_cpu_frame(app: &AppWindow, rendered: RenderedEmail) {
         app.set_email_links(ModelRc::new(VecModel::from(links)));
     }
     app.set_render_status(UiMessage::plain("Message ready."));
+    if let Some(start) = start {
+        eprintln!(
+            "email Slint model update: {:.2}ms",
+            start.elapsed().as_secs_f64() * 1000.0
+        );
+    }
 }
 
 pub(super) fn open_email_link(url: &str) -> Result<(), String> {

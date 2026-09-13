@@ -725,6 +725,7 @@ dependencies = [
  "euclid",
  "html-escape",
  "image",
+ "jpeg-decoder",
  "keyboard-types",
  "kurbo",
  "linebender_resource_handle",
@@ -2386,6 +2387,18 @@ dependencies = [
  "tracing-subscriber",
  "url",
  "webpki-roots",
+]
+
+[[package]]
+name = "flectar-renderer-probe"
+version = "0.1.0"
+dependencies = [
+ "anyrender",
+ "anyrender_vello_cpu",
+ "blitz-dom",
+ "blitz-html",
+ "blitz-paint",
+ "blitz-traits",
 ]
 
 [[package]]

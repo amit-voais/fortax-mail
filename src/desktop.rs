@@ -5,5 +5,5 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(code) = flectar_mail::pdf_preview::run_worker_if_requested() {
         std::process::exit(code);
     }
-    flectar_mail::run(flectar_mail::PlatformContext::desktop()?)
+    flectar_mail::run_desktop(flectar_mail::PlatformContext::desktop()?)
 }

@@ -7,6 +7,347 @@ fn renderer(html: &str) -> GpuEmailRenderer {
 }
 const BODY: &str = "<body style='margin:0'><p style='margin:0;font-size:20px'>Cafe\u{301} hello <a href='https://example.com'>linked world</a></p></body>";
 
+/// Run alone; reports application tile latency, not compositor frame time.
+#[test]
+#[ignore = "isolated scroll latency probe"]
+fn scroll_latency_probe() {
+    for (name, html) in [
+        (
+            "paragraphs",
+            format!(
+                "<body>{}</body>",
+                "<p>Ordinary <b>formatted email text</b> and more words.</p>".repeat(250)
+            ),
+        ),
+        (
+            "long-inline",
+            format!(
+                "<body><p>{}</p></body>",
+                "Ordinary <b>formatted email text</b> and more words. ".repeat(800)
+            ),
+        ),
+        (
+            "newsletter",
+            include_str!("../../resources/test-emails/revolut-precision.html").to_owned(),
+        ),
+    ] {
+        let mut r = renderer(&html);
+        r.render_cpu_if_needed(700, 700, 1.0).unwrap();
+        let layouts = r.layout_count;
+        let mut timings = Vec::new();
+        let end = (r.content_height - 700.0).max(0.0) as usize;
+        for y in (0..end).step_by(30) {
+            let start = Instant::now();
+            if r.set_visible_region(y as f32, 700.0) {
+                r.render_cpu_if_needed(700, 700, 1.0).unwrap();
+                timings.push(start.elapsed().as_micros());
+            }
+            assert!(r.tiles.len() <= 5);
+        }
+        assert_eq!(r.layout_count, layouts, "scrolling must never relayout");
+        timings.sort_unstable();
+        if !timings.is_empty() {
+            eprintln!(
+                "{name}: {} tile updates, median {} us, p95 {} us, max {} us",
+                timings.len(),
+                timings[timings.len() / 2],
+                timings[timings.len() * 95 / 100],
+                timings.last().unwrap()
+            );
+        }
+    }
+}
+
+#[test]
+fn scrolling_reuses_pixels_and_layout_with_a_bounded_cache() {
+    let mut r = renderer(&format!(
+        "<body style='margin:0'>{}</body>",
+        "<p style='height:110px;margin:0'>Scrollable words</p>".repeat(100)
+    ));
+    r.render_cpu_if_needed(520, 900, 1.0).unwrap();
+    let first = r.tiles[&1].image.clone();
+    let layouts = r.layout_count;
+    let tiles = r.tile_count;
+    assert!(!r.set_visible_region(30.0, 900.0));
+    assert!(r.render_cpu_if_needed(520, 900, 1.0).unwrap().is_none());
+    assert_eq!(r.tile_count, tiles);
+    r.set_visible_region(520.0, 900.0);
+    r.render_cpu_if_needed(520, 900, 1.0).unwrap().unwrap();
+    assert_eq!(r.tiles[&1].image, first);
+    assert_eq!(r.tile_count, tiles + 1);
+    for y in [8000.0, 4000.0, 1000.0, 0.0] {
+        r.set_visible_region(y, 900.0);
+        r.render_cpu_if_needed(520, 900, 1.0).unwrap();
+        assert!(r.tiles.len() <= 5);
+        assert_eq!(r.layout_count, layouts);
+    }
+    r.clear();
+    assert!(r.tiles.is_empty() && r.cpu_painter.is_none());
+}
+
+#[test]
+fn exact_tile_boundary_has_only_one_overscan_tile() {
+    assert_eq!(desired_tile_range(0.0, 512.0, 4096.0), 0..=1);
+    assert_eq!(desired_tile_range(512.0, 512.0, 4096.0), 0..=2);
+}
+
+#[test]
+fn scroll_steps_prioritize_visible_tiles_and_discard_obsolete_work() {
+    let mut r = renderer(&format!(
+        "<body>{}</body>",
+        "<p style='height:100px'>Words</p>".repeat(150)
+    ));
+    r.render_cpu_if_needed(520, 900, 1.0).unwrap();
+    let layouts = r.layout_count;
+    r.set_visible_region(5000.0, 900.0);
+    let before = r.tile_count;
+    r.render_cpu_scroll_step(520, 900, 1.0).unwrap();
+    assert_eq!(r.tile_count, before + 1);
+    assert!(
+        r.tiles.contains_key(&9),
+        "the first visible tile precedes overscan tile 8"
+    );
+    assert!(r.needs_repaint());
+    r.set_visible_region(0.0, 900.0);
+    for _ in 0..6 {
+        r.render_cpu_scroll_step(520, 900, 1.0).unwrap();
+    }
+    assert!(!r.needs_repaint());
+    assert!(r.tiles.keys().all(|index| *index <= 2));
+    assert_eq!(r.layout_count, layouts);
+}
+
+#[derive(Default)]
+struct DeferredImages(std::sync::Mutex<Vec<(String, Box<dyn blitz_traits::net::NetHandler>)>>);
+impl blitz_traits::net::NetProvider for DeferredImages {
+    fn fetch(
+        &self,
+        _: usize,
+        request: blitz_traits::net::Request,
+        handler: Box<dyn blitz_traits::net::NetHandler>,
+    ) {
+        self.0
+            .lock()
+            .unwrap()
+            .push((request.url.to_string(), handler));
+    }
+}
+impl DeferredImages {
+    fn deliver(&self, suffix: &str, bytes: Vec<u8>) {
+        let mut queued = self.0.lock().unwrap();
+        let index = queued
+            .iter()
+            .position(|(url, _)| url.ends_with(suffix))
+            .unwrap();
+        let (url, handler) = queued.remove(index);
+        drop(queued);
+        handler.bytes(url, blitz_traits::net::Bytes::from(bytes));
+    }
+}
+
+#[test]
+fn image_updates_preserve_fixed_layout_and_invalidate_only_affected_tiles() {
+    let provider = Arc::new(DeferredImages::default());
+    let html = "<body style='margin:0'><div style='height:600px'>Top</div><img src='https://example.com/fixed.png' width='90' height='60'><div style='height:1400px'>Bottom</div><img src='https://example.com/auto.png'></body>";
+    let mut r = GpuEmailRenderer::default();
+    r.set_email(prepare_email_html_with_provider(html, Some(provider.clone())).unwrap());
+    r.render_cpu_if_needed(520, 900, 1.0).unwrap();
+    let top = r.tiles[&0].image.clone();
+    let layouts = r.layout_count;
+    let tiles = r.tile_count;
+    let mut png = std::io::Cursor::new(Vec::new());
+    image::RgbaImage::from_pixel(90, 60, image::Rgba([0, 180, 0, 255]))
+        .write_to(&mut png, image::ImageFormat::Png)
+        .unwrap();
+    provider.deliver("fixed.png", png.get_ref().clone());
+    r.render_cpu_if_needed(520, 900, 1.0).unwrap().unwrap();
+    assert_eq!(r.layout_count, layouts);
+    assert_eq!(r.tile_count, tiles + 1);
+    assert_eq!(r.tiles[&0].image, top);
+    let pixels = r.tiles[&1].image.to_rgba8().unwrap();
+    assert!(
+        pixels
+            .as_slice()
+            .iter()
+            .any(|p| p.r < 10 && p.g > 150 && p.b < 10)
+    );
+    provider.deliver("auto.png", png.into_inner());
+    r.render_cpu_if_needed(520, 900, 1.0).unwrap();
+    assert_eq!(
+        r.layout_count,
+        layouts + 1,
+        "intrinsic sizing must still trigger layout"
+    );
+}
+
+#[test]
+fn fixed_image_delivery_retains_intrinsic_size_for_later_responsive_layout() {
+    let provider = Arc::new(DeferredImages::default());
+    let html = "<style>#image{width:60px;height:30px}@media(max-width:400px){#image{width:auto;height:auto}}</style><body style='margin:0'><img id='image' src='https://example.com/responsive.png'></body>";
+    let mut r = GpuEmailRenderer::default();
+    r.set_email(prepare_email_html_with_provider(html, Some(provider.clone())).unwrap());
+    r.render_cpu_if_needed(520, 400, 1.0).unwrap();
+    let mut png = std::io::Cursor::new(Vec::new());
+    image::RgbaImage::new(120, 80)
+        .write_to(&mut png, image::ImageFormat::Png)
+        .unwrap();
+    provider.deliver("responsive.png", png.into_inner());
+    for (width, expected) in [
+        (520, (60.0, 30.0)),
+        (320, (120.0, 80.0)),
+        (520, (60.0, 30.0)),
+    ] {
+        r.render_cpu_if_needed(width, 400, 1.0).unwrap();
+        let doc = &r.email.as_ref().unwrap().document;
+        let size = doc
+            .get_node(doc.get_element_by_id("image").unwrap())
+            .unwrap()
+            .final_layout()
+            .size;
+        assert_eq!((size.width, size.height), expected);
+    }
+}
+
+#[test]
+fn transformed_image_delivery_repaints_cached_tiles_without_relayout() {
+    let provider = Arc::new(DeferredImages::default());
+    let html = "<body style='margin:0'><div style='height:600px'></div><div style='transform:translateY(-200px)'><img src='https://example.com/moved.png' width='90' height='60'></div><div style='height:1400px'></div></body>";
+    let mut r = GpuEmailRenderer::default();
+    r.set_email(prepare_email_html_with_provider(html, Some(provider.clone())).unwrap());
+    r.render_cpu_if_needed(520, 900, 1.0).unwrap();
+    let layouts = r.layout_count;
+    let tiles = r.tile_count;
+    let retained = r.tiles.len() as u64;
+    let mut png = std::io::Cursor::new(Vec::new());
+    image::RgbaImage::from_pixel(90, 60, image::Rgba([0, 180, 0, 255]))
+        .write_to(&mut png, image::ImageFormat::Png)
+        .unwrap();
+    provider.deliver("moved.png", png.into_inner());
+    r.render_cpu_if_needed(520, 900, 1.0).unwrap();
+    assert_eq!(r.layout_count, layouts);
+    assert_eq!(r.tile_count, tiles + retained);
+    assert!(
+        r.tiles[&0]
+            .image
+            .to_rgba8()
+            .unwrap()
+            .as_slice()
+            .iter()
+            .any(|p| p.g > 150 && p.r < 10 && p.b < 10)
+    );
+}
+
+#[test]
+fn downsampled_images_keep_intrinsic_layout_and_background_scale() {
+    for format in [image::ImageFormat::Jpeg, image::ImageFormat::Png] {
+        let provider = Arc::new(DeferredImages::default());
+        let html = "<body style='margin:0'><img id='natural' src='https://example.com/large'><div id='background' style='height:100px;width:600px;background-image:url(https://example.com/background);background-size:600px 100px;background-repeat:no-repeat'></div></body>";
+        let mut r = GpuEmailRenderer::default();
+        r.set_email(prepare_email_html_with_provider(html, Some(provider.clone())).unwrap());
+        let mut bytes = std::io::Cursor::new(Vec::new());
+        let original = image::RgbImage::from_fn(3000, 300, |x, _| {
+            if x < 1500 {
+                image::Rgb([230, 0, 0])
+            } else {
+                image::Rgb([0, 0, 230])
+            }
+        });
+        original.write_to(&mut bytes, format).unwrap();
+        provider.deliver("large", bytes.get_ref().clone());
+        provider.deliver("background", bytes.into_inner());
+        let frame = r.render_cpu_if_needed(700, 700, 1.0).unwrap().unwrap();
+        let doc = &r.email.as_ref().unwrap().document;
+        let node = doc
+            .get_node(doc.get_element_by_id("natural").unwrap())
+            .unwrap();
+        let decoded = node.element_data().unwrap().raster_image_data().unwrap();
+        assert_eq!((decoded.width, decoded.height), (3000, 300));
+        assert!(decoded.pixel_width <= 2048);
+        assert_eq!(
+            decoded.data.len(),
+            (decoded.pixel_width * decoded.pixel_height * 4) as usize
+        );
+        // Blitz fits this auto-sized replaced element to available width.
+        // Its original aspect ratio must survive decoder scaling.
+        let size = node.final_layout().size;
+        assert_eq!(size.width, 700.0);
+        assert!((size.height - 70.0).abs() <= 1.0);
+        let background = doc
+            .get_node(doc.get_element_by_id("background").unwrap())
+            .unwrap();
+        let sample_y = (background.absolute_position(0.0, 0.0).y + 50.0) as usize;
+        let pixels = frame.tiles[0].image.to_rgba8().unwrap();
+        let red = pixels.as_slice()[sample_y * pixels.width() as usize + 100];
+        let blue = pixels.as_slice()[sample_y * pixels.width() as usize + 500];
+        assert!(red.r > 180 && red.b < 30, "{format:?}: left background");
+        assert!(blue.b > 180 && blue.r < 30, "{format:?}: right background");
+    }
+}
+
+#[test]
+fn culled_text_tiles_match_a_full_surface() {
+    for (name, style) in [
+        ("cached-lines", "font-family:'DejaVu Sans';font-size:16px"),
+        ("ordinary", ""),
+        (
+            "overhang",
+            "font-style:italic;line-height:12px;font-size:24px",
+        ),
+        (
+            "transformed",
+            "transform:rotate(3deg);transform-origin:top left",
+        ),
+        ("filtered", "filter:opacity(0.8)"),
+    ] {
+        let text = if name == "cached-lines" {
+            "Accents ÅÉgj <b>bold</b> <i>italic</i> café <span style='background:#cfc'>highlight</span> "
+        } else {
+            "Accents ÅÉgj <b>bold</b> <i>italic</i> <u>underlined</u> café 日本語 😀 <span style='background:#cfc'>highlight</span> "
+        };
+        let html = format!(
+            "<body style='margin:0'><p style='{style}'>{}</p></body>",
+            text.repeat(65)
+        );
+        for scale in [1.0, 1.25] {
+            let mut email = prepare_email_html(&html).unwrap();
+            let tiled = render_prepared_cpu(&mut email, 520, 900, scale).unwrap();
+            if name == "cached-lines" {
+                assert!(email.paint_cache.line_count() >= 16);
+            }
+            let mut full = render_to_buffer::<VelloCpuImageRenderer, _>(
+                |scene| {
+                    paint_scene(
+                        scene,
+                        &mut email.document,
+                        scale as f64,
+                        tiled.width,
+                        tiled.height,
+                        0,
+                        0,
+                    )
+                },
+                tiled.width,
+                tiled.height,
+            );
+            composite_over_white(&mut full);
+            let mut offset = 0;
+            for tile in &tiled.tiles {
+                let pixels = tile.image.to_rgba8().unwrap();
+                let bytes = pixels.as_bytes();
+                let reference = &full[offset..offset + bytes.len()];
+                let different = bytes
+                    .iter()
+                    .zip(reference)
+                    .filter(|(a, b)| a.abs_diff(**b) > 2)
+                    .count();
+                assert_eq!(different, 0, "{name} at {scale}, tile offset {offset}");
+                offset += bytes.len();
+            }
+            assert_eq!(offset, full.len());
+        }
+    }
+}
+
 #[test]
 fn ctrl_a_unicode_shift_caret_and_selection_restore() {
     let mut r = renderer(BODY);

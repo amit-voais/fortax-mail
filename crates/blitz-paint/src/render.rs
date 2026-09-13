@@ -104,6 +104,7 @@ impl<'a> PhysicalTracks<'a> {
 /// A short-lived struct which holds a bunch of parameters for rendering a scene so
 /// that we don't have to pass them down as parameters
 pub struct BlitzDomPainter<'dom, 'a> {
+    pub(crate) paint_cache: Option<&'a crate::PaintCache>,
     /// Input parameters (read only) for generating the Scene
     pub(crate) dom: &'dom BaseDocument,
     pub(crate) scale: f64,
@@ -149,6 +150,7 @@ impl<'dom, 'a> BlitzDomPainter<'dom, 'a> {
         let root_element_id = dom.try_root_element().map(|el| el.id);
 
         Self {
+            paint_cache: None,
             dom,
             scale,
             width,
@@ -639,8 +641,8 @@ fn to_peniko_image(image: &RasterImageData, quality: peniko::ImageQuality) -> pe
         image: ImageData {
             data: image.data.clone(),
             format: peniko::ImageFormat::Rgba8,
-            width: image.width,
-            height: image.height,
+            width: image.pixel_width,
+            height: image.pixel_height,
             alpha_type: peniko::ImageAlphaType::Alpha,
         },
         sampler: ImageSampler {
@@ -813,16 +815,79 @@ impl ElementCx<'_, '_> {
             let transform =
                 self.transform * Affine::translate((pos.x * self.scale, pos.y * self.scale));
 
-            // Render inline element backgrounds (e.g. `<span style="background: ...">`)
-            // behind the text and selection highlight.
+            // Render text
+            // Filters can bring offscreen source pixels into the viewport.
+            // Keep their source intact, including filters on ancestor boxes.
+            let mut ancestor = Some(self.node.id);
+            let mut viewport = Some(Rect::new(
+                0.0,
+                0.0,
+                self.context.width as f64,
+                self.context.height as f64,
+            ));
+            while let Some(id) = ancestor {
+                let Some(node) = self.context.dom.get_node(id) else {
+                    break;
+                };
+                if node.primary_styles().is_some_and(|style| {
+                    let effects = style.get_effects();
+                    !effects.filter.0.is_empty() || !effects.backdrop_filter.0.is_empty()
+                }) {
+                    viewport = None;
+                    break;
+                }
+                ancestor = node.parent;
+            }
+            let mut cached = self
+                .context
+                .paint_cache
+                .map(|cache| cache.lines.borrow_mut());
+            if let Some(cache) = cached.as_mut() {
+                // Bound auxiliary geometry to ~640 KiB even for huge messages.
+                let count = text_layout.layout.len();
+                if viewport.is_some()
+                    && count >= 16
+                    && !cache.contains_key(&self.node.id)
+                    && cache.values().map(Vec::len).sum::<usize>() + count <= 16_000
+                {
+                    cache.insert(
+                        self.node.id,
+                        crate::text::line_paint_bounds(
+                            &text_layout.layout,
+                            self.context.dom,
+                            self.node.id,
+                        ),
+                    );
+                }
+            }
+            let bounds = cached.as_ref().and_then(|cache| cache.get(&self.node.id));
+            let lines = text_layout
+                .layout
+                .lines()
+                .enumerate()
+                .filter_map(|(index, line)| {
+                    let outside = viewport
+                        .zip(bounds)
+                        .and_then(|(viewport, bounds)| {
+                            bounds[index].map(|bounds| {
+                                let bounds = transform.transform_rect_bbox(bounds);
+                                bounds.is_finite()
+                                    && (bounds.x1 < viewport.x0
+                                        || bounds.x0 > viewport.x1
+                                        || bounds.y1 < viewport.y0
+                                        || bounds.y0 > viewport.y1)
+                            })
+                        })
+                        .unwrap_or(false);
+                    (!outside).then_some(line)
+                });
             crate::text::draw_inline_backgrounds(
                 scene,
-                text_layout.layout.lines(),
+                lines.clone(),
                 self.context.dom,
                 transform,
                 self.node.id,
             );
-
             // Render text selection highlight (if any) using cached selection ranges
             if let Some(&(sel_start, sel_end)) = self.context.selection_ranges.get(&self.node.id) {
                 crate::text::draw_text_selection(
@@ -834,16 +899,16 @@ impl ElementCx<'_, '_> {
                 );
             }
 
-            // Render text
             let mut draw_text_context = self.context.draw_text_context.borrow_mut();
             crate::text::stroke_text(
                 scene,
-                text_layout.layout.lines(),
+                lines,
                 self.context.dom,
                 transform,
                 self.scale,
                 self.node.id,
                 &mut draw_text_context,
+                viewport,
             );
         }
     }
@@ -910,6 +975,7 @@ impl ElementCx<'_, '_> {
                 self.scale,
                 self.node.id,
                 &mut draw_text_context,
+                None,
             );
         }
     }
@@ -958,6 +1024,7 @@ impl ElementCx<'_, '_> {
                 self.scale,
                 self.node.id,
                 &mut draw_text_context,
+                None,
             );
         }
     }
@@ -1092,8 +1159,8 @@ impl ElementCx<'_, '_> {
             let x = x + x_offset.px() as f64;
             let y = y + y_offset.px() as f64;
 
-            let x_scale = paint_size.width as f64 / object_size.width as f64;
-            let y_scale = paint_size.height as f64 / object_size.height as f64;
+            let x_scale = paint_size.width as f64 / image.pixel_width as f64;
+            let y_scale = paint_size.height as f64 / image.pixel_height as f64;
             let transform = self
                 .transform
                 .pre_translate(Vec2 { x, y })

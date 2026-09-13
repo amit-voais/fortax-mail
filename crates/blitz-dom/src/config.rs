@@ -31,6 +31,8 @@ pub enum StyleThreading {
 /// Options used when constructing a [`BaseDocument`](crate::BaseDocument)
 #[derive(Default)]
 pub struct DocumentConfig {
+    /// Optional bounded raster decoding for untrusted email content.
+    pub image_decode_limits: Option<crate::net::ImageDecodeLimits>,
     /// The initial `Viewport`
     pub viewport: Option<Viewport>,
     /// The base url which relative URLs are resolved against
