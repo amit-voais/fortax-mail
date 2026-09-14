@@ -24,9 +24,18 @@ pub fn reprioritize_images() {
     scheduler::shared().reprioritize();
 }
 
-const MAX_RESOURCE_BYTES: usize = 5 * 1024 * 1024;
+const MAX_REMOTE_RESOURCE_BYTES: usize = 5 * 1024 * 1024;
+// CID images are already bounded to 8 MiB by the mail core. Keep the renderer
+// in agreement so a valid embedded attachment is not rejected after it has
+// been resolved to a data URI.
+const MAX_EMBEDDED_RESOURCE_BYTES: usize = 8 * 1024 * 1024;
 const MAX_IMAGE_DIMENSION: u32 = 4_096;
 const MAX_IMAGE_PIXELS: u64 = 8 * 1024 * 1024;
+// Modern phone JPEGs commonly exceed the generic raster limits. JPEG IDCT
+// scaling reduces these before allocating pixels, so larger sources remain
+// safe while PNG/GIF/WebP keep the stricter limits above.
+const MAX_JPEG_SOURCE_DIMENSION: u32 = 16_384;
+const MAX_JPEG_SOURCE_PIXELS: u64 = 64 * 1024 * 1024;
 const MAX_DECODED_DIMENSION: u32 = 2048;
 const MAX_DOCUMENT_BYTES: u64 = 20 * 1024 * 1024;
 const MAX_DOCUMENT_PIXELS: u64 = 16 * 1024 * 1024;
@@ -37,6 +46,8 @@ pub(crate) fn image_decode_limits() -> blitz_dom::net::ImageDecodeLimits {
     blitz_dom::net::ImageDecodeLimits {
         max_source_dimension: MAX_IMAGE_DIMENSION,
         max_source_pixels: MAX_IMAGE_PIXELS,
+        max_jpeg_source_dimension: MAX_JPEG_SOURCE_DIMENSION,
+        max_jpeg_source_pixels: MAX_JPEG_SOURCE_PIXELS,
         max_alloc: MAX_IMAGE_PIXELS * 4,
         target_dimension: MAX_DECODED_DIMENSION,
     }
@@ -302,7 +313,7 @@ async fn consume_http_image(
     if !response.status().is_success()
         || response
             .content_length()
-            .is_some_and(|length| length > MAX_RESOURCE_BYTES as u64)
+            .is_some_and(|length| length > MAX_REMOTE_RESOURCE_BYTES as u64)
     {
         return None;
     }
@@ -328,11 +339,11 @@ async fn consume_http_image(
         response
             .content_length()
             .unwrap_or(0)
-            .min(MAX_RESOURCE_BYTES as u64) as usize,
+            .min(MAX_REMOTE_RESOURCE_BYTES as u64) as usize,
     );
     while let Some(chunk) = response.chunk().await.ok()? {
         if signal.is_some_and(|signal| signal.aborted())
-            || bytes.len().saturating_add(chunk.len()) > MAX_RESOURCE_BYTES
+            || bytes.len().saturating_add(chunk.len()) > MAX_REMOTE_RESOURCE_BYTES
         {
             return None;
         }
@@ -400,7 +411,7 @@ async fn pinned_public_client(url: &reqwest::Url) -> Option<reqwest::Client> {
 fn load_data_image(url: &str) -> Option<Vec<u8>> {
     // Base64 overhead is 4/3; this pre-check bounds allocation even before
     // the streaming decoder sees the data.
-    if url.len() > MAX_RESOURCE_BYTES.saturating_mul(2) {
+    if url.len() > MAX_EMBEDDED_RESOURCE_BYTES.saturating_mul(2) {
         return None;
     }
     let data = data_url::DataUrl::process(url).ok()?;
@@ -408,25 +419,31 @@ fn load_data_image(url: &str) -> Option<Vec<u8>> {
         return None;
     }
     let (bytes, _) = data.decode_to_vec().ok()?;
-    (bytes.len() <= MAX_RESOURCE_BYTES).then_some(bytes)
+    (bytes.len() <= MAX_EMBEDDED_RESOURCE_BYTES).then_some(bytes)
 }
 
 fn validated_pixel_count(bytes: &[u8]) -> Option<u64> {
     let mut reader = ImageReader::new(Cursor::new(bytes))
         .with_guessed_format()
         .ok()?;
+    let format = reader.format();
+    let (max_dimension, max_pixels) = if format == Some(image::ImageFormat::Jpeg) {
+        (MAX_JPEG_SOURCE_DIMENSION, MAX_JPEG_SOURCE_PIXELS)
+    } else {
+        (MAX_IMAGE_DIMENSION, MAX_IMAGE_PIXELS)
+    };
     let mut limits = Limits::default();
-    limits.max_image_width = Some(MAX_IMAGE_DIMENSION);
-    limits.max_image_height = Some(MAX_IMAGE_DIMENSION);
+    limits.max_image_width = Some(max_dimension);
+    limits.max_image_height = Some(max_dimension);
     limits.max_alloc = Some(MAX_IMAGE_PIXELS * 4);
     reader.limits(limits);
     let (width, height) = reader.into_dimensions().ok()?;
     let pixels = u64::from(width).checked_mul(u64::from(height))?;
     (width > 0
         && height > 0
-        && width <= MAX_IMAGE_DIMENSION
-        && height <= MAX_IMAGE_DIMENSION
-        && pixels <= MAX_IMAGE_PIXELS)
+        && width <= max_dimension
+        && height <= max_dimension
+        && pixels <= max_pixels)
         .then(|| {
             // Charge a conservative upper bound on retained decoded pixels,
             // rather than the source pixels discarded by downsampling.
@@ -647,6 +664,24 @@ mod tests {
                 assert!(budget <= u64::from(width) * u64::from(height));
             }
         }
+    }
+
+    #[test]
+    fn full_resolution_phone_jpeg_is_admitted_and_downsampled() {
+        let mut bytes = Cursor::new(Vec::new());
+        image::RgbImage::new(4032, 3024)
+            .write_to(&mut bytes, image::ImageFormat::Jpeg)
+            .unwrap();
+
+        let budget = validated_pixel_count(bytes.get_ref())
+            .expect("a common 12 MP phone JPEG should fit the bounded JPEG path");
+        let decoded = image_decode_limits().decode(bytes.get_ref()).unwrap();
+
+        assert!(decoded.pixel_width <= MAX_DECODED_DIMENSION);
+        assert!(decoded.pixel_height <= MAX_DECODED_DIMENSION);
+        assert!(
+            budget >= u64::from(decoded.pixel_width) * u64::from(decoded.pixel_height)
+        );
     }
 
     #[test]

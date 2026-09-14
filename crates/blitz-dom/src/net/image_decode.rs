@@ -6,6 +6,10 @@ use std::{io::Cursor, sync::Arc};
 pub struct ImageDecodeLimits {
     pub max_source_dimension: u32,
     pub max_source_pixels: u64,
+    /// JPEGs can be admitted at a larger source size because the decoder uses
+    /// native IDCT scaling before allocating the retained pixel buffer.
+    pub max_jpeg_source_dimension: u32,
+    pub max_jpeg_source_pixels: u64,
     pub max_alloc: u64,
     pub target_dimension: u32,
 }
@@ -20,11 +24,20 @@ impl ImageDecodeLimits {
             .map_err(|e| e.to_string())?;
         let format = reader.format();
         let (width, height) = reader.into_dimensions().map_err(|e| e.to_string())?;
+        let (max_source_dimension, max_source_pixels) =
+            if format == Some(ImageFormat::Jpeg) {
+                (
+                    self.max_jpeg_source_dimension,
+                    self.max_jpeg_source_pixels,
+                )
+            } else {
+                (self.max_source_dimension, self.max_source_pixels)
+            };
         if width == 0
             || height == 0
-            || width > self.max_source_dimension
-            || height > self.max_source_dimension
-            || u64::from(width) * u64::from(height) > self.max_source_pixels
+            || width > max_source_dimension
+            || height > max_source_dimension
+            || u64::from(width) * u64::from(height) > max_source_pixels
             || self.target_dimension == 0
         {
             return Err("Image dimensions exceed the document decoder limits".into());

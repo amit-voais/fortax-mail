@@ -145,6 +145,11 @@ export component MailReadingPane inherits Rectangle {
     in-out property <length> email-scroll-y: 0px;
     out property <length> email-viewport-width: email-scroll.visible-width;
     out property <length> email-viewport-height: email-surface.height;
+    private property <length> rendered-email-height: root.email-viewport-width * EmailReader.width-ratio * root.email-content-aspect + (root.remote-images-blocked ? 60px : 0px);
+    private property <length> attachment-section-height: MailAttachments.rows.length > 0 ? 34px + MailAttachments.rows.length * 48px : 0px;
+    // Plain text, source, and reader mode own their own scrolling surface. In
+    // the normal renderer, place attachments immediately after the document.
+    private property <length> attachment-flow-y: root.text_mode || root.source_mode || EmailReader.reader-mode ? max(email-surface.height, root.rendered-email-height) : root.rendered-email-height;
     in property <color> accent;
     in property <color> accent-soft;
     in property <color> border;
@@ -890,7 +895,7 @@ export component MailReadingPane inherits Rectangle {
                                     width: parent.width;
                                     height: parent.height;
                                     viewport-width: root.email-viewport-width * EmailReader.width-ratio;
-                                    viewport-height: max(parent.height, root.email-viewport-width * EmailReader.width-ratio * root.email-content-aspect + (root.remote-images-blocked ? 60px : 0px));
+                                    viewport-height: max(parent.height, root.attachment-flow-y + root.attachment-section-height + (MailAttachments.rows.length > 0 ? 12px : 0px));
                                     viewport-y <=> root.email-scroll-y;
                                     horizontal-scrollbar-policy: EmailReader.width-ratio > 1.01 ? as-needed : always-off;
                                     mouse-drag-pan-enabled: root.compact && !root.selecting;
@@ -903,7 +908,7 @@ export component MailReadingPane inherits Rectangle {
                                 // below add the link-specific native actions.
                                 email-context := ContextMenuArea {
                                     width: root.email-viewport-width * EmailReader.width-ratio;
-                                    height: max(email-surface.height, root.email-viewport-width * EmailReader.width-ratio * root.email-content-aspect + (root.remote-images-blocked ? 60px : 0px));
+                                    height: max(email-surface.height, root.rendered-email-height);
                                     // Keep the parent enabled in plain-text
                                     // mode as well; otherwise Slint propagates
                                     // the disabled state into the read-only
@@ -1211,6 +1216,62 @@ export component MailReadingPane inherits Rectangle {
                                     Rectangle { width: parent.width; height: parent.height; border-width: parent.has-focus ? 2px : 0px; border-color: root.accent; background: transparent; }
                                 }
 
+                                // Attachments belong to the message document. They
+                                // share its vertical scroll and appear only after
+                                // the rendered body has passed through the viewport.
+                                if MailAttachments.rows.length > 0 : VerticalBox {
+                                    x: -email-scroll.viewport-x + 12px;
+                                    y: root.attachment-flow-y;
+                                    width: max(0px, email-scroll.visible-width - 24px);
+                                    height: root.attachment-section-height;
+                                    padding: 0px;
+                                    padding-top: 8px;
+                                    spacing: 6px;
+                                    Text {
+                                        height: 20px;
+                                        text: @tr("Attachments");
+                                        color: root.heading;
+                                        font-weight: 600;
+                                    }
+                                    for attachment in MailAttachments.rows : HorizontalBox {
+                                        width: parent.width;
+                                        height: 48px;
+                                        padding: 0px;
+                                        spacing: 8px;
+                                        attachment-focus := FocusScope {
+                                            min-width: 0px;
+                                            horizontal-stretch: 1;
+                                            key-pressed(event) => {
+                                                if event.text == Key.Return || event.text == Key.Space {
+                                                    MailAttachments.command(attachment.previewable ? "preview" : "download", attachment.id); return accept;
+                                                }
+                                                reject
+                                            }
+                                            SidebarItem {
+                                                width: parent.width;
+                                                row-height: 44px;
+                                                left-padding: 8px;
+                                                label: attachment.name;
+                                                selected: attachment-focus.has-focus;
+                                                icon: @image-url("../icons/phosphor/paperclip.svg");
+                                                sidebar-background: root.surface;
+                                                selection-background: root.accent-soft;
+                                                accent-color: root.accent;
+                                                body-color: root.heading;
+                                                muted-color: root.secondary-text;
+                                                clicked(scope) => { attachment-focus.focus(); MailAttachments.command(attachment.previewable ? "preview" : "download", attachment.id); }
+                                            }
+                                        }
+                                        ToolbarIconButton {
+                                            compact: root.compact;
+                                            icon: @image-url("../icons/phosphor/download-simple.svg");
+                                            icon-color: AppTheme.secondary;
+                                            tooltip-text: @tr("Download");
+                                            clicked => { MailAttachments.command("download", attachment.id); }
+                                        }
+                                    }
+                                }
+
                             }
                             if EmailReader.reader-mode : Rectangle {
                                 width: parent.width; height: parent.height;
@@ -1237,39 +1298,6 @@ export component MailReadingPane inherits Rectangle {
                                 }
                             }
 
-                        }
-
-                        if MailAttachments.rows.length > 0 && !root.attachment-menu-mode : VerticalBox {
-                            height: 34px + min(168px, MailAttachments.rows.length * 48px);
-                            vertical-stretch: 0; padding: 0px; padding-top: 8px; spacing: 6px;
-                            Text { height: 20px; text: @tr("Attachments"); color: root.heading; font-weight: 600; }
-                            // Keep access independent of the body's scroll position.
-                            attachments-list := ListView {
-                                viewport-width: self.visible-width;
-                                mouse-drag-pan-enabled: root.compact;
-                                for attachment in MailAttachments.rows : HorizontalBox {
-                                    width: attachments-list.visible-width;
-                                    height: 48px; padding: 0px; spacing: 8px;
-                                    attachment-focus := FocusScope {
-                                        min-width: 0px; horizontal-stretch: 1;
-                                        key-pressed(event) => {
-                                            if event.text == Key.Return || event.text == Key.Space {
-                                                MailAttachments.command(attachment.previewable ? "preview" : "download", attachment.id); return accept;
-                                            }
-                                            reject
-                                        }
-                                        SidebarItem {
-                                            width: parent.width; row-height: 44px; left-padding: 8px;
-                                            label: attachment.name; selected: attachment-focus.has-focus;
-                                            icon: @image-url("../icons/phosphor/paperclip.svg");
-                                            sidebar-background: root.surface; selection-background: root.accent-soft;
-                                            accent-color: root.accent; body-color: root.heading; muted-color: root.secondary-text;
-                                            clicked(scope) => { attachment-focus.focus(); MailAttachments.command(attachment.previewable ? "preview" : "download", attachment.id); }
-                                        }
-                                    }
-                                    ToolbarIconButton { compact: root.compact; icon: @image-url("../icons/phosphor/download-simple.svg"); icon-color: AppTheme.secondary; tooltip-text: @tr("Download"); clicked => { MailAttachments.command("download", attachment.id); } }
-                                }
-                            }
                         }
                         Text {
                             height: EmailReader.destination == "" ? 0px : 20px;
