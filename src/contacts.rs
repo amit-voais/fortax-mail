@@ -380,7 +380,7 @@ fn contact_account_rows(
         }
     }
     let connected_accounts = app.get_connected_accounts();
-    let account_rows = (0..connected_accounts.row_count())
+    (0..connected_accounts.row_count())
         .filter_map(|index| connected_accounts.row_data(index))
         .map(|account| {
             let selected = directory.scope == format!("Account:{}", account.id);
@@ -412,9 +412,7 @@ fn contact_account_rows(
                 selected,
             }
         })
-        .collect::<Vec<_>>();
-
-    account_rows
+        .collect::<Vec<_>>()
 }
 
 pub(crate) fn refresh_contact_sidebar(app: &AppWindow, state: &Rc<RefCell<ContactDirectoryState>>) {

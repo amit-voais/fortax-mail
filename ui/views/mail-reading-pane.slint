@@ -287,7 +287,7 @@ export component MailReadingPane inherits Rectangle {
         email-scroll.visible-width - 2 * (root.message-card-inset + root.message-card-border-width)
     );
     out property <length> email-viewport-height: max(
-        0px,
+        40px,
         email-surface.height - root.thread-header-height - root.renderer-controls-height
     );
     private property <length> rendered-email-height: root.email-viewport-width * EmailReader.width-ratio * root.email-content-aspect + (root.remote-images-blocked ? 60px : 0px);

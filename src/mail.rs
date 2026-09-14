@@ -1808,10 +1808,7 @@ fn display_thread_subject(subject: &str) -> String {
         leading_tags.push_str(tag.trim());
         remaining = rest.trim_start();
     }
-    loop {
-        let Some(colon) = remaining.find(':') else {
-            break;
-        };
+    while let Some(colon) = remaining.find(':') {
         let prefix = remaining[..colon].trim();
         let token = prefix
             .split_once('[')
