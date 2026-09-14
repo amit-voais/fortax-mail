@@ -31,6 +31,10 @@
       <caption>Unified inbox and message workspace in the dark theme</caption>
     </screenshot>
     <screenshot>
+      <image type="source" width="2640" height="1600">https://raw.githubusercontent.com/flectar/mail/main/resources/screenshots/desktop-thread-light.png</image>
+      <caption>Conversation with incoming and replied messages</caption>
+    </screenshot>
+    <screenshot>
       <image type="source" width="2640" height="1600">https://raw.githubusercontent.com/flectar/mail/main/resources/screenshots/desktop-minimal-light.png</image>
       <caption>Minimal desktop inbox in the light theme</caption>
     </screenshot>

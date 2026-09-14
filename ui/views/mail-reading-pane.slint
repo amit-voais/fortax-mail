@@ -341,13 +341,13 @@ export component MailReadingPane inherits Rectangle {
     changed selected-thread-index => {
         root.syncing-accordion-scroll = true;
         root.email-scroll-y = 0px;
-        root.accordion-scroll-y = -root.selected-header-y;
+        root.accordion-scroll-y = 0px;
         root.syncing-accordion-scroll = false;
     }
     changed email-scroll-y => {
         if (!root.syncing-accordion-scroll) {
             root.accordion-scroll-y = root.email-scroll-y == 0px
-                ? -root.selected-header-y
+                ? 0px
                 : root.email-scroll-y - root.message-body-y;
         }
     }

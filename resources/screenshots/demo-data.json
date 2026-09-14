@@ -14,6 +14,57 @@
       "height": 1
     }
   ],
+  "selected_thread_index": 2,
+  "thread_messages": [
+    {
+      "index": 0,
+      "sender": "Cloudflare",
+      "address": "no-reply@cloudflare.com",
+      "initials": "CF",
+      "favicon": "",
+      "favicon_small": "",
+      "has_favicon": false,
+      "preview": "Last week's traffic report is ready to review.",
+      "time": "Sep 7",
+      "to": "alex@flectar.com",
+      "unread": false,
+      "outgoing": false,
+      "body_pending": false,
+      "selected": false
+    },
+    {
+      "index": 1,
+      "sender": "Alex Morgan",
+      "address": "alex@flectar.com",
+      "initials": "AM",
+      "favicon": "",
+      "favicon_small": "",
+      "has_favicon": false,
+      "preview": "Thanks — the new caching rules seem to be working well.",
+      "time": "Sep 8",
+      "to": "Cloudflare Support",
+      "unread": false,
+      "outgoing": true,
+      "body_pending": false,
+      "selected": false
+    },
+    {
+      "index": 2,
+      "sender": "Cloudflare",
+      "address": "no-reply@cloudflare.com",
+      "initials": "CF",
+      "favicon": "",
+      "favicon_small": "",
+      "has_favicon": false,
+      "preview": "Requests are up 18.2%, and all systems are healthy.",
+      "time": "9:41 AM",
+      "to": "alex@flectar.com",
+      "unread": true,
+      "outgoing": false,
+      "body_pending": false,
+      "selected": true
+    }
+  ],
   "selected_sender": "Cloudflare",
   "selected_address": "no-reply@cloudflare.com",
   "selected_subject": "Your weekly traffic report",

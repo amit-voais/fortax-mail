@@ -26,7 +26,7 @@ slint-viewer --check "$ui"
 
 favicon_dir="$temporary_dir/favicons"
 mapfile -t sender_addresses < <(
-  jq -r '[.selected_address, (.emails[].address)] | unique[]' "$fixture"
+  jq -r '[.selected_address, (.emails[].address), (.thread_messages[]? | select(.outgoing | not) | .address)] | unique[]' "$fixture"
 )
 cargo run --quiet --example generate-screenshot-favicons -- \
   "$favicon_dir" "${sender_addresses[@]}"
@@ -39,6 +39,7 @@ render() {
   local workspace_layout="${5:-default}"
   local theme_preset="${6:-default}"
   local active_view="${7:-mail}"
+  local show_threads="${8:-false}"
   local style="fluent"
   local data_file="$temporary_dir/$output_name.json"
 
@@ -54,6 +55,7 @@ render() {
     --arg theme_preset "$theme_preset" \
     --arg active_view "$active_view" \
     --arg favicon_dir "$favicon_dir" \
+    --argjson show_threads "$show_threads" \
     '
       def favicon_path(address):
         ($favicon_dir + "/" + (address | split("@") | last | ascii_downcase) + ".png");
@@ -64,14 +66,24 @@ render() {
       | .text_mode = false
       | .selected_favicon = favicon_path(.selected_address)
       | .selected_has_favicon = true
+      | (.thread_messages // [] | length) as $thread_count
       | .emails |= map(
           .has_replied = (.has_replied // false)
+          | .message_count = (if $show_threads and .selected then ([1, $thread_count] | max) else (.message_count // 1) end)
           | .checked = (.checked // false)
           | .account_id = (.account_id // 0)
           | .favicon = favicon_path(.address)
           | .favicon_small = favicon_path(.address)
           | .has_favicon = true
         )
+      | .selected_address as $selected_address
+      | .thread_messages = (if $show_threads then (.thread_messages // []) else [] end)
+      | .thread_messages |= map(
+          .favicon = favicon_path(if .outgoing then $selected_address else .address end)
+          | .favicon_small = favicon_path(if .outgoing then $selected_address else .address end)
+          | .has_favicon = (.outgoing | not)
+        )
+      | .selected_thread_index = (if $show_threads then (.selected_thread_index // 0) else 0 end)
     ' "$fixture" > "$data_file"
 
   sed \
@@ -92,6 +104,7 @@ render() {
 
 render desktop-light 1320 800 light
 render desktop-dark 1320 800 dark
+render desktop-thread-light 1320 800 light default default mail true
 render desktop-minimal-light 1320 800 light minimal
 render desktop-minimal-dark 1320 800 dark minimal
 render desktop-teal-light 1320 800 light default teal

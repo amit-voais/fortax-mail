@@ -106,6 +106,13 @@ The full workspace keeps your folders, message list, and selected email visible
 together. The minimal layout reduces visual noise and gives each part of your
 inbox more room when you need it.
 
+### Conversation threads
+
+Replies stay grouped in chronological order, with the active message expanded
+inside the reading pane.
+
+![Flectar Mail conversation with incoming and replied messages](resources/screenshots/desktop-thread-light.png)
+
 ### Light
 
 | Full workspace | Minimal workspace |
