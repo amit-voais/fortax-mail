@@ -17,6 +17,7 @@ export component MailView inherits Rectangle {
     in property <bool> loading: false;
     in property <[EmailRow]> emails: [];
     in property <[SidebarRow]> sidebar_rows: [];
+    in-out property <string> folder_filter_query: "";
     private property <length> sidebar-scroll-y: 0px;
     in property <[MailLabelRow]> mail_labels: [];
     in property <[MailLabelRow]> mail_label_results: [];
@@ -98,6 +99,7 @@ export component MailView inherits Rectangle {
     callback select_scope(string);
     callback toggle_folder(int, bool);
     callback toggle_sidebar_section(string, bool);
+    callback filter_folders(string);
     callback request_folder_create(int, int, string);
     callback request_folder_rename(int, string);
     callback request_folder_delete(int, string);
@@ -151,6 +153,7 @@ export component MailView inherits Rectangle {
                 scroll-y <=> root.sidebar-scroll-y;
                 unified-count: root.unified_count;
                 selected-scope: root.selected_scope;
+                filter-query <=> root.folder_filter_query;
                 monochrome-icons: root.monochrome_sidebar_icons;
                 collapsed <=> root.mail_sidebar_collapsed;
                 background-color: root.sidebar-bg;
@@ -163,6 +166,7 @@ export component MailView inherits Rectangle {
                 select-scope(scope) => { root.select_scope(scope); }
                 toggle-section(key, open) => { root.toggle_sidebar_section(key, open); }
                 toggle-folder(id, expanded) => { root.toggle_folder(id, expanded); }
+                filter-folders(query) => { root.filter_folders(query); }
                 request-create-folder(account-id, parent-id, parent-name) => { root.request_folder_create(account-id, parent-id, parent-name); }
                 request-rename-folder(id, name) => { root.request_folder_rename(id, name); }
                 request-delete-folder(id, name) => { root.request_folder_delete(id, name); }
@@ -327,6 +331,7 @@ export component MailView inherits Rectangle {
                 scroll-y <=> root.sidebar-scroll-y;
                 unified-count: root.unified_count;
                 selected-scope: root.selected_scope;
+                filter-query <=> root.folder_filter_query;
                 monochrome-icons: root.monochrome_sidebar_icons;
                 collapsed <=> root.mail_sidebar_collapsed;
                 background-color: root.sidebar-bg;
@@ -342,6 +347,7 @@ export component MailView inherits Rectangle {
                 }
                 toggle-section(key, open) => { root.toggle_sidebar_section(key, open); }
                 toggle-folder(id, expanded) => { root.toggle_folder(id, expanded); }
+                filter-folders(query) => { root.filter_folders(query); }
                 request-create-folder(account-id, parent-id, parent-name) => { root.request_folder_create(account-id, parent-id, parent-name); }
                 request-rename-folder(id, name) => { root.request_folder_rename(id, name); }
                 request-delete-folder(id, name) => { root.request_folder_delete(id, name); }
@@ -530,6 +536,7 @@ export component MailView inherits Rectangle {
                 scroll-y <=> root.sidebar-scroll-y;
                 unified-count: root.unified_count;
                 selected-scope: root.selected_scope;
+                filter-query <=> root.folder_filter_query;
                 monochrome-icons: root.monochrome_sidebar_icons;
                 collapsed: false;
                 background-color: root.sidebar-bg;
@@ -546,6 +553,7 @@ export component MailView inherits Rectangle {
                 }
                 toggle-section(key, open) => { root.toggle_sidebar_section(key, open); }
                 toggle-folder(id, expanded) => { root.toggle_folder(id, expanded); }
+                filter-folders(query) => { root.filter_folders(query); }
                 request-create-folder(account-id, parent-id, parent-name) => { root.request_folder_create(account-id, parent-id, parent-name); }
                 request-rename-folder(id, name) => { root.request_folder_rename(id, name); }
                 request-delete-folder(id, name) => { root.request_folder_delete(id, name); }

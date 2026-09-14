@@ -437,6 +437,7 @@ export component AppWindow inherits Window {
     callback select_scope(string);
     callback toggle_folder(int, bool);
     callback toggle_sidebar_section(string, bool);
+    callback filter_folders(string);
     callback create_folder(int, int, string);
     callback rename_folder(int, string);
     callback delete_folder(int);
@@ -553,6 +554,7 @@ export component AppWindow inherits Window {
 
     in property <[EmailRow]> emails: [];
     in property <[SidebarRow]> sidebar_rows: [];
+    in-out property <string> folder_filter_query: "";
     in property <[MailLabelRow]> mail_labels: [];
     in property <[MailLabelRow]> mail_label_results: [];
     in property <int> selected_mail_label_count: 0;
@@ -987,6 +989,7 @@ export component AppWindow inherits Window {
             show-avatars: root.show_avatars;
             emails: root.emails;
             sidebar_rows: root.sidebar_rows;
+            folder_filter_query <=> root.folder_filter_query;
             mail_labels: root.mail_labels;
             mail_label_results: root.mail_label_results;
             selected_mail_label_count: root.selected_mail_label_count;
@@ -1062,6 +1065,7 @@ export component AppWindow inherits Window {
             select_scope(scope) => { root.select_scope(scope); }
             toggle_sidebar_section(key, open) => { root.toggle_sidebar_section(key, open); }
             toggle_folder(id, expanded) => { root.toggle_folder(id, expanded); }
+            filter_folders(query) => { root.filter_folders(query); }
             request_folder_create(account-id, parent-id, parent-name) => { root.open-folder-create(account-id, parent-id, parent-name); }
             request_folder_rename(id, name) => { root.open-folder-rename(id, name); }
             request_folder_delete(id, name) => { root.open-folder-delete(id, name); }

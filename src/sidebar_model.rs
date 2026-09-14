@@ -61,26 +61,78 @@ fn same_row(a: &SidebarRow, b: &SidebarRow) -> bool {
 
 pub(super) fn refresh_sidebar(state: &Rc<RefCell<InboxState>>) {
     let state = state.borrow();
-    let rows = make_sidebar_rows(
-        make_mailbox_rows(
-            &state.mailboxes,
-            &state.profile_avatar_images,
-            &state.labels,
-            &state.collapsed_folder_ids,
-        ),
-        make_mailbox_rows(
-            &state.unified_mailboxes,
-            &state.profile_avatar_images,
-            &state.labels,
-            &HashSet::new(),
-        ),
-        make_label_rows(&state.labels, None, ""),
-        &state.collapsed_sidebar_sections,
+    let query = state.folder_filter.trim();
+    let filtering = !query.is_empty();
+    let no_collapsed_folders = HashSet::new();
+    let mailboxes = make_mailbox_rows(
+        &state.mailboxes,
+        &state.profile_avatar_images,
+        &state.labels,
+        if filtering {
+            &no_collapsed_folders
+        } else {
+            &state.collapsed_folder_ids
+        },
     );
+    let rows = if filtering {
+        make_filtered_sidebar_rows(mailboxes, query)
+    } else {
+        make_sidebar_rows(
+            mailboxes,
+            make_mailbox_rows(
+                &state.unified_mailboxes,
+                &state.profile_avatar_images,
+                &state.labels,
+                &no_collapsed_folders,
+            ),
+            make_label_rows(&state.labels, None, ""),
+            &state.collapsed_sidebar_sections,
+        )
+    };
     // Model notifications can synchronously inspect application state.
     let model = Rc::clone(&state.sidebar_rows);
     drop(state);
     model.reconcile(rows);
+}
+
+fn make_filtered_sidebar_rows(mailboxes: Vec<MailboxRow>, query: &str) -> Vec<SidebarRow> {
+    use SidebarRowKind as Kind;
+
+    let query = query.to_lowercase();
+    let mut accounts = Vec::new();
+    let mut folders: HashMap<i32, Vec<MailboxRow>> = HashMap::new();
+    for mailbox in mailboxes {
+        if mailbox.is_account {
+            accounts.push(mailbox);
+        } else if mailbox.label.to_lowercase().contains(&query) {
+            folders.entry(mailbox.account_id).or_default().push(mailbox);
+        }
+    }
+
+    let mut rows = Vec::new();
+    for account in accounts {
+        let account_id = account.account_id;
+        let Some(matches) = folders.remove(&account_id) else {
+            continue;
+        };
+        rows.push(SidebarRow {
+            open: true,
+            mailbox: account,
+            ..row(Kind::Account, format!("account:{account_id}"))
+        });
+        rows.extend(matches.into_iter().map(|mut mailbox| {
+            // Search results are a flat projection; their original hierarchy
+            // remains untouched and returns when the filter is cleared.
+            mailbox.depth = 0;
+            mailbox.has_children = false;
+            let key = format!("mailbox:{account_id}:{}", mailbox.scope);
+            SidebarRow {
+                mailbox,
+                ..row(Kind::Folder, key)
+            }
+        }));
+    }
+    rows
 }
 
 fn row(kind: SidebarRowKind, key: impl Into<slint::SharedString>) -> SidebarRow {
@@ -328,6 +380,29 @@ mod tests {
         let rows = make_sidebar_rows(reordered, vec![], vec![], &collapsed);
         assert!(!rows.iter().find(|row| row.key == "account:1").unwrap().open);
         assert!(rows.iter().find(|row| row.key == "account:2").unwrap().open);
+    }
+
+    #[test]
+    fn folder_filter_is_case_insensitive_and_keeps_account_context() {
+        let mut data = accounts(2, 3);
+        data[2].label = "Receipts".into();
+        data[5].label = "RECEIPTS 2025".into();
+
+        let rows = make_filtered_sidebar_rows(data, "receipts");
+        assert_eq!(
+            rows.iter().map(|row| row.kind).collect::<Vec<_>>(),
+            vec![Kind::Account, Kind::Folder, Kind::Account, Kind::Folder]
+        );
+        assert!(
+            rows.iter()
+                .filter(|row| row.kind == Kind::Account)
+                .all(|row| row.open)
+        );
+        assert!(
+            rows.iter()
+                .filter(|row| row.kind == Kind::Folder)
+                .all(|row| { row.mailbox.depth == 0 && !row.mailbox.has_children })
+        );
     }
 
     #[derive(Debug, PartialEq)]

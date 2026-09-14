@@ -426,6 +426,7 @@ struct InboxState {
     collapsed_folder_ids: HashSet<i64>,
     collapsed_sidebar_sections: HashSet<String>,
     sidebar_rows: Rc<SidebarModel>,
+    folder_filter: String,
     scope: String,
     query: String,
     search_filter: String,
@@ -793,6 +794,7 @@ impl InboxState {
             collapsed_folder_ids: HashSet::new(),
             collapsed_sidebar_sections: HashSet::from(["categories".into(), "labels".into()]),
             sidebar_rows: Rc::new(SidebarModel::default()),
+            folder_filter: String::new(),
             total_count: 0,
             inbox_count: 0,
             messages: Vec::new(),
@@ -2533,6 +2535,12 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                 .insert(folder_id);
         }
         refresh_sidebar(&folder_toggle_state);
+    });
+
+    let folder_filter_state = Rc::clone(&state);
+    app.on_filter_folders(move |query| {
+        folder_filter_state.borrow_mut().folder_filter = query.to_string();
+        refresh_sidebar(&folder_filter_state);
     });
 
     let create_folder_state = Rc::clone(&state);

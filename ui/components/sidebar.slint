@@ -3,6 +3,7 @@ import { ListView, VerticalBox } from "std-widgets.slint";
 import { SidebarRow, SidebarRowKind } from "../models.slint";
 import { SidebarItem, SidebarSectionHeader } from "sidebar-controls.slint";
 import { Button } from "button.slint";
+import { IconButton, LineEdit } from "controls.slint";
 import {
     CollapsibleWorkspaceSidebar,
     WorkspaceMiniHeading,
@@ -14,6 +15,8 @@ export component MailSidebar inherits CollapsibleWorkspaceSidebar {
     in property <bool> touch-mode: false;
     in property <[SidebarRow]> rows: [];
     in-out property <length> scroll-y: 0px;
+    in-out property <string> filter-query: "";
+    private property <bool> filter-open: root.filter-query != "";
     in property <string> unified-count;
     in property <string> selected-scope;
     in property <bool> monochrome-icons: false;
@@ -29,6 +32,7 @@ export component MailSidebar inherits CollapsibleWorkspaceSidebar {
     callback manage-accounts;
     callback toggle-folder(int, bool);
     callback toggle-section(string, bool);
+    callback filter-folders(string);
     callback request-create-folder(int, int, string);
     callback request-rename-folder(int, string);
     callback request-delete-folder(int, string);
@@ -54,6 +58,87 @@ export component MailSidebar inherits CollapsibleWorkspaceSidebar {
             has-icon: true;
             primary: true;
             clicked => { root.compose(); }
+        }
+
+
+        Rectangle {
+            height: 32px;
+            horizontal-stretch: 1;
+            background: transparent;
+
+            Rectangle {
+                visible: !root.filter-open;
+                width: parent.width;
+                height: parent.height;
+                border-radius: 6px;
+                background: find-hit.has-hover ? root.hover-background : transparent;
+
+                Image {
+                    x: 5px;
+                    y: 8px;
+                    width: 16px;
+                    height: 16px;
+                    source: @image-url("../icons/phosphor/magnifying-glass.svg");
+                    colorize: root.muted-color;
+                    image-fit: contain;
+                    accessible-role: none;
+                }
+
+                Text {
+                    x: 28px;
+                    width: parent.width - 28px;
+                    height: parent.height;
+                    text: @tr("Find folder");
+                    color: root.muted-color;
+                    font-size: TypeScale.caption;
+                    vertical-alignment: center;
+                }
+
+                find-hit := TouchArea {
+                    accessible-role: button;
+                    accessible-label: @tr("Find folder");
+                    accessible-action-default => {
+                        root.filter-open = true;
+                        filter-field.focus();
+                    }
+                    clicked => {
+                        root.filter-open = true;
+                        filter-field.focus();
+                    }
+                    mouse-cursor: pointer;
+                }
+            }
+
+            filter-field := LineEdit {
+                visible: root.filter-open;
+                width: parent.width;
+                height: parent.height;
+                text <=> root.filter-query;
+                placeholder-text: @tr("Find folder");
+                input-label: @tr("Find folder");
+                show-leading-icon: true;
+                leading-icon: @image-url("../icons/phosphor/magnifying-glass.svg");
+                leading-icon-color: root.muted-color;
+                trailing-content-width: 32px;
+                edited(value) => { root.filter-folders(value); }
+            }
+
+            IconButton {
+                visible: root.filter-open;
+                x: parent.width - 32px;
+                width: 32px;
+                height: 32px;
+                icon: @image-url("../icons/phosphor/x.svg");
+                icon-size: 14px;
+                icon-color: root.muted-color;
+                hover-background: root.hover-background;
+                tooltip-text: @tr("Clear folder filter");
+                clicked => {
+                    root.filter-query = "";
+                    root.filter-open = false;
+                    root.filter-folders("");
+                }
+            }
         }
 
         Rectangle {
@@ -432,6 +517,17 @@ export component MailSidebar inherits CollapsibleWorkspaceSidebar {
                         }
                     }
                 }
+            }
+
+            if root.filter-query != "" && root.rows.length == 0 : Text {
+                x: 12px;
+                y: 12px;
+                width: parent.width - 24px;
+                text: @tr("No folders found");
+                color: root.muted-color;
+                font-size: TypeScale.caption;
+                horizontal-alignment: center;
+                wrap: word-wrap;
             }
 
             ScrollFade {
