@@ -1,4 +1,4 @@
-import { AccountRow, ComposeAttachment, ComposeContact, ComposeEditorTile } from "../models.slint";
+import { AccountRow, ComposeAttachment, ComposeContact, ComposeEditorTile, EmailTemplateRow } from "../models.slint";
 import { EmailComposer } from "../components/email-composer.slint";
 
 // Window-level placement and application callbacks stay here; the reusable
@@ -30,6 +30,7 @@ export component ComposeDialog inherits Rectangle {
     in-out property <int> compose_account_id: -1;
     in property <[ComposeContact]> compose_contact_suggestions: [];
     in property <[ComposeAttachment]> compose_attachments: [];
+    in property <[EmailTemplateRow]> compose_templates: [];
     in property <string> compose_attachment_summary: "";
     in-out property <string> compose_from_label: @tr("No connected account");
     in property <string> compose_notice: "";
@@ -66,6 +67,10 @@ export component ComposeDialog inherits Rectangle {
     callback compose_editor_layout_changed;
     callback search_compose_contacts(string, int);
     callback select_compose_contact(int, string) -> string;
+    callback refresh_email_templates();
+    callback use_email_template(int) -> bool;
+    callback save_email_template(int, string, string, string, string) -> bool;
+    callback delete_email_template(int) -> bool;
 
     back-requested => { composer.back-requested(); }
 
@@ -95,6 +100,7 @@ export component ComposeDialog inherits Rectangle {
         selected-account-id <=> root.compose_account_id;
         contact-suggestions: root.compose_contact_suggestions;
         attachments: root.compose_attachments;
+        templates: root.compose_templates;
         attachment-summary: root.compose_attachment_summary;
         from-label <=> root.compose_from_label;
         notice: root.compose_notice;
@@ -156,5 +162,9 @@ export component ComposeDialog inherits Rectangle {
         editor-layout-changed => { root.compose_editor_layout_changed(); }
         search-contacts(query, account-id) => { root.search_compose_contacts(query, account-id); }
         select-contact(index, recipients) => root.select_compose_contact(index, recipients);
+        refresh-templates => { root.refresh_email_templates(); }
+        use-template(id) => root.use_email_template(id);
+        save-template(id, name, shortcut, subject, body) => root.save_email_template(id, name, shortcut, subject, body);
+        delete-template(id) => root.delete_email_template(id);
     }
 }

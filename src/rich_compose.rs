@@ -171,6 +171,31 @@ impl RichComposeDocument {
         }
     }
 
+    pub fn insert_text(&mut self, value: &str) -> ComposeSelection {
+        let anchor = valid_offset(&self.text, self.selection.0);
+        let cursor = valid_offset(&self.text, self.selection.1);
+        let (start, end) = ordered(anchor, cursor);
+        if value.is_empty() && start == end {
+            return self.update_selection(to_i32(start), to_i32(end));
+        }
+
+        self.push_undo();
+        self.redo.clear();
+        self.typing_override = None;
+        let start_character = byte_to_char(&self.text, start);
+        let end_character = byte_to_char(&self.text, end);
+        let style = self.typing_style.clone();
+        self.text.replace_range(start..end, value);
+        self.styles.splice(
+            start_character..end_character,
+            std::iter::repeat_n(style, value.chars().count()),
+        );
+        self.auto_link_urls();
+        self.bump_revision();
+        let caret = start.saturating_add(value.len());
+        self.update_selection(to_i32(caret), to_i32(caret))
+    }
+
     pub fn format(
         &mut self,
         kind: &str,
@@ -851,6 +876,18 @@ mod tests {
             document.body_html().as_deref(),
             Some("<div><em>Hello!</em></div>")
         );
+    }
+
+    #[test]
+    fn inserted_template_replaces_the_selection_and_can_be_undone() {
+        let mut document = RichComposeDocument::default();
+        document.synchronize("Hello placeholder", 6, 17);
+        let selection = document.insert_text("there");
+        assert_eq!(document.text(), "Hello there");
+        assert_eq!(selection, ComposeSelection { start: 11, end: 11 });
+
+        document.history("undo");
+        assert_eq!(document.text(), "Hello placeholder");
     }
 
     #[test]

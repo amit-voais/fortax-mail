@@ -10,7 +10,7 @@ use flectar_mail_core::{
         ConnectCardDavArgs, ContactRecordCursor, ContactRecordPage, CreateEventArgs, CustomTheme,
         DraftAttachmentIn, FolderInfo, Label, MailHistory, MailboxBadgeCounts, MessageDetail,
         PerformActionArgs, PortableAccountConfig, Provider, QueueSendArgs, QueueSendResult,
-        SaveDraftArgs, Settings, ThreadCursor, ThreadSummary, View,
+        SaveDraftArgs, Settings, Snippet, ThreadCursor, ThreadSummary, View,
     },
 };
 #[cfg(test)]
@@ -803,6 +803,41 @@ impl CoreMailSource {
     ) -> Result<Vec<Address>, String> {
         self.core
             .list_contacts(prefix, account_id, limit)
+            .await
+            .map_err(|error| error.to_string())
+    }
+
+    pub async fn list_email_templates(&self) -> Result<Vec<Snippet>, String> {
+        self.core
+            .list_snippets()
+            .await
+            .map_err(|error| error.to_string())
+    }
+
+    pub async fn save_email_template(
+        &self,
+        id: Option<i64>,
+        name: String,
+        shortcut: Option<String>,
+        subject: Option<String>,
+        body: String,
+    ) -> Result<Snippet, String> {
+        self.core
+            .save_snippet(id, name, shortcut, subject, body)
+            .await
+            .map_err(|error| error.to_string())
+    }
+
+    pub async fn delete_email_template(&self, id: i64) -> Result<(), String> {
+        self.core
+            .delete_snippet(id)
+            .await
+            .map_err(|error| error.to_string())
+    }
+
+    pub async fn use_email_template(&self, id: i64) -> Result<(), String> {
+        self.core
+            .use_snippet(id)
             .await
             .map_err(|error| error.to_string())
     }

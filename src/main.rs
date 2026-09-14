@@ -70,7 +70,7 @@ use flectar_mail_core::config::Paths;
 use flectar_mail_core::models::{
     Account, AccountConfig, AddPasswordAccountArgs, CalendarConnection, CardDavConnection,
     ContactRecord, ContactRecordCursor, ContactRecordPage, CreateEventArgs, DraftAttachmentIn,
-    Label, MailProtocol, Provider, ThreadCursor, UpdateEventArgs,
+    Label, MailProtocol, Provider, Snippet, ThreadCursor, UpdateEventArgs,
 };
 #[cfg(test)]
 use mail::fixture_messages;
@@ -4540,6 +4540,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         Vec::<flectar_mail_core::models::Address>::new(),
     ));
     let compose_intent = Rc::new(RefCell::new(ComposeIntent::default()));
+    let compose_templates = Rc::new(RefCell::new(Vec::<Snippet>::new()));
     account_mail_preferences::register(&app, &state, &runtime, &compose_document, &compose_editor);
     apply_compose_files(&app, &compose_files.borrow());
     {
@@ -4548,6 +4549,210 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         apply_rich_compose(&app, &document, ComposeSelection::default(), &mut editor);
     }
     apply_compose_contacts(&app, &[]);
+    apply_email_templates(&app, &[]);
+
+    let app_weak = app.as_weak();
+    let state_for_templates = Rc::clone(&state);
+    let runtime_for_templates = Rc::clone(&runtime);
+    let templates_for_refresh = Rc::clone(&compose_templates);
+    app.on_refresh_email_templates(move || {
+        let Some(app) = app_weak.upgrade() else {
+            return;
+        };
+        let Some(core) = state_for_templates.borrow().core.clone() else {
+            app.set_compose_notice(UiMessage::plain(
+                "Connect an account before managing email templates.",
+            ));
+            app.set_compose_notice_is_error(true);
+            return;
+        };
+        match runtime_for_templates.block_on(core.list_email_templates()) {
+            Ok(templates) => {
+                apply_email_templates(&app, &templates);
+                *templates_for_refresh.borrow_mut() = templates;
+                app.set_compose_notice(UiMessage::EMPTY);
+                app.set_compose_notice_is_error(false);
+            }
+            Err(error) => {
+                app.set_compose_notice(UiMessage::detail(
+                    "Could not load email templates: {}",
+                    error,
+                ));
+                app.set_compose_notice_is_error(true);
+            }
+        }
+    });
+
+    let app_weak = app.as_weak();
+    let state_for_template_save = Rc::clone(&state);
+    let runtime_for_template_save = Rc::clone(&runtime);
+    let templates_for_save = Rc::clone(&compose_templates);
+    app.on_save_email_template(move |id, name, shortcut, subject, body| {
+        let Some(app) = app_weak.upgrade() else {
+            return false;
+        };
+        let name = name.trim();
+        let subject = subject.trim();
+        if name.is_empty() {
+            app.set_compose_notice(UiMessage::plain("Enter a template name."));
+            app.set_compose_notice_is_error(true);
+            return false;
+        }
+        if subject.is_empty() && body.trim().is_empty() {
+            app.set_compose_notice(UiMessage::plain(
+                "Add a subject or message to the template.",
+            ));
+            app.set_compose_notice_is_error(true);
+            return false;
+        }
+        let Some(core) = state_for_template_save.borrow().core.clone() else {
+            app.set_compose_notice(UiMessage::plain(
+                "Connect an account before managing email templates.",
+            ));
+            app.set_compose_notice_is_error(true);
+            return false;
+        };
+        let shortcut = shortcut.trim().trim_start_matches('/').trim();
+        let result = runtime_for_template_save.block_on(core.save_email_template(
+            (id >= 0).then_some(i64::from(id)),
+            name.to_owned(),
+            (!shortcut.is_empty()).then(|| shortcut.to_owned()),
+            (!subject.is_empty()).then(|| subject.to_owned()),
+            body.to_string(),
+        ));
+        match result {
+            Ok(saved) => {
+                let mut templates = templates_for_save.borrow_mut();
+                if let Some(existing) = templates.iter_mut().find(|item| item.id == saved.id) {
+                    *existing = saved;
+                } else {
+                    templates.push(saved);
+                }
+                templates.sort_by(|left, right| {
+                    right
+                        .usage_count
+                        .cmp(&left.usage_count)
+                        .then_with(|| left.name.to_lowercase().cmp(&right.name.to_lowercase()))
+                });
+                apply_email_templates(&app, &templates);
+                app.set_compose_notice(UiMessage::plain("Email template saved."));
+                app.set_compose_notice_is_error(false);
+                true
+            }
+            Err(error) => {
+                app.set_compose_notice(UiMessage::detail(
+                    "Could not save email template: {}",
+                    error,
+                ));
+                app.set_compose_notice_is_error(true);
+                false
+            }
+        }
+    });
+
+    let app_weak = app.as_weak();
+    let state_for_template_delete = Rc::clone(&state);
+    let runtime_for_template_delete = Rc::clone(&runtime);
+    let templates_for_delete = Rc::clone(&compose_templates);
+    app.on_delete_email_template(move |id| {
+        let Some(app) = app_weak.upgrade() else {
+            return false;
+        };
+        let Some(core) = state_for_template_delete.borrow().core.clone() else {
+            app.set_compose_notice(UiMessage::plain(
+                "Connect an account before managing email templates.",
+            ));
+            app.set_compose_notice_is_error(true);
+            return false;
+        };
+        match runtime_for_template_delete.block_on(core.delete_email_template(i64::from(id))) {
+            Ok(()) => {
+                let mut templates = templates_for_delete.borrow_mut();
+                templates.retain(|template| template.id != i64::from(id));
+                apply_email_templates(&app, &templates);
+                app.set_compose_notice(UiMessage::plain("Email template deleted."));
+                app.set_compose_notice_is_error(false);
+                true
+            }
+            Err(error) => {
+                app.set_compose_notice(UiMessage::detail(
+                    "Could not delete email template: {}",
+                    error,
+                ));
+                app.set_compose_notice_is_error(true);
+                false
+            }
+        }
+    });
+
+    let app_weak = app.as_weak();
+    let state_for_template_use = Rc::clone(&state);
+    let runtime_for_template_use = Rc::clone(&runtime);
+    let templates_for_use = Rc::clone(&compose_templates);
+    let document_for_template_use = Rc::clone(&compose_document);
+    let editor_for_template_use = Rc::clone(&compose_editor);
+    app.on_use_email_template(move |id| {
+        let Some(app) = app_weak.upgrade() else {
+            return false;
+        };
+        let Some(template) = templates_for_use
+            .borrow()
+            .iter()
+            .find(|template| template.id == i64::from(id))
+            .cloned()
+        else {
+            app.set_compose_notice(UiMessage::plain("Email template is no longer available."));
+            app.set_compose_notice_is_error(true);
+            return false;
+        };
+
+        if app.get_compose_subject().trim().is_empty()
+            && let Some(subject) = template.subject.as_deref()
+            && !subject.trim().is_empty()
+        {
+            app.set_compose_subject(subject.into());
+        }
+        {
+            let mut document = document_for_template_use.borrow_mut();
+            let selection = document.insert_text(&template.body_text);
+            apply_rich_compose(
+                &app,
+                &document,
+                selection,
+                &mut editor_for_template_use.borrow_mut(),
+            );
+        }
+
+        let usage_result =
+            state_for_template_use.borrow().core.clone().map(|core| {
+                runtime_for_template_use.block_on(core.use_email_template(template.id))
+            });
+        if matches!(usage_result, Some(Ok(()))) {
+            let mut templates = templates_for_use.borrow_mut();
+            if let Some(used) = templates.iter_mut().find(|item| item.id == template.id) {
+                used.usage_count = used.usage_count.saturating_add(1);
+            }
+            templates.sort_by(|left, right| {
+                right
+                    .usage_count
+                    .cmp(&left.usage_count)
+                    .then_with(|| left.name.to_lowercase().cmp(&right.name.to_lowercase()))
+            });
+            apply_email_templates(&app, &templates);
+            app.set_compose_notice(UiMessage::plain("Email template inserted."));
+            app.set_compose_notice_is_error(false);
+        } else if let Some(Err(error)) = usage_result {
+            app.set_compose_notice(UiMessage::detail(
+                "Email template inserted, but its usage could not be saved: {}",
+                error,
+            ));
+            app.set_compose_notice_is_error(true);
+        } else {
+            app.set_compose_notice(UiMessage::plain("Email template inserted."));
+            app.set_compose_notice_is_error(false);
+        }
+        true
+    });
 
     let app_weak = app.as_weak();
     let intent_for_open = Rc::clone(&compose_intent);

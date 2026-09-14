@@ -21,6 +21,7 @@ export component ComposerToolbar inherits Rectangle {
     in property <bool> link-active: false;
     in property <bool> can-link: false;
     callback apply-format(string);
+    callback open-templates();
     callback undo();
     callback redo();
 
@@ -58,6 +59,10 @@ export component ComposerToolbar inherits Rectangle {
             IconButton { icon: @image-url("../icons/phosphor/quotes.svg"); icon-size: 18px; icon-color: root.secondary-color; hover-background: root.control-hover-color; tooltip-text: @tr("Quote"); clicked => { root.apply-format("quote"); } }
             IconButton { icon: @image-url("../icons/phosphor/code.svg"); icon-size: 18px; icon-color: root.code-active ? root.accent-color : root.secondary-color; active: root.code-active; hover-background: root.control-hover-color; active-background: root.accent-background; tooltip-text: @tr("Inline code"); clicked => { root.apply-format("code"); } }
             IconButton { icon: @image-url("../icons/phosphor/link.svg"); icon-size: 18px; icon-color: root.link-active ? root.accent-color : root.secondary-color; active: root.link-active; active-background: root.accent-background; interactive: root.can-link; hover-background: root.control-hover-color; tooltip-text: root.can-link ? @tr("Add or edit link") : @tr("Select text to add a link"); clicked => { root.apply-format("link"); } }
+
+            Rectangle { width: 1px; height: 18px; background: root.subtle-border-color; }
+
+            IconButton { icon: @image-url("../icons/phosphor/book-open-text.svg"); icon-size: 18px; icon-color: root.secondary-color; hover-background: root.control-hover-color; tooltip-text: @tr("Email templates"); clicked => { root.open-templates(); } }
 
             Rectangle { horizontal-stretch: 1; }
 

@@ -359,6 +359,25 @@ pub(super) fn apply_compose_contacts(
     app.set_compose_contact_suggestions(ModelRc::new(VecModel::from(rows)));
 }
 
+pub(super) fn apply_email_templates(
+    app: &AppWindow,
+    templates: &[flectar_mail_core::models::Snippet],
+) {
+    let rows = templates
+        .iter()
+        .filter_map(|template| {
+            Some(EmailTemplateRow {
+                id: i32::try_from(template.id).ok()?,
+                name: template.name.clone().into(),
+                shortcut: template.shortcut.clone().unwrap_or_default().into(),
+                subject: template.subject.clone().unwrap_or_default().into(),
+                body_text: template.body_text.clone().into(),
+            })
+        })
+        .collect::<Vec<_>>();
+    app.set_compose_templates(ModelRc::new(VecModel::from(rows)));
+}
+
 pub(super) fn contact_initials(contact: &flectar_mail_core::models::Address) -> String {
     let source = contact
         .name

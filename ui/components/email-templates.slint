@@ -1,0 +1,347 @@
+import { ListView, VerticalBox } from "std-widgets.slint";
+import { EmailTemplateRow } from "../models.slint";
+import { Button } from "button.slint";
+import { ConfirmationDialog } from "confirmation-dialog.slint";
+import { IconButton, LineEdit, TextEdit } from "controls.slint";
+import { TypeScale } from "../typography.slint";
+
+export component EmailTemplates inherits Rectangle {
+    in-out property <bool> open: false;
+    in property <bool> compact: false;
+    in property <[EmailTemplateRow]> templates: [];
+    in property <string> draft-subject: "";
+    in property <string> draft-body: "";
+    in property <string> notice: "";
+    in property <bool> notice-is-error: false;
+    in property <color> surface-color;
+    in property <color> raised-color;
+    in property <color> ui-border-color;
+    in property <color> hover-color;
+    in property <color> title-color;
+    in property <color> body-color;
+    in property <color> muted-color;
+    in property <color> accent-color;
+    callback refresh;
+    callback use-template(int) -> bool;
+    callback save-template(int, string, string, string, string) -> bool;
+    callback delete-template(int) -> bool;
+
+    private property <bool> editing: false;
+    private property <int> edit-id: -1;
+    private property <string> edit-name: "";
+    private property <string> edit-shortcut: "";
+    private property <string> edit-subject: "";
+    private property <string> edit-body: "";
+    private property <bool> delete-open: false;
+    private property <int> delete-id: -1;
+    private property <string> delete-name: "";
+
+    function close-dialog() {
+        root.editing = false;
+        root.delete-open = false;
+        root.open = false;
+    }
+
+    function new-template() {
+        root.edit-id = -1;
+        root.edit-name = "";
+        root.edit-shortcut = "";
+        root.edit-subject = root.draft-subject;
+        root.edit-body = root.draft-body;
+        root.editing = true;
+    }
+
+    function edit-template(index: int) {
+        root.edit-id = root.templates[index].id;
+        root.edit-name = root.templates[index].name;
+        root.edit-shortcut = root.templates[index].shortcut;
+        root.edit-subject = root.templates[index].subject;
+        root.edit-body = root.templates[index].body_text;
+        root.editing = true;
+    }
+
+    changed open => {
+        if root.open {
+            root.editing = false;
+            root.delete-open = false;
+            root.refresh();
+        }
+    }
+
+    visible: root.open;
+    background: #00000066;
+    z: 7000;
+    accessible-role: groupbox;
+    accessible-label: @tr("Email templates");
+
+    TouchArea { enabled: root.open; }
+
+    panel := Rectangle {
+        x: root.compact ? 0px : (parent.width - self.width) / 2;
+        y: root.compact ? 0px : (parent.height - self.height) / 2;
+        width: root.compact ? parent.width : min(620px, parent.width - 32px);
+        height: root.compact ? parent.height : min(560px, parent.height - 32px);
+        border-radius: root.compact ? 0px : 12px;
+        border-width: root.compact ? 0px : 1px;
+        border-color: root.ui-border-color;
+        background: root.surface-color;
+        clip: true;
+
+        header := Rectangle {
+            x: 0px;
+            y: 0px;
+            width: parent.width;
+            height: 56px;
+            background: root.raised-color;
+            border-width: 1px;
+            border-color: root.ui-border-color;
+
+            Text {
+                x: 20px;
+                width: parent.width - 76px;
+                height: parent.height;
+                text: root.editing
+                    ? (root.edit-id < 0 ? @tr("New email template") : @tr("Edit email template"))
+                    : @tr("Email templates");
+                color: root.title-color;
+                font-size: TypeScale.heading;
+                font-weight: 700;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+
+            IconButton {
+                x: parent.width - 48px;
+                y: 8px;
+                width: 40px;
+                height: 40px;
+                icon: @image-url("../icons/phosphor/x.svg");
+                icon-color: root.muted-color;
+                hover-background: root.hover-color;
+                tooltip-text: @tr("Close");
+                clicked => { root.close-dialog(); }
+            }
+        }
+
+        if !root.editing : Rectangle {
+            x: 0px;
+            y: header.height;
+            width: parent.width;
+            height: parent.height - header.height;
+
+            Button {
+                x: 16px;
+                y: 14px;
+                width: 144px;
+                height: 34px;
+                text: @tr("New template");
+                icon: @image-url("../icons/phosphor/plus.svg");
+                has-icon: true;
+                primary: true;
+                clicked => { root.new-template(); }
+            }
+
+            if root.notice != "" : Text {
+                x: 160px;
+                y: 14px;
+                width: max(0px, parent.width - 176px);
+                height: 34px;
+                text: root.notice;
+                color: root.notice-is-error ? #d04a43 : root.accent-color;
+                font-size: TypeScale.caption;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+
+            if root.templates.length == 0 : Text {
+                x: 20px;
+                y: 82px;
+                width: parent.width - 40px;
+                text: @tr("No email templates yet");
+                color: root.muted-color;
+                font-size: TypeScale.body;
+                horizontal-alignment: center;
+                wrap: word-wrap;
+            }
+
+            templates-list := ListView {
+                x: 12px;
+                y: 60px;
+                width: parent.width - 24px;
+                height: parent.height - 72px;
+                viewport-width: self.visible-width;
+                horizontal-scrollbar-policy: always-off;
+                mouse-drag-pan-enabled: root.compact;
+
+                for template[index] in root.templates : Rectangle {
+                    width: max(0px, templates-list.visible-width - 12px);
+                    height: 64px;
+                    border-radius: 7px;
+                    background: template-hit.has-hover ? root.hover-color : transparent;
+
+                    Text {
+                        x: 10px;
+                        y: 9px;
+                        width: max(0px, parent.width - 162px);
+                        height: 22px;
+                        text: template.name;
+                        color: root.title-color;
+                        font-size: TypeScale.body;
+                        font-weight: 600;
+                        overflow: elide;
+                    }
+
+                    Text {
+                        x: 10px;
+                        y: 32px;
+                        width: max(0px, parent.width - 162px);
+                        height: 20px;
+                        text: template.shortcut == ""
+                            ? (template.subject == "" ? @tr("No subject") : template.subject)
+                            : "/" + template.shortcut + (template.subject == "" ? "" : " · " + template.subject);
+                        color: root.muted-color;
+                        font-size: TypeScale.caption;
+                        overflow: elide;
+                    }
+
+                    template-hit := TouchArea {
+                        x: 0px;
+                        width: max(0px, parent.width - 144px);
+                        height: parent.height;
+                        accessible-role: button;
+                        accessible-label: @tr("Insert template {}", template.name);
+                        accessible-action-default => {
+                            if root.use-template(template.id) { root.close-dialog(); }
+                        }
+                        clicked => {
+                            if root.use-template(template.id) { root.close-dialog(); }
+                        }
+                        mouse-cursor: pointer;
+                    }
+
+                    Button {
+                        x: parent.width - 136px;
+                        y: 15px;
+                        width: 68px;
+                        height: 34px;
+                        text: @tr("Insert");
+                        clicked => {
+                            if root.use-template(template.id) { root.close-dialog(); }
+                        }
+                    }
+
+                    IconButton {
+                        x: parent.width - 66px;
+                        y: 16px;
+                        icon: @image-url("../icons/phosphor/note-pencil-fill.svg");
+                        icon-color: root.muted-color;
+                        hover-background: root.hover-color;
+                        tooltip-text: @tr("Edit template");
+                        clicked => { root.edit-template(index); }
+                    }
+
+                    IconButton {
+                        x: parent.width - 32px;
+                        y: 16px;
+                        icon: @image-url("../icons/phosphor/trash.svg");
+                        icon-color: root.muted-color;
+                        hover-background: root.hover-color;
+                        tooltip-text: @tr("Delete template");
+                        clicked => {
+                            root.delete-id = template.id;
+                            root.delete-name = template.name;
+                            root.delete-open = true;
+                        }
+                    }
+                }
+            }
+        }
+
+        if root.editing : VerticalBox {
+            x: 18px;
+            y: header.height + 14px;
+            width: parent.width - 36px;
+            height: parent.height - header.height - 28px;
+            padding: 0px;
+            spacing: 8px;
+
+            LineEdit {
+                height: 36px;
+                text <=> root.edit-name;
+                input-label: @tr("Template name");
+                placeholder-text: @tr("Template name");
+            }
+            LineEdit {
+                height: 36px;
+                text <=> root.edit-shortcut;
+                input-label: @tr("Shortcut (optional)");
+                placeholder-text: @tr("Shortcut (optional)");
+            }
+            LineEdit {
+                height: 36px;
+                text <=> root.edit-subject;
+                input-label: @tr("Subject (optional)");
+                placeholder-text: @tr("Subject (optional)");
+            }
+            TextEdit {
+                vertical-stretch: 1;
+                min-height: 70px;
+                text <=> root.edit-body;
+                placeholder-text: @tr("Template message");
+            }
+
+            if root.notice != "" : Text {
+                height: 22px;
+                text: root.notice;
+                color: root.notice-is-error ? #d04a43 : root.accent-color;
+                font-size: TypeScale.caption;
+                overflow: elide;
+            }
+
+            HorizontalLayout {
+                height: 34px;
+                spacing: 8px;
+                Rectangle { horizontal-stretch: 1; }
+                Button {
+                    text: @tr("Cancel");
+                    clicked => { root.editing = false; }
+                }
+                Button {
+                    text: @tr("Save template");
+                    primary: true;
+                    enabled: root.edit-name != "" && (root.edit-subject != "" || root.edit-body != "");
+                    clicked => {
+                        if root.save-template(
+                            root.edit-id,
+                            root.edit-name,
+                            root.edit-shortcut,
+                            root.edit-subject,
+                            root.edit-body,
+                        ) {
+                            root.editing = false;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    ConfirmationDialog {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: parent.height;
+        open <=> root.delete-open;
+        title: @tr("Delete email template?");
+        subject: root.delete-name;
+        description: @tr("Delete this template from this device?");
+        confirm-label: @tr("Delete");
+        icon: @image-url("../icons/phosphor/trash-fill.svg");
+        surface: root.surface-color;
+        dialog-border-color: root.ui-border-color;
+        title-color: root.title-color;
+        body-color: root.body-color;
+        muted-color: root.muted-color;
+        confirmed => { root.delete-template(root.delete-id); }
+    }
+}

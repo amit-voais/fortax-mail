@@ -14,7 +14,7 @@ import { TypeScale } from "typography.slint";
 export { AppTheme, ThemeUtilities } from "design-system.slint";
 import { AppTheme, LayoutMetrics } from "design-system.slint";
 import { Button } from "components/button.slint";
-import { AccountRow, CalendarDay, CalendarEventRow, CalendarSourceRow, CalendarWeekDay, ComposeAttachment, ComposeContact, ComposeEditorTile, ContactSidebarRow, ContactRow, EmailLink, EmailRow, EmailTile, LocalizedMessage, SidebarRow, MailLabelRow } from "models.slint";
+import { AccountRow, CalendarDay, CalendarEventRow, CalendarSourceRow, CalendarWeekDay, ComposeAttachment, ComposeContact, ComposeEditorTile, ContactSidebarRow, ContactRow, EmailLink, EmailRow, EmailTemplateRow, EmailTile, LocalizedMessage, SidebarRow, MailLabelRow } from "models.slint";
 export { EmailReader, ReaderCaret, ReaderImage, ReaderItem, MailDragApi } from "models.slint";
 import { FunctionalCalendarView } from "components/calendar.slint";
 import { CompactProductNav, ProductRail } from "components/product-rail.slint";
@@ -385,6 +385,17 @@ export global I18n {
         if (key == "Message queued for delivery (action {}).") { return @tr("Message queued for delivery (action {}).", argument); }
         if (key == "Draft saved locally (#{}).") { return @tr("Draft saved locally (#{}).", argument); }
         if (key == "Compose failed: {}") { return @tr("Compose failed: {}", argument); }
+        if (key == "Connect an account before managing email templates.") { return @tr("Connect an account before managing email templates."); }
+        if (key == "Could not load email templates: {}") { return @tr("Could not load email templates: {}", argument); }
+        if (key == "Enter a template name.") { return @tr("Enter a template name."); }
+        if (key == "Add a subject or message to the template.") { return @tr("Add a subject or message to the template."); }
+        if (key == "Email template saved.") { return @tr("Email template saved."); }
+        if (key == "Could not save email template: {}") { return @tr("Could not save email template: {}", argument); }
+        if (key == "Email template deleted.") { return @tr("Email template deleted."); }
+        if (key == "Could not delete email template: {}") { return @tr("Could not delete email template: {}", argument); }
+        if (key == "Email template is no longer available.") { return @tr("Email template is no longer available."); }
+        if (key == "Email template inserted.") { return @tr("Email template inserted."); }
+        if (key == "Email template inserted, but its usage could not be saved: {}") { return @tr("Email template inserted, but its usage could not be saved: {}", argument); }
         if (key == "IMAP port must be between 1 and 65535.") { return @tr("IMAP port must be between 1 and 65535."); }
         if (key == "SMTP port must be between 1 and 65535.") { return @tr("SMTP port must be between 1 and 65535."); }
         if (key == "Local mail data is unavailable. Retry startup.") { return @tr("Local mail data is unavailable. Retry startup."); }
@@ -484,6 +495,10 @@ export component AppWindow inherits Window {
     callback compose_editor_layout_changed();
     callback search_compose_contacts(string, int);
     callback select_compose_contact(int, string) -> string;
+    callback refresh_email_templates();
+    callback use_email_template(int) -> bool;
+    callback save_email_template(int, string, string, string, string) -> bool;
+    callback delete_email_template(int) -> bool;
     callback add_password_account(string, string, string, string, string, string, string, string, string);
     callback start_oauth(string);
     callback reauth_account(int);
@@ -553,6 +568,7 @@ export component AppWindow inherits Window {
     callback refresh-email-resources();
 
     in property <[EmailRow]> emails: [];
+    in property <[EmailTemplateRow]> compose_templates: [];
     in property <[SidebarRow]> sidebar_rows: [];
     in-out property <string> folder_filter_query: "";
     in property <[MailLabelRow]> mail_labels: [];
@@ -1474,6 +1490,7 @@ export component AppWindow inherits Window {
             compose_account_id <=> root.compose_account_id;
             compose_contact_suggestions: root.compose_contact_suggestions;
             compose_attachments: root.compose_attachments;
+            compose_templates: root.compose_templates;
             compose_attachment_summary: root.compose_attachment_summary;
             compose_from_label <=> root.compose_from_label;
             compose_notice: root.compose_notice;
@@ -1515,6 +1532,10 @@ export component AppWindow inherits Window {
             compose_editor_layout_changed => { root.compose_editor_layout_changed(); }
             search_compose_contacts(query, account-id) => { root.search_compose_contacts(query, account-id); }
             select_compose_contact(index, recipients) => root.select_compose_contact(index, recipients);
+            refresh_email_templates => { root.refresh_email_templates(); }
+            use_email_template(id) => root.use_email_template(id);
+            save_email_template(id, name, shortcut, subject, body) => root.save_email_template(id, name, shortcut, subject, body);
+            delete_email_template(id) => root.delete_email_template(id);
         }
 
         // The rail width comes from the shared workspace geometry. Its hover label is
