@@ -98,6 +98,88 @@ impl rustls::client::danger::ServerCertVerifier for NoVerify {
     }
 }
 
+/// Verify normal PKI chains first, then allow an imported certificate to act
+/// as an explicitly pinned endpoint when it is the exact CA-marked certificate
+/// presented by Proton Bridge. The narrow fallback preserves expiry and name
+/// validation while the exact DER match supplies the endpoint identity check.
+#[derive(Debug)]
+struct ImportedCertificateVerifier {
+    standard: Arc<rustls::client::WebPkiServerVerifier>,
+    imported: Vec<rustls::pki_types::CertificateDer<'static>>,
+}
+
+impl ImportedCertificateVerifier {
+    fn is_ca_used_as_end_entity(error: &rustls::Error) -> bool {
+        let rustls::Error::InvalidCertificate(rustls::CertificateError::Other(other)) = error
+        else {
+            return false;
+        };
+        other
+            .0
+            .downcast_ref::<webpki::Error>()
+            .is_some_and(|error| matches!(error, webpki::Error::CaUsedAsEndEntity))
+    }
+}
+
+impl rustls::client::danger::ServerCertVerifier for ImportedCertificateVerifier {
+    fn verify_server_cert(
+        &self,
+        end_entity: &rustls::pki_types::CertificateDer<'_>,
+        intermediates: &[rustls::pki_types::CertificateDer<'_>],
+        server_name: &rustls::pki_types::ServerName<'_>,
+        ocsp_response: &[u8],
+        now: rustls::pki_types::UnixTime,
+    ) -> std::result::Result<rustls::client::danger::ServerCertVerified, rustls::Error> {
+        match self.standard.verify_server_cert(
+            end_entity,
+            intermediates,
+            server_name,
+            ocsp_response,
+            now,
+        ) {
+            Ok(verified) => Ok(verified),
+            Err(error)
+                if Self::is_ca_used_as_end_entity(&error)
+                    && self
+                        .imported
+                        .iter()
+                        .any(|certificate| certificate.as_ref() == end_entity.as_ref()) =>
+            {
+                // WebPKI checked validity before reporting CaUsedAsEndEntity.
+                // Check the name separately because chain validation failed
+                // before the standard verifier reached its name check. rustls
+                // verifies proof of possession in verify_tls{12,13}_signature.
+                let certificate = rustls::server::ParsedCertificate::try_from(end_entity)?;
+                rustls::client::verify_server_name(&certificate, server_name)?;
+                Ok(rustls::client::danger::ServerCertVerified::assertion())
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        message: &[u8],
+        cert: &rustls::pki_types::CertificateDer<'_>,
+        dss: &rustls::DigitallySignedStruct,
+    ) -> std::result::Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        self.standard.verify_tls12_signature(message, cert, dss)
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &rustls::pki_types::CertificateDer<'_>,
+        dss: &rustls::DigitallySignedStruct,
+    ) -> std::result::Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        self.standard.verify_tls13_signature(message, cert, dss)
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
+        self.standard.supported_verify_schemes()
+    }
+}
+
 pub fn tls_connector() -> TlsConnector {
     static CONFIG: once_cell::sync::Lazy<Arc<rustls::ClientConfig>> =
         once_cell::sync::Lazy::new(|| {
@@ -153,20 +235,33 @@ pub fn trusted_certificates(pem: &str) -> Result<Vec<rustls::pki_types::Certific
     Ok(certificates)
 }
 
-fn account_tls_connector(pem: &str) -> Result<TlsConnector> {
+pub(crate) fn account_tls_connector(pem: &str) -> Result<TlsConnector> {
     if pem.is_empty() {
         return Ok(tls_connector());
     }
     let provider = Arc::new(rustls::crypto::ring::default_provider());
     let mut roots = rustls::RootCertStore::empty();
     roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
-    for cert in trusted_certificates(pem)? {
-        roots.add(cert).map_err(|e| CoreError::Tls(e.to_string()))?;
+    let imported = trusted_certificates(pem)?;
+    for cert in &imported {
+        roots
+            .add(cert.clone())
+            .map_err(|e| CoreError::Tls(e.to_string()))?;
     }
+    let verifier = rustls::client::WebPkiServerVerifier::builder_with_provider(
+        Arc::new(roots),
+        provider.clone(),
+    )
+    .build()
+    .map_err(|e| CoreError::Tls(e.to_string()))?;
     let config = rustls::ClientConfig::builder_with_provider(provider)
         .with_safe_default_protocol_versions()
         .map_err(|e| CoreError::Tls(e.to_string()))?
-        .with_root_certificates(roots)
+        .dangerous()
+        .with_custom_certificate_verifier(Arc::new(ImportedCertificateVerifier {
+            standard: verifier,
+            imported,
+        }))
         .with_no_client_auth();
     Ok(TlsConnector::from(Arc::new(config)))
 }

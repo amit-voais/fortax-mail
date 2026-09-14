@@ -9,11 +9,8 @@ use tokio::{
 };
 
 const CERT: &str = include_str!("fixtures/tls/server.pem");
+const PROTON_BRIDGE_CERT: &str = include_str!("fixtures/tls/proton-bridge.pem");
 const KEY: &str = include_str!("fixtures/tls/server-key.pem");
-
-fn acceptor() -> tokio_rustls::TlsAcceptor {
-    acceptor_for(CERT)
-}
 
 fn acceptor_for(cert: &str) -> tokio_rustls::TlsAcceptor {
     let config = rustls::ServerConfig::builder_with_provider(Arc::new(
@@ -30,10 +27,17 @@ fn acceptor_for(cert: &str) -> tokio_rustls::TlsAcceptor {
     tokio_rustls::TlsAcceptor::from(Arc::new(config))
 }
 fn settings(mode: ConnectionSecurity) -> MailConnectionSettings {
+    settings_with_certificate(mode, CERT)
+}
+
+fn settings_with_certificate(
+    mode: ConnectionSecurity,
+    certificate: &str,
+) -> MailConnectionSettings {
     MailConnectionSettings {
         imap_security: mode,
         smtp_security: mode,
-        trusted_certificate_pem: CERT.into(),
+        trusted_certificate_pem: certificate.into(),
     }
 }
 async fn line<S: tokio::io::AsyncRead + Unpin>(stream: &mut BufReader<S>) -> String {
@@ -48,6 +52,14 @@ async fn line<S: tokio::io::AsyncRead + Unpin>(stream: &mut BufReader<S>) -> Str
     line
 }
 async fn imap_server(starttls: bool, reject: bool) -> (u16, tokio::task::JoinHandle<()>) {
+    imap_server_with_certificate(starttls, reject, CERT).await
+}
+
+async fn imap_server_with_certificate(
+    starttls: bool,
+    reject: bool,
+    certificate: &'static str,
+) -> (u16, tokio::task::JoinHandle<()>) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
     let task = tokio::spawn(async move {
@@ -80,7 +92,7 @@ async fn imap_server(starttls: bool, reject: bool) -> (u16, tokio::task::JoinHan
         } else {
             tcp
         };
-        let Ok(tls) = acceptor().accept(tcp).await else {
+        let Ok(tls) = acceptor_for(certificate).accept(tcp).await else {
             return;
         };
         let mut stream = BufReader::new(tls);
@@ -170,6 +182,10 @@ async fn untrusted_certificate_is_rejected() {
 }
 
 async fn smtp_connection(mode: ConnectionSecurity) {
+    smtp_connection_with_certificate(mode, CERT).await;
+}
+
+async fn smtp_connection_with_certificate(mode: ConnectionSecurity, certificate: &'static str) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
     let task = tokio::spawn(async move {
@@ -188,7 +204,7 @@ async fn smtp_connection(mode: ConnectionSecurity) {
         } else {
             tcp
         };
-        let mut stream = BufReader::new(acceptor().accept(tcp).await.unwrap());
+        let mut stream = BufReader::new(acceptor_for(certificate).accept(tcp).await.unwrap());
         if mode == ConnectionSecurity::Tls {
             stream.write_all(b"220 localhost ESMTP\r\n").await.unwrap();
         }
@@ -204,7 +220,15 @@ async fn smtp_connection(mode: ConnectionSecurity) {
         assert_eq!(line(&mut stream).await, "QUIT\r\n");
         stream.write_all(b"221 Goodbye\r\n").await.unwrap();
     });
-    let config = AccountConfig {
+    let config = smtp_config(port, mode, certificate);
+    smtp::test_connection(&config, &smtp::SmtpAuth::Password("bridge-password".into()))
+        .await
+        .unwrap();
+    task.await.unwrap();
+}
+
+fn smtp_config(port: u16, mode: ConnectionSecurity, certificate: &str) -> AccountConfig {
+    AccountConfig {
         id: 1,
         email: "user@example.com".into(),
         display_name: None,
@@ -220,14 +244,10 @@ async fn smtp_connection(mode: ConnectionSecurity) {
         smtp_host: "127.0.0.1".into(),
         smtp_port: port,
         settings: AccountSettings {
-            connection: settings(mode),
+            connection: settings_with_certificate(mode, certificate),
             ..Default::default()
         },
-    };
-    smtp::test_connection(&config, &smtp::SmtpAuth::Password("bridge-password".into()))
-        .await
-        .unwrap();
-    task.await.unwrap();
+    }
 }
 #[tokio::test]
 async fn smtp_starttls_on_custom_port() {
@@ -236,6 +256,120 @@ async fn smtp_starttls_on_custom_port() {
 #[tokio::test]
 async fn smtp_implicit_tls_on_custom_port() {
     smtp_connection(ConnectionSecurity::Tls).await;
+}
+
+#[tokio::test]
+async fn proton_bridge_ca_certificate_works_for_imap_and_smtp() {
+    let (port, task) = imap_server_with_certificate(true, false, PROTON_BRIDGE_CERT).await;
+    let session = imap::connect_with_settings(
+        "127.0.0.1",
+        port,
+        credentials(),
+        &settings_with_certificate(ConnectionSecurity::Starttls, PROTON_BRIDGE_CERT),
+    )
+    .await
+    .unwrap();
+    imap::logout(session).await;
+    task.await.unwrap();
+
+    smtp_connection_with_certificate(ConnectionSecurity::Starttls, PROTON_BRIDGE_CERT).await;
+}
+
+#[tokio::test]
+async fn proton_bridge_ca_certificate_works_when_sending_mail() {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let task = tokio::spawn(async move {
+        let (tcp, _) = listener.accept().await.unwrap();
+        let mut plain = BufReader::new(tcp);
+        plain.write_all(b"220 localhost ESMTP\r\n").await.unwrap();
+        assert!(line(&mut plain).await.starts_with("EHLO "));
+        plain
+            .write_all(b"250-localhost\r\n250 STARTTLS\r\n")
+            .await
+            .unwrap();
+        assert_eq!(line(&mut plain).await, "STARTTLS\r\n");
+        plain.write_all(b"220 Ready\r\n").await.unwrap();
+
+        let tls = acceptor_for(PROTON_BRIDGE_CERT)
+            .accept(plain.into_inner())
+            .await
+            .unwrap();
+        let mut stream = BufReader::new(tls);
+        assert!(line(&mut stream).await.starts_with("EHLO "));
+        stream
+            .write_all(b"250-localhost\r\n250 AUTH PLAIN\r\n")
+            .await
+            .unwrap();
+        assert!(line(&mut stream).await.starts_with("AUTH PLAIN "));
+        stream.write_all(b"235 Authenticated\r\n").await.unwrap();
+        assert!(line(&mut stream).await.starts_with("MAIL FROM:"));
+        stream.write_all(b"250 Sender accepted\r\n").await.unwrap();
+        assert!(line(&mut stream).await.starts_with("RCPT TO:"));
+        stream
+            .write_all(b"250 Recipient accepted\r\n")
+            .await
+            .unwrap();
+        assert_eq!(line(&mut stream).await, "DATA\r\n");
+        stream
+            .write_all(b"354 End data with <CR><LF>.<CR><LF>\r\n")
+            .await
+            .unwrap();
+        let mut message = String::new();
+        loop {
+            let next = line(&mut stream).await;
+            if next == ".\r\n" {
+                break;
+            }
+            message.push_str(&next);
+        }
+        assert!(message.contains("Subject: Bridge test"));
+        assert!(message.contains("Bridge body"));
+        stream.write_all(b"250 Queued\r\n").await.unwrap();
+        assert_eq!(line(&mut stream).await, "QUIT\r\n");
+        stream.write_all(b"221 Goodbye\r\n").await.unwrap();
+    });
+
+    smtp::send_raw(
+        &smtp_config(port, ConnectionSecurity::Starttls, PROTON_BRIDGE_CERT),
+        &smtp::SmtpAuth::Password("bridge-password".into()),
+        "user@example.com",
+        &["recipient@example.com".into()],
+        b"From: user@example.com\r\nTo: recipient@example.com\r\nSubject: Bridge test\r\n\r\nBridge body\r\n",
+    )
+    .await
+    .unwrap();
+    task.await.unwrap();
+}
+
+#[tokio::test]
+async fn proton_bridge_ca_certificate_must_match_the_import() {
+    let (port, task) = imap_server_with_certificate(false, false, PROTON_BRIDGE_CERT).await;
+    let error = imap::connect_with_settings(
+        "127.0.0.1",
+        port,
+        credentials(),
+        &settings(ConnectionSecurity::Tls),
+    )
+    .await
+    .unwrap_err();
+    assert!(error.to_string().contains("CaUsedAsEndEntity"), "{error}");
+    task.await.unwrap();
+}
+
+#[tokio::test]
+async fn proton_bridge_ca_certificate_still_checks_hostname() {
+    let (port, task) = imap_server_with_certificate(false, false, PROTON_BRIDGE_CERT).await;
+    let error = imap::connect_with_settings(
+        "localhost",
+        port,
+        credentials(),
+        &settings_with_certificate(ConnectionSecurity::Tls, PROTON_BRIDGE_CERT),
+    )
+    .await
+    .unwrap_err();
+    assert!(error.to_string().contains("not valid for name"), "{error}");
+    task.await.unwrap();
 }
 
 #[test]

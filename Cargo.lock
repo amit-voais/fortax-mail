@@ -2375,6 +2375,7 @@ dependencies = [
  "rusqlite",
  "rustix 1.1.4",
  "rustls",
+ "rustls-webpki",
  "serde",
  "serde_json",
  "sha2 0.10.9",
