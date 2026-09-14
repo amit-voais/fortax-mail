@@ -286,22 +286,27 @@ export component MailReadingPane inherits Rectangle {
         0px,
         email-scroll.visible-width - 2 * (root.message-card-inset + root.message-card-border-width)
     );
-    out property <length> email-viewport-height: email-surface.height;
+    out property <length> email-viewport-height: max(
+        0px,
+        email-surface.height - root.thread-header-height - root.renderer-controls-height
+    );
     private property <length> rendered-email-height: root.email-viewport-width * EmailReader.width-ratio * root.email-content-aspect + (root.remote-images-blocked ? 60px : 0px);
     private property <length> attachment-section-height: MailAttachments.rows.length > 0 ? 34px + MailAttachments.rows.length * 48px : 0px;
     // Plain text, source, and reader mode own their own scrolling surface. In
     // the normal renderer, place attachments immediately after the document.
-    private property <length> attachment-flow-y: root.text_mode || root.source_mode || EmailReader.reader-mode ? max(email-surface.height, root.rendered-email-height) : root.rendered-email-height;
+    private property <length> attachment-flow-y: root.text_mode || root.source_mode || EmailReader.reader-mode ? max(root.email-viewport-height, root.rendered-email-height) : root.rendered-email-height;
     private property <length> thread-header-height: 64px;
     private property <length> thread-item-stride: root.thread-header-height + root.thread-item-gap;
     private property <int> accordion-message-count: max(1, root.thread-messages.length);
     private property <int> accordion-selected-index: min(max(0, root.selected-thread-index), root.accordion-message-count - 1);
     private property <length> selected-header-y: root.accordion-selected-index * root.thread-item-stride;
-    private property <length> message-body-y: root.selected-header-y + root.thread-header-height;
+    private property <length> renderer-controls-height: renderer-controls.preferred-height;
+    private property <length> message-body-y: root.selected-header-y + root.thread-header-height + root.renderer-controls-height;
     private property <length> message-document-height: max(
-        root.email-viewport-height - root.thread-header-height,
+        root.email-viewport-height,
         root.attachment-flow-y + root.attachment-section-height + (MailAttachments.rows.length > 0 ? 12px : 0px)
     );
+    private property <length> expanded-message-height: root.renderer-controls-height + root.message-document-height;
     in property <color> accent;
     in property <color> accent-soft;
     in property <color> border;
@@ -801,51 +806,6 @@ export component MailReadingPane inherits Rectangle {
 
                         if root.selected-label-count > 0 : Rectangle { height: 8px; }
 
-                        HorizontalBox {
-                            height: root.compact ? LayoutMetrics.touch-target : LayoutMetrics.control-height; padding: 0px; spacing: 4px; cross-axis-alignment: center;
-                            ZoomControls { compact: root.compact; available: EmailReader.available; zoom: EmailReader.zoom; revision: EmailReader.zoom-revision; fitting: EmailReader.auto-fit; command(action) => { EmailReader.command(action); } }
-                            Rectangle { horizontal-stretch: 1; }
-                            if root.attachment-menu-mode && MailAttachments.rows.length > 0 : ContextMenuArea {
-                                width: root.compact ? LayoutMetrics.touch-target : LayoutMetrics.control-height;
-                                height: root.compact ? LayoutMetrics.touch-target : LayoutMetrics.control-height;
-                                ToolbarIconButton {
-                                    compact: root.compact; icon: @image-url("../icons/phosphor/paperclip.svg");
-                                    icon-color: root.secondary-text; tooltip-text: @tr("Attachments");
-                                    clicked => { parent.show({ x: 0px, y: parent.height }); }
-                                }
-                                Menu {
-                                    for attachment in MailAttachments.rows : MenuItem {
-                                        title: attachment.name;
-                                        activated => { MailAttachments.command(attachment.previewable ? "preview" : "download", attachment.id); }
-                                    }
-                                }
-                            }
-                            ReaderControl { compact: root.compact; icon: @image-url("../icons/phosphor/magnifying-glass.svg"); tooltip-text: @tr("Find in message"); active: EmailReader.find-open; clicked => { EmailReader.find-open = !EmailReader.find-open; if EmailReader.find-open { EmailReader.reader-mode = false; root.text_mode = false; root.source_mode = false; find-input.focus(); } } }
-                            ReaderControl { compact: root.compact; icon: EmailReader.reader-mode ? @image-url("../icons/phosphor/code.svg") : @image-url("../icons/phosphor/book-open-text.svg"); tooltip-text: EmailReader.reader-mode ? @tr("Show original layout") : @tr("Reader mode"); active: EmailReader.reader-mode; clicked => { EmailReader.reader-mode = !EmailReader.reader-mode; if EmailReader.reader-mode { root.text_mode = false; root.source_mode = false; EmailReader.find-open = false; } } }
-                        }
-                        HorizontalBox {
-                            visible: EmailReader.find-open;
-                            height: EmailReader.find-open ? (root.compact ? 44px : 32px) : 0px; padding: 0px; spacing: 4px;
-                            find-input := LineEdit { enabled: EmailReader.find-open; text <=> EmailReader.query; placeholder-text: @tr("Find in message"); edited => { EmailReader.find(EmailReader.query, 0); } accepted => { EmailReader.find(EmailReader.query, 1); } }
-                            Text { text: EmailReader.find-status; color: root.secondary-text; vertical-alignment: center; }
-                            ReaderControl { compact: root.compact; icon: @image-url("../icons/phosphor/caret-up.svg"); tooltip-text: @tr("Previous match"); clicked => { EmailReader.find(EmailReader.query, -1); } }
-                            ReaderControl { compact: root.compact; icon: @image-url("../icons/phosphor/caret-down.svg"); tooltip-text: @tr("Next match"); clicked => { EmailReader.find(EmailReader.query, 1); } }
-                            ReaderControl { compact: root.compact; icon: @image-url("../icons/phosphor/x.svg"); tooltip-text: @tr("Close find"); clicked => { EmailReader.find-open = false; } }
-                        }
-                        if EmailReader.failed-images > 0 && !root.remote-images-blocked && !root.text_mode && !root.source_mode && !EmailReader.reader-mode : HorizontalBox {
-                            height: root.compact ? 44px : 32px; padding: 0px; spacing: 6px;
-                            Text { text: @tr("Some images could not be loaded."); overflow: elide; color: root.secondary-text; vertical-alignment: center; horizontal-stretch: 1; }
-                            ReaderControl { compact: root.compact; icon: @image-url("../icons/phosphor/arrow-clockwise.svg"); tooltip-text: @tr("Retry images"); clicked => { EmailReader.retry-images(); } }
-                        }
-                        if EmailReader.body-pending : HorizontalBox {
-                            padding: 0px; spacing: 8px;
-                            Text { text: @tr("Loading message…"); color: root.secondary-text; vertical-alignment: center; horizontal-stretch: 1; }
-                            ReaderControl { compact: root.compact; interactive: true; icon: @image-url("../icons/phosphor/arrow-clockwise.svg"); tooltip-text: @tr("Reload message"); clicked => { EmailReader.ensure-body(EmailReader.message-id); } }
-                        }
-                        if EmailReader.notice != "" : Text {
-                            text: EmailReader.notice; wrap: word-wrap; color: root.secondary-text; font-size: TypeScale.secondary;
-                            accessible-role: text;
-                        }
                         Rectangle { height: 12px; }
                         email-surface := Rectangle {
                             horizontal-stretch: 1;
@@ -865,7 +825,7 @@ export component MailReadingPane inherits Rectangle {
                                         parent.height,
                                         root.accordion-message-count * root.thread-header-height
                                             + max(0, root.accordion-message-count - 1) * root.thread-item-gap
-                                            + root.message-document-height
+                                            + root.expanded-message-height
                                     );
                                     viewport-y <=> root.accordion-scroll-y;
                                     horizontal-scrollbar-policy: EmailReader.width-ratio > 1.01 ? as-needed : always-off;
@@ -884,7 +844,7 @@ export component MailReadingPane inherits Rectangle {
                                     x: -email-scroll.viewport-x + root.message-card-inset;
                                     y: root.selected-header-y;
                                     width: max(0px, email-scroll.visible-width - 2 * root.message-card-inset);
-                                    height: root.thread-header-height + root.message-document-height;
+                                    height: root.thread-header-height + root.expanded-message-height;
                                     background: root.surface;
                                     border-radius: 8px;
                                     border-width: 1px;
@@ -917,7 +877,7 @@ export component MailReadingPane inherits Rectangle {
                                 for row in root.thread-messages : ThreadMessageHeader {
                                     x: -email-scroll.viewport-x + root.message-card-inset;
                                     y: row.index * root.thread-item-stride
-                                        + (row.index > root.accordion-selected-index ? root.message-document-height : 0px);
+                                        + (row.index > root.accordion-selected-index ? root.expanded-message-height : 0px);
                                     width: max(0px, email-scroll.visible-width - 2 * root.message-card-inset);
                                     sender: row.sender;
                                     address: row.address;
@@ -940,6 +900,68 @@ export component MailReadingPane inherits Rectangle {
                                     heading: root.heading;
                                     secondary-text: root.secondary-text;
                                     open => { root.select_thread_message(row.index); }
+                                }
+
+                                // Renderer controls are part of the expanded
+                                // message. They follow its sender header and
+                                // leave the viewport when the message is scrolled.
+                                renderer-controls := VerticalBox {
+                                    x: -email-scroll.viewport-x + root.message-card-inset + root.message-card-border-width;
+                                    y: root.selected-header-y + root.thread-header-height;
+                                    width: root.email-viewport-width;
+                                    height: self.preferred-height;
+                                    padding-top: 4px;
+                                    padding-right: 10px;
+                                    padding-bottom: 4px;
+                                    padding-left: 10px;
+                                    spacing: 0px;
+
+                                    HorizontalBox {
+                                        height: root.compact ? LayoutMetrics.touch-target : LayoutMetrics.control-height; padding: 0px; spacing: 4px; cross-axis-alignment: center;
+                                        ZoomControls { compact: root.compact; available: EmailReader.available; zoom: EmailReader.zoom; revision: EmailReader.zoom-revision; fitting: EmailReader.auto-fit; command(action) => { EmailReader.command(action); } }
+                                        Rectangle { horizontal-stretch: 1; }
+                                        if root.attachment-menu-mode && MailAttachments.rows.length > 0 : ContextMenuArea {
+                                            width: root.compact ? LayoutMetrics.touch-target : LayoutMetrics.control-height;
+                                            height: root.compact ? LayoutMetrics.touch-target : LayoutMetrics.control-height;
+                                            ToolbarIconButton {
+                                                compact: root.compact; icon: @image-url("../icons/phosphor/paperclip.svg");
+                                                icon-color: root.secondary-text; tooltip-text: @tr("Attachments");
+                                                clicked => { parent.show({ x: 0px, y: parent.height }); }
+                                            }
+                                            Menu {
+                                                for attachment in MailAttachments.rows : MenuItem {
+                                                    title: attachment.name;
+                                                    activated => { MailAttachments.command(attachment.previewable ? "preview" : "download", attachment.id); }
+                                                }
+                                            }
+                                        }
+                                        ReaderControl { compact: root.compact; icon: @image-url("../icons/phosphor/magnifying-glass.svg"); tooltip-text: @tr("Find in message"); active: EmailReader.find-open; clicked => { EmailReader.find-open = !EmailReader.find-open; if EmailReader.find-open { EmailReader.reader-mode = false; root.text_mode = false; root.source_mode = false; find-input.focus(); } } }
+                                        ReaderControl { compact: root.compact; icon: EmailReader.reader-mode ? @image-url("../icons/phosphor/code.svg") : @image-url("../icons/phosphor/book-open-text.svg"); tooltip-text: EmailReader.reader-mode ? @tr("Show original layout") : @tr("Reader mode"); active: EmailReader.reader-mode; clicked => { EmailReader.reader-mode = !EmailReader.reader-mode; if EmailReader.reader-mode { root.text_mode = false; root.source_mode = false; EmailReader.find-open = false; } } }
+                                    }
+                                    HorizontalBox {
+                                        visible: EmailReader.find-open;
+                                        height: EmailReader.find-open ? (root.compact ? 44px : 32px) : 0px; padding: 0px; spacing: 4px;
+                                        find-input := LineEdit { enabled: EmailReader.find-open; text <=> EmailReader.query; placeholder-text: @tr("Find in message"); edited => { EmailReader.find(EmailReader.query, 0); } accepted => { EmailReader.find(EmailReader.query, 1); } }
+                                        Text { text: EmailReader.find-status; color: root.secondary-text; vertical-alignment: center; }
+                                        ReaderControl { compact: root.compact; icon: @image-url("../icons/phosphor/caret-up.svg"); tooltip-text: @tr("Previous match"); clicked => { EmailReader.find(EmailReader.query, -1); } }
+                                        ReaderControl { compact: root.compact; icon: @image-url("../icons/phosphor/caret-down.svg"); tooltip-text: @tr("Next match"); clicked => { EmailReader.find(EmailReader.query, 1); } }
+                                        ReaderControl { compact: root.compact; icon: @image-url("../icons/phosphor/x.svg"); tooltip-text: @tr("Close find"); clicked => { EmailReader.find-open = false; } }
+                                    }
+                                    if EmailReader.failed-images > 0 && !root.remote-images-blocked && !root.text_mode && !root.source_mode && !EmailReader.reader-mode : HorizontalBox {
+                                        height: root.compact ? 44px : 32px; padding: 0px; spacing: 6px;
+                                        Text { text: @tr("Some images could not be loaded."); overflow: elide; color: root.secondary-text; vertical-alignment: center; horizontal-stretch: 1; }
+                                        ReaderControl { compact: root.compact; icon: @image-url("../icons/phosphor/arrow-clockwise.svg"); tooltip-text: @tr("Retry images"); clicked => { EmailReader.retry-images(); } }
+                                    }
+                                    if EmailReader.body-pending : HorizontalBox {
+                                        height: root.compact ? 44px : 32px; padding: 0px; spacing: 8px;
+                                        Text { text: @tr("Loading message…"); color: root.secondary-text; vertical-alignment: center; horizontal-stretch: 1; }
+                                        ReaderControl { compact: root.compact; interactive: true; icon: @image-url("../icons/phosphor/arrow-clockwise.svg"); tooltip-text: @tr("Reload message"); clicked => { EmailReader.ensure-body(EmailReader.message-id); } }
+                                    }
+                                    if EmailReader.notice != "" : Text {
+                                        height: self.preferred-height;
+                                        text: EmailReader.notice; wrap: word-wrap; color: root.secondary-text; font-size: TypeScale.secondary;
+                                        accessible-role: text;
+                                    }
                                 }
 
                                 // This area supplies the normal right-click
