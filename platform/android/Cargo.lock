@@ -1844,7 +1844,7 @@ dependencies = [
 
 [[package]]
 name = "flectar-mail"
-version = "0.1.0-alpha.5"
+version = "0.1.0-alpha.6"
 dependencies = [
  "anyrender",
  "anyrender_vello_cpu",
