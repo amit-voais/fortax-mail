@@ -85,10 +85,28 @@ export struct EmailRow {
     starred: bool,
     has_attachments: bool,
     has_replied: bool,
+    message_count: int,
     label_summary: string,
     labels: [MailLabelRow],
     selected: bool,
     checked: bool,
+}
+
+// Messages remain separate inside a conversation. The native side keeps the
+// bodies and renderer state; this lightweight model is safe to virtualize even
+// for long threads.
+export struct ThreadMessageRow {
+    index: int,
+    sender: string,
+    address: string,
+    initials: string,
+    preview: string,
+    time: string,
+    to: string,
+    unread: bool,
+    outgoing: bool,
+    body_pending: bool,
+    selected: bool,
 }
 
 export struct AccountRow {

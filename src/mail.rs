@@ -56,8 +56,10 @@ pub struct MailMessage {
     pub unread: bool,
     pub starred: bool,
     pub has_attachments: bool,
+    pub message_count: i64,
     pub attachments: Vec<flectar_mail_core::models::AttachmentMeta>,
     pub has_replied: bool,
+    pub is_outgoing: bool,
     pub labels: Vec<i64>,
     pub html: Option<String>,
     pub text: Option<String>,
@@ -90,8 +92,10 @@ impl MailMessage {
             unread: email.unread,
             starred: false,
             has_attachments: false,
+            message_count: 1,
             attachments: Vec::new(),
             has_replied: false,
+            is_outgoing: false,
             labels: Vec::new(),
             html: Some(email.html.to_owned()),
             text: None,
@@ -160,6 +164,11 @@ pub struct MailPage {
     pub next_cursor: Option<ThreadCursor>,
     pub account_count: usize,
     pub unified_mailboxes: Vec<MailboxEntry>,
+}
+
+#[derive(Clone, Debug)]
+pub struct MailConversation {
+    pub messages: Vec<MailMessage>,
 }
 
 #[derive(Clone, Debug)]
@@ -456,19 +465,57 @@ impl CoreMailSource {
         })
     }
 
-    pub async fn load_message(&self, row: &MailMessage) -> Result<MailMessage, String> {
+    /// Load the selected thread as independent messages. Bodies are still
+    /// fetched lazily by the core and the UI expands only one message at a
+    /// time, so opening a long conversation does not create a renderer per
+    /// message.
+    pub async fn load_conversation(
+        &self,
+        row: &MailMessage,
+        selected_message_id: Option<i64>,
+    ) -> Result<MailConversation, String> {
         let thread_id = row
             .thread_id
             .ok_or_else(|| "message is not backed by a core thread".to_owned())?;
-        let message = self
+        let mut thread = self
             .core
-            .get_latest_thread_body(thread_id)
+            .get_thread_outline(thread_id)
             .await
             .map_err(|error| error.to_string())?;
-        Ok(detail_to_message(row, &message))
+        let selected_message_id = selected_message_id
+            .filter(|id| thread.messages.iter().any(|message| message.id == *id))
+            .or_else(|| thread.messages.last().map(|message| message.id))
+            .ok_or_else(|| "thread has no messages".to_owned())?;
+        let selected = self
+            .core
+            .get_body(selected_message_id)
+            .await
+            .map_err(|error| error.to_string())?;
+        if let Some(message) = thread
+            .messages
+            .iter_mut()
+            .find(|message| message.id == selected_message_id)
+        {
+            *message = selected;
+        }
+        let messages = thread
+            .messages
+            .iter()
+            .filter_map(|message| {
+                detail_to_conversation_message(row, message, message.id == selected_message_id)
+            })
+            .collect::<Vec<_>>();
+        if messages.is_empty() {
+            return Err("thread has no messages".to_owned());
+        }
+        Ok(MailConversation { messages })
     }
 
-    pub async fn load_compose_source(&self, row: &MailMessage) -> Result<ComposeSource, String> {
+    pub async fn load_compose_source(
+        &self,
+        row: &MailMessage,
+        message_id: Option<i64>,
+    ) -> Result<ComposeSource, String> {
         let thread_id = row
             .thread_id
             .ok_or_else(|| "message is not backed by a core thread".to_owned())?;
@@ -479,7 +526,9 @@ impl CoreMailSource {
             .map_err(|error| error.to_string())?;
         let message = thread
             .messages
-            .last()
+            .iter()
+            .find(|message| Some(message.id) == message_id)
+            .or_else(|| thread.messages.last())
             .ok_or_else(|| "thread has no messages".to_owned())?;
         let account_email = self
             .core
@@ -1689,10 +1738,23 @@ fn summary_to_message(
     let address = participant
         .map(|person| person.email.clone())
         .unwrap_or_default();
-    let sender = participant
-        .and_then(|person| person.name.clone())
-        .filter(|name| !name.trim().is_empty())
-        .unwrap_or_else(|| address.clone());
+    let participant_names = thread
+        .participants
+        .iter()
+        .map(|person| {
+            person
+                .name
+                .clone()
+                .filter(|name| !name.trim().is_empty())
+                .unwrap_or_else(|| person.email.clone())
+        })
+        .collect::<Vec<_>>();
+    let sender = match participant_names.as_slice() {
+        [] => address.clone(),
+        [only] => only.clone(),
+        [first, second] => format!("{first}, {second}"),
+        [first, second, rest @ ..] => format!("{first}, {second} +{}", rest.len()),
+    };
     let account = accounts
         .iter()
         .find(|account| account.id == thread.account_id)
@@ -1722,8 +1784,10 @@ fn summary_to_message(
         unread: thread.unread_count > 0,
         starred: thread.is_starred,
         has_attachments: thread.has_attachments,
+        message_count: thread.message_count.max(1),
         attachments: Vec::new(),
         has_replied: thread.has_replied,
+        is_outgoing: false,
         labels: thread.labels,
         html: None,
         text: None,
@@ -1775,14 +1839,35 @@ fn detail_to_message(row: &MailMessage, message: &MessageDetail) -> MailMessage 
         unread: !message.is_read,
         starred: row.starred,
         has_attachments: !message.attachments.is_empty(),
+        message_count: row.message_count,
         attachments: message.attachments.clone(),
         has_replied: row.has_replied,
+        is_outgoing: message.is_outgoing,
         labels: row.labels.clone(),
         html,
         text: message.text_body.clone(),
         body_pending: message.body_state != "cached",
         sender_verification: message.sender_verification.as_str().to_owned(),
     }
+}
+
+fn detail_to_conversation_message(
+    row: &MailMessage,
+    message: &MessageDetail,
+    body_loaded: bool,
+) -> Option<MailMessage> {
+    let mut projected = detail_to_message(row, message);
+    projected.id = i32::try_from(message.id).ok()?;
+    projected.thread_id = Some(message.thread_id);
+    projected.account_id = message.account_id;
+    projected.message_count = 1;
+    projected.is_outgoing = message.is_outgoing;
+    if !body_loaded {
+        projected.html = None;
+        projected.text = None;
+        projected.attachments.clear();
+    }
+    Some(projected)
 }
 
 fn readable_message_html(html: Option<&str>, text: Option<&str>, snippet: &str) -> String {
@@ -2232,11 +2317,12 @@ pub fn fixtures() -> Vec<EmailFixture> {
 mod tests {
     use super::{
         ComposeMessage, compose_args, mailbox_entries, markdown_to_html, markdown_to_plain_text,
-        readable_message_html, relative_time_at, resolve_scope, validated_startup_scope,
+        readable_message_html, relative_time_at, resolve_scope, summary_to_message,
+        validated_startup_scope,
     };
     use chrono::{Local, TimeZone};
     use flectar_mail_core::models::{
-        Account, AuthKind, FolderInfo, Label, MailProtocol, Provider, View,
+        Account, Address, AuthKind, FolderInfo, Label, MailProtocol, Provider, ThreadSummary, View,
     };
 
     fn test_account() -> Account {
@@ -2294,6 +2380,48 @@ mod tests {
             relative_time_at(yesterday.timestamp_millis(), now),
             "Yesterday"
         );
+    }
+
+    #[test]
+    fn thread_summary_projects_participants_and_message_count() {
+        let row = summary_to_message(
+            ThreadSummary {
+                id: 22,
+                account_id: 1,
+                account_email: "person@example.com".into(),
+                subject: "Launch review".into(),
+                snippet: "Tuesday works for everyone.".into(),
+                participants: vec![
+                    Address {
+                        name: Some("Maya".into()),
+                        email: "maya@example.com".into(),
+                    },
+                    Address {
+                        name: Some("Alex".into()),
+                        email: "alex@example.com".into(),
+                    },
+                    Address {
+                        name: None,
+                        email: "lee@example.com".into(),
+                    },
+                ],
+                last_message_at: 0,
+                message_count: 4,
+                unread_count: 1,
+                is_starred: false,
+                has_attachments: false,
+                has_replied: true,
+                snoozed_until: None,
+                labels: Vec::new(),
+            },
+            &[test_account()],
+            "Inbox",
+        )
+        .unwrap();
+
+        assert_eq!(row.sender, "Maya, Alex +1");
+        assert_eq!(row.message_count, 4);
+        assert_eq!(row.id, 22);
     }
 
     #[test]

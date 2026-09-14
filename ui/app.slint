@@ -14,8 +14,9 @@ import { TypeScale } from "typography.slint";
 export { AppTheme, ThemeUtilities } from "design-system.slint";
 import { AppTheme, LayoutMetrics } from "design-system.slint";
 import { Button } from "components/button.slint";
-import { AccountRow, CalendarDay, CalendarEventRow, CalendarSourceRow, CalendarWeekDay, ComposeAttachment, ComposeContact, ComposeEditorTile, ContactSidebarRow, ContactRow, EmailLink, EmailRow, EmailTemplateRow, EmailTile, LocalizedMessage, SidebarRow, MailLabelRow } from "models.slint";
+import { AccountRow, CalendarDay, CalendarEventRow, CalendarSourceRow, CalendarWeekDay, ComposeAttachment, ComposeContact, ComposeEditorTile, ContactSidebarRow, ContactRow, EmailLink, EmailRow, EmailTemplateRow, EmailTile, LocalizedMessage, SidebarRow, MailLabelRow, ThreadMessageRow } from "models.slint";
 export { EmailReader, ReaderCaret, ReaderImage, ReaderItem, MailDragApi } from "models.slint";
+export { ThreadMessageRow } from "models.slint";
 import { FunctionalCalendarView } from "components/calendar.slint";
 import { CompactProductNav, ProductRail } from "components/product-rail.slint";
 import { WorkspaceFrame } from "components/workspace-layout.slint";
@@ -248,21 +249,21 @@ export global I18n {
 
     ui-message-list(key, argument, second-argument, third-argument) => {
         if (key == "Background mail refresh failed: {}") { return @tr("Background mail refresh failed: {}", argument); }
-        if (key == "No messages in this folder") { return @tr("No messages in this folder"); }
-        if (key == "No messages match this search") { return @tr("No messages match this search"); }
+        if (key == "No conversations in this folder") { return @tr("No conversations in this folder"); }
+        if (key == "No conversations match this search") { return @tr("No conversations match this search"); }
         if (key == "Mail core is ready for account synchronization and message actions.") { return @tr("Mail core is ready for account synchronization and message actions."); }
-        if (key == "Showing {} of {} message") { return @tr("Showing {} of {} message", argument, second-argument); }
-        if (key == "Showing {} of {} message · more available") { return @tr("Showing {} of {} message · more available", argument, second-argument); }
-        if (key == "Showing {} of {} message · current results complete") { return @tr("Showing {} of {} message · current results complete", argument, second-argument); }
-        if (key == "Showing {} of {} messages") { return @tr("Showing {} of {} messages", argument, second-argument); }
-        if (key == "Showing {} of {} messages · more available") { return @tr("Showing {} of {} messages · more available", argument, second-argument); }
-        if (key == "Showing {} of {} messages · current results complete") { return @tr("Showing {} of {} messages · current results complete", argument, second-argument); }
-        if (key == "Showing {} of {} message matching \"{}\"") { return @tr("Showing {} of {} message matching \"{}\"", argument, second-argument, third-argument); }
-        if (key == "Showing {} of {} message matching \"{}\" · more available") { return @tr("Showing {} of {} message matching \"{}\" · more available", argument, second-argument, third-argument); }
-        if (key == "Showing {} of {} message matching \"{}\" · current results complete") { return @tr("Showing {} of {} message matching \"{}\" · current results complete", argument, second-argument, third-argument); }
-        if (key == "Showing {} of {} messages matching \"{}\"") { return @tr("Showing {} of {} messages matching \"{}\"", argument, second-argument, third-argument); }
-        if (key == "Showing {} of {} messages matching \"{}\" · more available") { return @tr("Showing {} of {} messages matching \"{}\" · more available", argument, second-argument, third-argument); }
-        if (key == "Showing {} of {} messages matching \"{}\" · current results complete") { return @tr("Showing {} of {} messages matching \"{}\" · current results complete", argument, second-argument, third-argument); }
+        if (key == "Showing {} of {} conversation") { return @tr("Showing {} of {} conversation", argument, second-argument); }
+        if (key == "Showing {} of {} conversation · more available") { return @tr("Showing {} of {} conversation · more available", argument, second-argument); }
+        if (key == "Showing {} of {} conversation · current results complete") { return @tr("Showing {} of {} conversation · current results complete", argument, second-argument); }
+        if (key == "Showing {} of {} conversations") { return @tr("Showing {} of {} conversations", argument, second-argument); }
+        if (key == "Showing {} of {} conversations · more available") { return @tr("Showing {} of {} conversations · more available", argument, second-argument); }
+        if (key == "Showing {} of {} conversations · current results complete") { return @tr("Showing {} of {} conversations · current results complete", argument, second-argument); }
+        if (key == "Showing {} of {} conversation matching \"{}\"") { return @tr("Showing {} of {} conversation matching \"{}\"", argument, second-argument, third-argument); }
+        if (key == "Showing {} of {} conversation matching \"{}\" · more available") { return @tr("Showing {} of {} conversation matching \"{}\" · more available", argument, second-argument, third-argument); }
+        if (key == "Showing {} of {} conversation matching \"{}\" · current results complete") { return @tr("Showing {} of {} conversation matching \"{}\" · current results complete", argument, second-argument, third-argument); }
+        if (key == "Showing {} of {} conversations matching \"{}\"") { return @tr("Showing {} of {} conversations matching \"{}\"", argument, second-argument, third-argument); }
+        if (key == "Showing {} of {} conversations matching \"{}\" · more available") { return @tr("Showing {} of {} conversations matching \"{}\" · more available", argument, second-argument, third-argument); }
+        if (key == "Showing {} of {} conversations matching \"{}\" · current results complete") { return @tr("Showing {} of {} conversations matching \"{}\" · current results complete", argument, second-argument, third-argument); }
         if (key == "Rendered with software fallback after GPU error: {}") { return @tr("Rendered with software fallback after GPU error: {}", argument); }
         if (key == "Blitz render failed (GPU: {}; software: {})") { return @tr("Blitz render failed (GPU: {}; software: {})", argument, second-argument); }
         return "";
@@ -443,6 +444,7 @@ export component AppWindow inherits Window {
     background: root.page-bg;
 
     callback select_email(int);
+    callback select_thread_message(int);
     callback search_changed(string);
     callback set_search_filter(string);
     callback select_scope(string);
@@ -569,6 +571,7 @@ export component AppWindow inherits Window {
 
     in property <[EmailRow]> emails: [];
     in property <[EmailTemplateRow]> compose_templates: [];
+    in property <[ThreadMessageRow]> thread_messages: [];
     in property <[SidebarRow]> sidebar_rows: [];
     in-out property <string> folder_filter_query: "";
     in property <[MailLabelRow]> mail_labels: [];
@@ -1004,6 +1007,7 @@ export component AppWindow inherits Window {
             layout-mode: root.workspace_layout;
             show-avatars: root.show_avatars;
             emails: root.emails;
+            thread_messages: root.thread_messages;
             sidebar_rows: root.sidebar_rows;
             folder_filter_query <=> root.folder_filter_query;
             mail_labels: root.mail_labels;
@@ -1076,6 +1080,7 @@ export component AppWindow inherits Window {
             surface-raised: root.surface-raised;
             title-color: root.title-color;
             select_email(id) => { root.select_email(id); }
+            select_thread_message(index) => { root.select_thread_message(index); }
             search_changed(query) => { root.search_changed(query); }
             set_search_filter(filter) => { root.set_search_filter(filter); }
             select_scope(scope) => { root.select_scope(scope); }

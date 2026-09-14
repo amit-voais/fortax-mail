@@ -243,6 +243,10 @@ pub(super) fn render_current(
         let mut state = state.borrow_mut();
         state.email_renderer.borrow_mut().clear();
         release_unselected_bodies(&mut state.messages, None);
+        state.conversation_owner_id = None;
+        state.conversation_messages.clear();
+        state.conversation_selected_index = 0;
+        state.conversation_rows.set_vec(Vec::new());
         app.set_email_tiles(Default::default());
         app.set_email_links(Default::default());
         return Ok(());
@@ -339,6 +343,12 @@ pub(super) fn render_current(
         )
     };
     if selection_changed {
+        let mut state = state.borrow_mut();
+        state.conversation_owner_id = None;
+        state.conversation_messages.clear();
+        state.conversation_selected_index = 0;
+        state.conversation_rows.set_vec(Vec::new());
+        drop(state);
         // "View plain text" is a message action, not a global display mode.
         app.set_text_mode(false);
         app.set_source_mode(false);
@@ -383,18 +393,57 @@ pub(super) fn render_current(
     schedule_favicon_fetches(app, state, runtime, visible);
 
     if let Some(email) = selected_email {
-        app.global::<EmailReader>().invoke_ensure_body(email.id);
-        apply_selected_favicon(app, favicon_icons.get(&email.domain));
-        apply_email(app, email, &email_renderer, use_wgpu, allow_remote_images)
+        let (display_email, conversation_ready) = {
+            let state = state.borrow();
+            let conversation_ready = state.conversation_owner_id == Some(email.id)
+                && !state.conversation_messages.is_empty();
+            let display_email = conversation_ready
+                .then(|| {
+                    state
+                        .conversation_messages
+                        .get(state.conversation_selected_index)
+                        .cloned()
+                })
+                .flatten()
+                .unwrap_or_else(|| email.clone());
+            if conversation_ready {
+                reconcile_model_rows_by(
+                    &state.conversation_rows,
+                    make_thread_rows(
+                        &state.conversation_messages,
+                        state.conversation_selected_index,
+                    ),
+                    |row| row.index,
+                    PartialEq::eq,
+                );
+            }
+            (display_email, conversation_ready)
+        };
+        if using_core && (!conversation_ready || display_email.html.is_none()) {
+            app.global::<EmailReader>()
+                .invoke_ensure_body(if conversation_ready {
+                    display_email.id
+                } else {
+                    email.id
+                });
+        }
+        apply_selected_favicon(app, favicon_icons.get(&display_email.domain));
+        apply_email(
+            app,
+            display_email,
+            &email_renderer,
+            use_wgpu,
+            allow_remote_images,
+        )
     } else {
         app.global::<EmailReader>().invoke_ensure_body(-1);
         email_renderer.borrow_mut().clear();
         app.set_selected_sender("".into());
         app.set_selected_address("".into());
         app.set_selected_subject(if query.trim().is_empty() {
-            translated(app, &UiMessage::plain("No messages in this folder"))
+            translated(app, &UiMessage::plain("No conversations in this folder"))
         } else {
-            translated(app, &UiMessage::plain("No messages match this search"))
+            translated(app, &UiMessage::plain("No conversations match this search"))
         });
         app.set_selected_time("".into());
         app.set_selected_to("".into());
@@ -419,11 +468,53 @@ pub(super) fn render_current(
         app.set_selected_text("".into());
         app.set_has_selection(false);
         app.set_remote_images_blocked(false);
+        state.borrow().conversation_rows.set_vec(Vec::new());
         app.set_render_status(UiMessage::plain(
             "Mail core is ready for account synchronization and message actions.",
         ));
         Ok(())
     }
+}
+
+pub(super) fn select_thread_message(
+    app: &AppWindow,
+    state: &Rc<RefCell<InboxState>>,
+    runtime: &tokio::runtime::Runtime,
+    index: i32,
+) -> Result<(), String> {
+    let index = usize::try_from(index).map_err(|_| "invalid thread message".to_owned())?;
+    {
+        let mut state = state.borrow_mut();
+        if index >= state.conversation_messages.len() || state.conversation_selected_index == index
+        {
+            return Ok(());
+        }
+        state.conversation_selected_index = index;
+    }
+    app.set_text_mode(false);
+    app.set_source_mode(false);
+    app.set_rendering_info_open(false);
+    render_current(app, state, runtime)
+}
+
+fn make_thread_rows(messages: &[MailMessage], selected_index: usize) -> Vec<ThreadMessageRow> {
+    messages
+        .iter()
+        .enumerate()
+        .map(|(index, message)| ThreadMessageRow {
+            index: i32::try_from(index).unwrap_or(i32::MAX),
+            sender: message.sender.clone().into(),
+            address: message.address.clone().into(),
+            initials: message.initials.clone().into(),
+            preview: display_preview(&message.preview).into(),
+            time: message.time.clone().into(),
+            to: message.to.clone().into(),
+            unread: message.unread,
+            outgoing: message.is_outgoing,
+            body_pending: message.body_pending,
+            selected: index == selected_index,
+        })
+        .collect()
 }
 
 pub(super) fn apply_label_rows(
@@ -604,63 +695,63 @@ pub(super) fn list_status(
         using_core && !can_load_more,
     ) {
         (true, true, true, _) => UiMessage::arguments(
-            "Showing {} of {} message · more available",
+            "Showing {} of {} conversation · more available",
             visible_count,
             total_count,
         ),
         (true, true, _, true) => UiMessage::arguments(
-            "Showing {} of {} message · current results complete",
+            "Showing {} of {} conversation · current results complete",
             visible_count,
             total_count,
         ),
         (true, true, _, _) => {
-            UiMessage::arguments("Showing {} of {} message", visible_count, total_count)
+            UiMessage::arguments("Showing {} of {} conversation", visible_count, total_count)
         }
         (true, false, true, _) => UiMessage::arguments(
-            "Showing {} of {} messages · more available",
+            "Showing {} of {} conversations · more available",
             visible_count,
             total_count,
         ),
         (true, false, _, true) => UiMessage::arguments(
-            "Showing {} of {} messages · current results complete",
+            "Showing {} of {} conversations · current results complete",
             visible_count,
             total_count,
         ),
         (true, false, _, _) => {
-            UiMessage::arguments("Showing {} of {} messages", visible_count, total_count)
+            UiMessage::arguments("Showing {} of {} conversations", visible_count, total_count)
         }
         (false, true, true, _) => UiMessage::three_arguments(
-            "Showing {} of {} message matching \"{}\" · more available",
+            "Showing {} of {} conversation matching \"{}\" · more available",
             visible_count,
             total_count,
             query.trim(),
         ),
         (false, true, _, true) => UiMessage::three_arguments(
-            "Showing {} of {} message matching \"{}\" · current results complete",
+            "Showing {} of {} conversation matching \"{}\" · current results complete",
             visible_count,
             total_count,
             query.trim(),
         ),
         (false, true, _, _) => UiMessage::three_arguments(
-            "Showing {} of {} message matching \"{}\"",
+            "Showing {} of {} conversation matching \"{}\"",
             visible_count,
             total_count,
             query.trim(),
         ),
         (false, false, true, _) => UiMessage::three_arguments(
-            "Showing {} of {} messages matching \"{}\" · more available",
+            "Showing {} of {} conversations matching \"{}\" · more available",
             visible_count,
             total_count,
             query.trim(),
         ),
         (false, false, _, true) => UiMessage::three_arguments(
-            "Showing {} of {} messages matching \"{}\" · current results complete",
+            "Showing {} of {} conversations matching \"{}\" · current results complete",
             visible_count,
             total_count,
             query.trim(),
         ),
         (false, false, _, _) => UiMessage::three_arguments(
-            "Showing {} of {} messages matching \"{}\"",
+            "Showing {} of {} conversations matching \"{}\"",
             visible_count,
             total_count,
             query.trim(),
@@ -686,6 +777,7 @@ fn same_email_row(a: &EmailRow, b: &EmailRow) -> bool {
         && a.starred == b.starred
         && a.has_attachments == b.has_attachments
         && a.has_replied == b.has_replied
+        && a.message_count == b.message_count
         && a.label_summary == b.label_summary
         && a.selected == b.selected
         && a.checked == b.checked
@@ -724,6 +816,9 @@ pub(super) fn make_rows(
                 starred: email.starred,
                 has_attachments: email.has_attachments,
                 has_replied: email.has_replied,
+                message_count: i32::try_from(email.message_count)
+                    .unwrap_or(i32::MAX)
+                    .max(1),
                 label_summary: label_summary(&email.labels, labels).into(),
                 labels: ModelRc::new(VecModel::from(applied_label_rows(labels, &email.labels))),
                 selected: Some(email.id) == selected_id,
@@ -856,9 +951,21 @@ pub(super) fn refresh_rows_only(
     app.set_mail_selection_count(checked_ids.len() as i32);
     apply_label_rows(app, &labels, selected_email);
     refresh_sidebar(state);
-    let selected_icon = selected_id
-        .and_then(|id| visible.iter().find(|email| email.id == id))
-        .and_then(|email| favicon_icons.get(&email.domain));
+    let selected_domain = selected_email.map(|email| {
+        let state = state.borrow();
+        if state.conversation_owner_id == selected_id {
+            state
+                .conversation_messages
+                .get(state.conversation_selected_index)
+                .map(|message| message.domain.clone())
+                .unwrap_or_else(|| email.domain.clone())
+        } else {
+            email.domain.clone()
+        }
+    });
+    let selected_icon = selected_domain
+        .as_deref()
+        .and_then(|domain| favicon_icons.get(domain));
     apply_selected_favicon(app, selected_icon);
     schedule_favicon_fetches(app, state, runtime, visible);
 }
@@ -1269,6 +1376,27 @@ mod tests {
         assert!(rows.iter().all(|r| r.html.is_none() && r.text.is_none()));
     }
 
+    #[test]
+    fn conversation_rows_keep_messages_separate_and_select_one() {
+        let mut received = message(10);
+        received.sender = "Maya".into();
+        received.preview = "Could we move the review to Tuesday?".into();
+        received.unread = true;
+        let mut sent = message(11);
+        sent.sender = "Alex".into();
+        sent.preview = "Tuesday works for me.".into();
+        sent.is_outgoing = true;
+
+        let rows = make_thread_rows(&[received, sent], 1);
+
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].sender, "Maya");
+        assert!(rows[0].unread);
+        assert!(!rows[0].selected);
+        assert!(rows[1].outgoing);
+        assert!(rows[1].selected);
+    }
+
     fn message(id: i32) -> MailMessage {
         MailMessage {
             id,
@@ -1288,7 +1416,9 @@ mod tests {
             unread: false,
             starred: false,
             has_attachments: false,
+            message_count: 1,
             has_replied: false,
+            is_outgoing: false,
             labels: Vec::new(),
             html: None,
             text: None,

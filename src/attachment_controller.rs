@@ -257,10 +257,11 @@ pub(crate) fn register(
                 session.borrow().selected.clone()
             } else {
                 value.parse::<i64>().ok().and_then(|id| {
+                    let state = state.borrow();
                     state
-                        .borrow()
-                        .messages
+                        .conversation_messages
                         .iter()
+                        .chain(state.messages.iter())
                         .find(|m| m.id == message)
                         .and_then(|m| m.attachments.iter().find(|a| a.id == id))
                         .cloned()

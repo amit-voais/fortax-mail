@@ -1,7 +1,7 @@
 import { AccountMailPreferences } from "../components/account-mail-preferences.slint";
 import { ZoomControls } from "../components/zoom-controls.slint";
 import { Button as ReaderButton, HorizontalBox, ListView, ScrollView, VerticalBox } from "std-widgets.slint";
-import { MailAttachments, EmailReader, EmailLink, EmailTile, MailLabelRow } from "../models.slint";
+import { MailAttachments, EmailReader, EmailLink, EmailTile, MailLabelRow, ThreadMessageRow } from "../models.slint";
 import { SidebarItem } from "../components/sidebar-controls.slint";
 import { Avatar } from "../components/avatar.slint";
 import { Button } from "../components/button.slint";
@@ -112,6 +112,7 @@ export component MailReadingPane inherits Rectangle {
     in property <[EmailLink]> email_links: [];
     in property <[MailLabelRow]> mail_labels: [];
     in property <[MailLabelRow]> mail-label-results: [];
+    in property <[ThreadMessageRow]> thread-messages: [];
     in property <int> selected-label-count: 0;
     in property <string> selected_sender: "";
     in property <string> selected_address: "";
@@ -161,6 +162,7 @@ export component MailReadingPane inherits Rectangle {
     callback save-mail-label(int, string, color);
     callback search-mail-labels(string);
     callback select_email(int);
+    callback select_thread_message(int);
     callback compose_message_action(string);
     callback close_preview();
     callback print_message();
@@ -265,7 +267,7 @@ export component MailReadingPane inherits Rectangle {
                                 icon-color: root.secondary-text;
                                 idle-background: root.control-bg;
                                 hover-background: root.muted-control-bg;
-                                tooltip-text: @tr("Close message preview");
+                                tooltip-text: @tr("Close conversation");
                                 accessible-id: "message-back-button";
                                 clicked => { root.close_preview(); }
                             }
@@ -275,7 +277,7 @@ export component MailReadingPane inherits Rectangle {
                                 icon-color: root.secondary-text;
                                 idle-background: root.control-bg;
                                 hover-background: root.muted-control-bg;
-                                tooltip-text: @tr("Previous message");
+                                tooltip-text: @tr("Previous conversation");
                                 accessible-id: "previous-message-button";
                                 clicked => { root.select_email(root.previous-email-id); }
                             }
@@ -285,7 +287,7 @@ export component MailReadingPane inherits Rectangle {
                                 icon-color: root.secondary-text;
                                 idle-background: root.control-bg;
                                 hover-background: root.muted-control-bg;
-                                tooltip-text: @tr("Next message");
+                                tooltip-text: @tr("Next conversation");
                                 accessible-id: "next-message-button";
                                 clicked => { root.select_email(root.next-email-id); }
                             }
@@ -625,6 +627,121 @@ export component MailReadingPane inherits Rectangle {
                         }
 
                         if root.selected-label-count > 0 : Rectangle { height: 8px; }
+
+                        if root.thread-messages.length > 1 : VerticalBox {
+                            height: 34px + min(root.compact ? 156px : 198px, root.thread-messages.length * 66px);
+                            padding: 0px;
+                            spacing: 6px;
+
+                            HorizontalBox {
+                                height: 28px;
+                                padding: 0px;
+                                spacing: 8px;
+                                cross-axis-alignment: center;
+                                Image {
+                                    width: 16px;
+                                    height: 16px;
+                                    source: @image-url("../icons/phosphor/stack-fill.svg");
+                                    colorize: root.accent;
+                                    image-fit: contain;
+                                    accessible-role: none;
+                                }
+                                Text {
+                                    text: @tr("Conversation");
+                                    color: root.heading;
+                                    font-size: TypeScale.body;
+                                    font-weight: 700;
+                                    vertical-alignment: center;
+                                }
+                                Text {
+                                    text: @tr("{} messages", root.thread-messages.length);
+                                    color: root.secondary-text;
+                                    font-size: TypeScale.secondary;
+                                    vertical-alignment: center;
+                                }
+                                Rectangle { horizontal-stretch: 1; }
+                            }
+
+                            thread-list := ListView {
+                                horizontal-scrollbar-policy: always-off;
+                                mouse-drag-pan-enabled: root.compact;
+                                accessible-label: @tr("Conversation messages");
+                                accessible-item-count: root.thread-messages.length;
+
+                                for row in root.thread-messages : thread-row := Rectangle {
+                                    width: thread-list.visible-width;
+                                    height: 66px;
+                                    border-radius: 8px;
+                                    border-width: row.selected ? 1px : 0px;
+                                    border-color: root.accent;
+                                    background: row.selected ? root.accent-soft : thread-hit.has-hover ? root.control-bg : transparent;
+                                    animate background { duration: 140ms; }
+                                    accessible-role: list-item;
+                                    accessible-label: @tr("Message from {}", row.sender) + ", " + row.preview;
+                                    accessible-item-index: row.index;
+                                    accessible-item-selectable: true;
+                                    accessible-item-selected: row.selected;
+                                    accessible-action-default => { root.select_thread_message(row.index); }
+
+                                    Rectangle {
+                                        x: 17px;
+                                        y: row.index == 0 ? 32px : 0px;
+                                        width: 2px;
+                                        height: row.index == root.thread-messages.length - 1 ? 0px : (row.index == 0 ? 34px : 66px);
+                                        background: root.border;
+                                    }
+                                    Avatar {
+                                        x: 2px;
+                                        y: 14px;
+                                        size: 32px;
+                                        fallback: row.initials;
+                                        background-color: row.outgoing ? root.accent : root.control-bg;
+                                        foreground-color: row.outgoing ? #ffffff : root.secondary-text;
+                                    }
+                                    Text {
+                                        x: 44px;
+                                        y: 8px;
+                                        width: max(0px, parent.width - self.x - 100px);
+                                        height: 22px;
+                                        text: row.outgoing ? @tr("You") : row.sender;
+                                        color: root.heading;
+                                        font-size: TypeScale.body;
+                                        font-weight: row.selected || row.unread ? 700 : 600;
+                                        overflow: elide;
+                                        vertical-alignment: center;
+                                    }
+                                    Text {
+                                        x: parent.width - 88px;
+                                        y: 8px;
+                                        width: 76px;
+                                        height: 22px;
+                                        text: row.time;
+                                        color: root.secondary-text;
+                                        font-size: TypeScale.caption;
+                                        overflow: elide;
+                                        horizontal-alignment: right;
+                                        vertical-alignment: center;
+                                    }
+                                    Text {
+                                        x: 44px;
+                                        y: 31px;
+                                        width: max(0px, parent.width - self.x - 20px);
+                                        height: 25px;
+                                        text: row.body_pending ? @tr("Loading message…") : row.preview;
+                                        color: row.body_pending ? root.accent : root.secondary-text;
+                                        font-size: TypeScale.secondary;
+                                        overflow: elide;
+                                        vertical-alignment: center;
+                                    }
+                                    thread-hit := TouchArea {
+                                        mouse-cursor: pointer;
+                                        clicked => { root.select_thread_message(row.index); }
+                                    }
+                                }
+                            }
+                        }
+
+                        if root.thread-messages.length > 1 : Rectangle { height: 12px; }
 
                         HorizontalBox {
                             min-height: 44px;

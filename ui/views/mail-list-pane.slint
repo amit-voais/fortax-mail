@@ -277,6 +277,7 @@ export component MailListPane inherits Rectangle {
                                 animate opacity { duration: 120ms; }
                                 accessible-role: list-item;
                                 accessible-label: @tr("{}, {}", row.sender, row.subject == "" ? @tr("(No subject)") : row.subject)
+                                    + (row.message_count > 1 ? ", " + @tr("{} messages", row.message_count) : "")
                                     + (row.label_summary == "" ? "" : ", " + row.label_summary)
                                     + (row.has_attachments ? ", " + @tr("Has attachments") : "")
                                     + (row.has_replied ? ", " + @tr("Replied") : "");
@@ -363,10 +364,45 @@ export component MailListPane inherits Rectangle {
                                             accessible-role: none;
                                         }
                                     }
+                                    thread-count := Rectangle {
+                                        visible: row.message_count > 1;
+                                        x: sender-indicators.x - self.width - 8px;
+                                        y: root.dense ? 10px : 2px;
+                                        width: row.message_count >= 100 ? 48px : row.message_count >= 10 ? 42px : 36px;
+                                        height: 22px;
+                                        border-radius: 11px;
+                                        background: root.accent-soft;
+                                        accessible-role: text;
+                                        accessible-label: @tr("{} messages in this conversation", row.message_count);
+
+                                        HorizontalBox {
+                                            padding-left: 7px;
+                                            padding-right: 7px;
+                                            spacing: 3px;
+                                            cross-axis-alignment: center;
+                                            Image {
+                                                width: 11px;
+                                                height: 11px;
+                                                source: @image-url("../icons/phosphor/stack-fill.svg");
+                                                colorize: root.accent;
+                                                image-fit: contain;
+                                                accessible-role: none;
+                                            }
+                                            Text {
+                                                text: row.message_count;
+                                                color: root.accent;
+                                                font-size: TypeScale.caption;
+                                                font-weight: 700;
+                                                vertical-alignment: center;
+                                            }
+                                        }
+                                    }
                                     sender-title := Text {
                                         x: 0px;
                                         y: 0px;
-                                        width: root.dense ? min(170px, max(0px, parent.width - 190px))
+                                        width: row.message_count > 1
+                                            ? max(0px, thread-count.x - 8px)
+                                            : root.dense ? min(170px, max(0px, parent.width - 190px))
                                             : row.has_attachments || row.has_replied
                                                 ? max(0px, sender-indicators.x - 8px)
                                                 : max(0px, sender-time.x - 22px);

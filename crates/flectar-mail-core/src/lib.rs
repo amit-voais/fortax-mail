@@ -2085,6 +2085,20 @@ impl Core {
         Ok(detail)
     }
 
+    /// Load the lightweight message sequence for a conversation. Bodies,
+    /// inline images, and attachment rows are deliberately omitted so a long
+    /// thread can be opened without materializing every rich message.
+    pub async fn get_thread_outline(&self, thread_id: i64) -> Result<ThreadDetail> {
+        self.db
+            .read(move |conn| {
+                let thread = repo::threads::get_summary(conn, thread_id)?
+                    .ok_or_else(|| CoreError::NotFound(format!("thread {thread_id}")))?;
+                let messages = repo::messages::list_outline_for_thread(conn, thread_id)?;
+                Ok(ThreadDetail { thread, messages })
+            })
+            .await
+    }
+
     async fn request_body(&self, account_id: i64, message_id: i64) {
         let claimed = self
             .db

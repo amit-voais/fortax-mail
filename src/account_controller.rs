@@ -338,10 +338,17 @@ pub(super) fn print_selected_message(state: &Rc<RefCell<InboxState>>) -> Result<
         let selected_id = state
             .selected_id
             .ok_or_else(|| "no message is selected".to_owned())?;
-        state
-            .messages
-            .iter()
-            .find(|message| message.id == selected_id)
+        let selected = state
+            .conversation_messages
+            .get(state.conversation_selected_index)
+            .filter(|_| state.conversation_owner_id == Some(selected_id))
+            .or_else(|| {
+                state
+                    .messages
+                    .iter()
+                    .find(|message| message.id == selected_id)
+            });
+        selected
             .and_then(|message| message.html.clone())
             .ok_or_else(|| "message body is not ready".to_owned())?
     };
@@ -358,9 +365,15 @@ pub(super) fn open_selected_message_in_browser(
             .selected_id
             .ok_or_else(|| "no message is selected".to_owned())?;
         let message = state
-            .messages
-            .iter()
-            .find(|message| message.id == selected_id)
+            .conversation_messages
+            .get(state.conversation_selected_index)
+            .filter(|_| state.conversation_owner_id == Some(selected_id))
+            .or_else(|| {
+                state
+                    .messages
+                    .iter()
+                    .find(|message| message.id == selected_id)
+            })
             .ok_or_else(|| "selected message is no longer available".to_owned())?;
         message.html.clone().unwrap_or_else(|| {
             let preview = display_preview(&message.preview);

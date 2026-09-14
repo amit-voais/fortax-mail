@@ -358,7 +358,7 @@ struct FolderMutationUpdate {
 struct MessageLoadUpdate {
     generation: u64,
     id: i32,
-    result: Result<MailMessage, String>,
+    result: Result<mail::MailConversation, String>,
 }
 
 struct ContactLoadUpdate {
@@ -418,6 +418,10 @@ struct InboxState {
     use_wgpu: bool,
     using_core: bool,
     messages: Vec<MailMessage>,
+    conversation_owner_id: Option<i32>,
+    conversation_messages: Vec<MailMessage>,
+    conversation_selected_index: usize,
+    conversation_rows: Rc<VecModel<ThreadMessageRow>>,
     labels: Vec<Label>,
     email_rows: Rc<VecModel<EmailRow>>,
     mailboxes: Vec<MailboxEntry>,
@@ -798,6 +802,10 @@ impl InboxState {
             total_count: 0,
             inbox_count: 0,
             messages: Vec::new(),
+            conversation_owner_id: None,
+            conversation_messages: Vec::new(),
+            conversation_selected_index: 0,
+            conversation_rows: Rc::new(VecModel::default()),
             labels: Vec::new(),
             email_rows: Rc::new(VecModel::default()),
             scope: "Unified Inbox".to_owned(),
@@ -1351,6 +1359,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     }
 
     app.set_emails(Rc::clone(&initial_state.email_rows).into());
+    app.set_thread_messages(Rc::clone(&initial_state.conversation_rows).into());
     app.set_sidebar_rows(Rc::clone(&initial_state.sidebar_rows).into());
     let state = Rc::new(RefCell::new(initial_state));
     mail_work::register(&app, &state, &runtime);
@@ -2391,15 +2400,15 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     // One active read and one replaceable pending selection. Never build a
     // queue of expanded bodies while the user moves quickly through the list.
     let (body_requests, body_request_rx) =
-        tokio::sync::watch::channel(None::<(u64, (CoreMailSource, MailMessage))>);
+        tokio::sync::watch::channel(None::<(u64, (CoreMailSource, MailMessage, Option<i64>))>);
     let body_requests = Rc::new(body_requests);
     let body_generation = Rc::new(Cell::new(0_u64));
-    let body_pending = Rc::new(Cell::new(None::<(i32, u64)>));
+    let body_pending = Rc::new(Cell::new(None::<(i32, Option<i64>, u64)>));
     let body_updates = message_load_tx.clone();
     runtime.spawn(latest_load::run(
         body_request_rx,
-        |(core, row)| async move {
-            let result = core.load_message(&row).await;
+        |(core, row, selected_message_id)| async move {
+            let result = core.load_conversation(&row, selected_message_id).await;
             (row.id, result)
         },
         move |generation, (id, result)| {
@@ -2422,25 +2431,50 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     app.global::<EmailReader>().on_ensure_body(move |id| {
         let load = {
             let state = body_state.borrow();
-            state.core.clone().zip(
-                state
-                    .messages
+            let selected_row = state
+                .selected_id
+                .and_then(|selected_id| state.messages.iter().find(|row| row.id == selected_id));
+            let request_matches = selected_row.is_some_and(|row| row.id == id)
+                || state
+                    .conversation_messages
                     .iter()
-                    .find(|row| row.id == id && row.body_pending && row.thread_id.is_some())
-                    .cloned(),
+                    .any(|message| message.id == id);
+            let selected_message_id = if selected_row.is_some_and(|row| row.id == id) {
+                selected_row.and_then(|row| {
+                    (state.conversation_owner_id == Some(row.id))
+                        .then(|| {
+                            state
+                                .conversation_messages
+                                .get(state.conversation_selected_index)
+                                .map(|message| i64::from(message.id))
+                        })
+                        .flatten()
+                })
+            } else {
+                Some(i64::from(id))
+            };
+            state.core.clone().zip(
+                request_matches
+                    .then(|| selected_row.cloned())
+                    .flatten()
+                    .filter(|row| row.thread_id.is_some())
+                    .map(|row| (row, selected_message_id)),
             )
         };
-        if let Some((core, mut row)) = load {
-            if pending.get().is_some_and(|(active, _)| active == id) {
+        if let Some((core, (mut row, selected_message_id))) = load {
+            let request_id = row.id;
+            if pending.get().is_some_and(|(active, message, _)| {
+                active == request_id && message == selected_message_id
+            }) {
                 return;
             }
             let next = generation.get().wrapping_add(1);
             generation.set(next);
-            pending.set(Some((id, next)));
+            pending.set(Some((request_id, selected_message_id, next)));
             row.html = None;
             row.text = None;
-            requests.send_replace(Some((next, (core, row))));
-        } else if pending.get().is_some_and(|(active, _)| active != id) {
+            requests.send_replace(Some((next, (core, row, selected_message_id))));
+        } else if pending.get().is_some_and(|(active, _, _)| active != id) {
             generation.set(generation.get().wrapping_add(1));
             pending.set(None);
             requests.send_replace(None);
@@ -2971,7 +3005,12 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     let message_load_app = app.as_weak();
     app.on_drain_message_load_updates(move || {
         while let Ok(update) = message_load_rx.borrow_mut().try_recv() {
-            if message_load_pending_for_ui.get() != Some((update.id, update.generation)) {
+            if !message_load_pending_for_ui
+                .get()
+                .is_some_and(|(id, _, generation)| {
+                    id == update.id && generation == update.generation
+                })
+            {
                 continue;
             }
             message_load_pending_for_ui.set(None);
@@ -2979,26 +3018,46 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                 return;
             };
             match update.result {
-                Ok(message) => {
-                    let body_pending = message.body_pending;
+                Ok(conversation) => {
                     let is_selected = {
                         let mut state = message_load_state.borrow_mut();
                         let is_selected =
                             state.selected_id == Some(update.id) && !state.preview_closed;
-                        if is_selected
-                            && let Some(current) = state
+                        if is_selected {
+                            let selected_message_id = state
+                                .conversation_messages
+                                .get(state.conversation_selected_index)
+                                .map(|message| message.id);
+                            state.conversation_owner_id = Some(update.id);
+                            state.conversation_messages = conversation.messages;
+                            state.conversation_selected_index = selected_message_id
+                                .and_then(|id| {
+                                    state
+                                        .conversation_messages
+                                        .iter()
+                                        .position(|message| message.id == id)
+                                })
+                                .unwrap_or_else(|| {
+                                    state.conversation_messages.len().saturating_sub(1)
+                                });
+                            let any_body_pending = state
+                                .conversation_messages
+                                .iter()
+                                .any(|message| message.body_pending);
+                            if let Some(current) = state
                                 .messages
                                 .iter_mut()
                                 .find(|current| current.id == update.id)
-                        {
-                            *current = message;
+                            {
+                                current.body_pending = any_body_pending;
+                            }
                         }
                         is_selected
                     };
                     // A user may select another row while this load is in flight.
-                    // Discard superseded bodies instead of caching them in list rows.
+                    // Keep only the selected thread and project its metadata before
+                    // rendering the one expanded body.
                     if is_selected
-                        && !body_pending
                         && let Err(error) =
                             render_current(&app, &message_load_state, &message_load_runtime)
                     {
@@ -4785,13 +4844,23 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         let Some(app) = app_weak.upgrade() else {
             return;
         };
-        let (core, row) = {
+        let (core, row, conversation_message_id) = {
             let state = state_for_message_compose.borrow();
             let row = state
                 .selected_id
                 .and_then(|id| state.messages.iter().find(|message| message.id == id))
                 .cloned();
-            (state.core.clone(), row)
+            let conversation_message_id = row.as_ref().and_then(|row| {
+                (state.conversation_owner_id == Some(row.id))
+                    .then(|| {
+                        state
+                            .conversation_messages
+                            .get(state.conversation_selected_index)
+                            .map(|message| i64::from(message.id))
+                    })
+                    .flatten()
+            });
+            (state.core.clone(), row, conversation_message_id)
         };
         let Some(core) = core else {
             app.set_render_status(UiMessage::plain(
@@ -4902,7 +4971,9 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             return;
         }
 
-        let source = match runtime_for_message_compose.block_on(core.load_compose_source(&row)) {
+        let source = match runtime_for_message_compose
+            .block_on(core.load_compose_source(&row, conversation_message_id))
+        {
             Ok(source) => source,
             Err(error) => {
                 app.set_render_status(UiMessage::detail("Could not open composer: {}", error));
@@ -6228,6 +6299,23 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                 "Could not mark message as read: {}",
                 "read queue is busy; reopen the message to retry",
             ));
+        }
+    });
+
+    let app_weak = app.as_weak();
+    let state_for_thread_selection = Rc::clone(&state);
+    let runtime_for_thread_selection = Rc::clone(&runtime);
+    app.on_select_thread_message(move |index| {
+        let Some(app) = app_weak.upgrade() else {
+            return;
+        };
+        if let Err(error) = select_thread_message(
+            &app,
+            &state_for_thread_selection,
+            &runtime_for_thread_selection,
+            index,
+        ) {
+            app.set_render_status(UiMessage::detail("Message load failed: {}", error));
         }
     });
 

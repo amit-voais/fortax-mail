@@ -908,6 +908,22 @@ pub fn list_for_thread(conn: &Connection, thread_id: i64) -> Result<Vec<MessageD
     Ok(out)
 }
 
+/// Conversation headers and snippets without materializing stored bodies or
+/// attachment rows. The reader uses this for its virtualized thread timeline
+/// and loads only the expanded message body separately.
+pub fn list_outline_for_thread(conn: &Connection, thread_id: i64) -> Result<Vec<MessageDetail>> {
+    let sql = format!(
+        "SELECT {DETAIL_MESSAGE_COLS}, NULL AS text_body, NULL AS html_body, {SEND_STATE_COLS}
+         FROM messages m
+         WHERE m.thread_id = ?1
+         ORDER BY m.date ASC, m.id ASC"
+    );
+    let mut stmt = conn.prepare(&sql)?;
+    Ok(stmt
+        .query_map(params![thread_id], detail_from_row)?
+        .collect::<rusqlite::Result<Vec<_>>>()?)
+}
+
 /// All (id, uid) pairs currently mapped in a folder - used for expunge reconciliation.
 pub fn uids_in_folder(conn: &Connection, folder_id: i64) -> Result<Vec<(i64, i64)>> {
     let mut stmt =
@@ -1128,6 +1144,40 @@ mod tests {
         let mut sorted = dates.clone();
         sorted.sort_unstable();
         assert_eq!(dates, sorted);
+    }
+
+    #[test]
+    fn thread_outline_keeps_headers_but_omits_body_and_attachments() {
+        let c = testutil::conn();
+        testutil::seed_account(&c);
+        let (thread_id, message_id) =
+            testutil::seed_message(&c, "sender@test.dev", "Subject", false);
+        store_body(
+            &c,
+            message_id,
+            Some("plain body"),
+            Some("<p>rich body</p>"),
+            None,
+            true,
+            None,
+        )
+        .unwrap();
+        c.execute(
+            "INSERT INTO attachments (message_id, filename, mime_type, size, is_inline)
+             VALUES (?1, 'report.pdf', 'application/pdf', 42, 0)",
+            [message_id],
+        )
+        .unwrap();
+
+        let outline = list_outline_for_thread(&c, thread_id).unwrap();
+
+        assert_eq!(outline.len(), 1);
+        assert_eq!(outline[0].id, message_id);
+        assert_eq!(outline[0].subject, "Subject");
+        assert_eq!(outline[0].body_state, "cached");
+        assert!(outline[0].text_body.is_none());
+        assert!(outline[0].html_body.is_none());
+        assert!(outline[0].attachments.is_empty());
     }
 
     /// A thread whose rows predate the List-Unsubscribe header fetch offers no

@@ -52,6 +52,8 @@ pub(crate) struct WarmStartMessage {
     pub(crate) unread: bool,
     pub(crate) starred: bool,
     pub(crate) has_attachments: bool,
+    #[serde(default = "single_message")]
+    pub(crate) message_count: i64,
     #[serde(default)]
     pub(crate) has_replied: bool,
     #[serde(default)]
@@ -78,6 +80,7 @@ impl From<&mail::MailMessage> for WarmStartMessage {
             unread: message.unread,
             starred: message.starred,
             has_attachments: message.has_attachments,
+            message_count: message.message_count,
             has_replied: message.has_replied,
             labels: message.labels.clone(),
             sender_verification: message.sender_verification.clone(),
@@ -105,7 +108,9 @@ impl From<WarmStartMessage> for mail::MailMessage {
             unread: message.unread,
             starred: message.starred,
             has_attachments: message.has_attachments,
+            message_count: message.message_count.max(1),
             has_replied: message.has_replied,
+            is_outgoing: false,
             labels: message.labels,
             html: None,
             text: None,
@@ -114,6 +119,10 @@ impl From<WarmStartMessage> for mail::MailMessage {
             sender_verification: message.sender_verification,
         }
     }
+}
+
+const fn single_message() -> i64 {
+    1
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -689,7 +698,9 @@ mod warm_start_tests {
             unread: true,
             starred: false,
             has_attachments: false,
+            message_count: 2,
             has_replied: true,
+            is_outgoing: false,
             labels: Vec::new(),
             html: Some("<p>body must not enter warm cache</p>".into()),
             text: Some("Plain body must not enter warm cache".into()),

@@ -1,5 +1,5 @@
 import { HorizontalBox } from "std-widgets.slint";
-import { EmailLink, EmailRow, EmailTile, SidebarRow, MailLabelRow } from "../models.slint";
+import { EmailLink, EmailRow, EmailTile, SidebarRow, MailLabelRow, ThreadMessageRow } from "../models.slint";
 import { LayoutMetrics } from "../design-system.slint";
 import { MailSidebar } from "../components/sidebar.slint";
 import { MailListPane } from "mail-list-pane.slint";
@@ -16,6 +16,7 @@ export component MailView inherits Rectangle {
     in property <bool> show-avatars: true;
     in property <bool> loading: false;
     in property <[EmailRow]> emails: [];
+    in property <[ThreadMessageRow]> thread_messages: [];
     in property <[SidebarRow]> sidebar_rows: [];
     in-out property <string> folder_filter_query: "";
     private property <length> sidebar-scroll-y: 0px;
@@ -94,6 +95,7 @@ export component MailView inherits Rectangle {
     in property <color> surface-raised;
     in property <color> title-color;
     callback select_email(int);
+    callback select_thread_message(int);
     callback search_changed(string);
     callback set_search_filter(string);
     callback select_scope(string);
@@ -240,6 +242,7 @@ export component MailView inherits Rectangle {
                 window-width: root.width;
                 email_tiles: root.email_tiles;
                 email_links: root.email_links;
+                thread-messages: root.thread_messages;
                 selected_sender: root.selected_sender;
                 selected_address: root.selected_address;
                 selected_subject: root.selected_subject;
@@ -288,6 +291,7 @@ export component MailView inherits Rectangle {
                 save-mail-label(id, name, color) => { root.save_mail_label(id, name, color); }
                 search-mail-labels(query) => { root.search_mail_labels(query); }
                 select_email(id) => { root.select_email(id); }
+                select_thread_message(index) => { root.select_thread_message(index); }
                 compose_message_action(action) => { root.compose_message_action(action); }
                 close_preview => { root.close_preview(); }
                 print_message => { root.print_message(); }
@@ -440,6 +444,7 @@ export component MailView inherits Rectangle {
                 window-width: self.width;
                 email_tiles: root.email_tiles;
                 email_links: root.email_links;
+                thread-messages: root.thread_messages;
                 selected_sender: root.selected_sender;
                 selected_address: root.selected_address;
                 selected_subject: root.selected_subject;
@@ -488,6 +493,7 @@ export component MailView inherits Rectangle {
                 save-mail-label(id, name, color) => { root.save_mail_label(id, name, color); }
                 search-mail-labels(query) => { root.search_mail_labels(query); }
                 select_email(id) => { root.select_email(id); }
+                select_thread_message(index) => { root.select_thread_message(index); }
                 compose_message_action(action) => { root.compose_message_action(action); }
                 close_preview => {
                     root.compact-page = "list";
