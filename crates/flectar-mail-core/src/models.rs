@@ -750,6 +750,7 @@ pub struct QueueSendArgs {
 #[serde(rename_all = "camelCase")]
 pub struct QueueSendResult {
     pub action_id: i64,
+    pub draft_id: i64,
     pub dispatch_at: i64,
 }
 

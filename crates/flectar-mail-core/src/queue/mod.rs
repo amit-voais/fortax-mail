@@ -86,7 +86,7 @@ pub async fn execute_due(
                     state: "paused".into(),
                     error: Some(e.to_string()),
                 });
-                let msg = "authentication required".to_string();
+                let msg = e.to_string();
                 ctx.db
                     .write(move |conn| {
                         repo::actions::bump_attempt(conn, action_id, now_ms() + 60_000, &msg)

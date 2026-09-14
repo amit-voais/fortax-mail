@@ -446,6 +446,7 @@ pub(super) fn clear_compose(
     contacts.borrow_mut().clear();
     apply_compose_files(app, &[]);
     apply_compose_contacts(app, &[]);
+    app.set_compose_sending(false);
     app.set_compose_open(false);
     app.set_compose_mode("new".into());
     app.set_compose_to("".into());

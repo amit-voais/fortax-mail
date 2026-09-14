@@ -193,6 +193,7 @@ export component ComposerFooter inherits Rectangle {
     in property <string> attachment-summary: "";
     in property <bool> can-send: false;
     in property <bool> has-content: false;
+    in property <bool> sending: false;
     in property <color> control-hover-color;
     in property <color> muted-color;
     in property <color> raised-color;
@@ -218,11 +219,11 @@ export component ComposerFooter inherits Rectangle {
                 y: 10px;
                 width: root.compact ? 96px : 106px;
                 height: 34px;
-                text: @tr("Send");
+                text: root.sending ? @tr("Sending…") : @tr("Send");
                 icon: @image-url("../icons/phosphor/paper-plane-tilt-fill.svg");
                 has-icon: true;
                 primary: true;
-                enabled: root.can-send;
+                enabled: root.can-send && !root.sending;
                 clicked => { root.submit(true); }
             }
 

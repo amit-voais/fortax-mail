@@ -1288,6 +1288,13 @@ impl CoreMailSource {
             .map_err(|error| error.to_string())?;
         Ok(queued)
     }
+
+    pub async fn wait_for_send(&self, action_id: i64) -> Result<(), String> {
+        self.core
+            .wait_for_send(action_id)
+            .await
+            .map_err(|error| error.to_string())
+    }
 }
 
 fn compose_args(

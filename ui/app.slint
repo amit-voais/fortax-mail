@@ -384,6 +384,9 @@ export global I18n {
         if (key == "Choose the account this message should be sent from.") { return @tr("Choose the account this message should be sent from."); }
         if (key == "Connect an account before saving or sending mail.") { return @tr("Connect an account before saving or sending mail."); }
         if (key == "Message queued for delivery (action {}).") { return @tr("Message queued for delivery (action {}).", argument); }
+        if (key == "Sending message…") { return @tr("Sending message…"); }
+        if (key == "Message sent.") { return @tr("Message sent."); }
+        if (key == "Message was not sent: {} Your draft is preserved.") { return @tr("Message was not sent: {} Your draft is preserved.", argument); }
         if (key == "Draft saved locally (#{}).") { return @tr("Draft saved locally (#{}).", argument); }
         if (key == "Compose failed: {}") { return @tr("Compose failed: {}", argument); }
         if (key == "Connect an account before managing email templates.") { return @tr("Connect an account before managing email templates."); }
@@ -567,6 +570,7 @@ export component AppWindow inherits Window {
     callback drain-sync-updates();
     callback drain-data-reset-updates();
     callback drain-contact-load-updates();
+    callback drain-compose-send-updates();
     callback refresh-email-resources();
 
     in property <[EmailRow]> emails: [];
@@ -727,6 +731,7 @@ export component AppWindow inherits Window {
     in-out property <string> compose_bcc: "";
     in-out property <string> compose_subject: "";
     in-out property <string> compose_body: "";
+    in property <bool> compose_sending: false;
     in-out property <int> compose_account_id: -1;
     in property <[ComposeContact]> compose_contact_suggestions: [];
     in property <[ComposeAttachment]> compose_attachments: [];
@@ -1491,6 +1496,7 @@ export component AppWindow inherits Window {
             compose_bcc <=> root.compose_bcc;
             compose_subject <=> root.compose_subject;
             compose_body <=> root.compose_body;
+            compose_sending: root.compose_sending;
             compose_accounts: root.connected_accounts;
             compose_account_id <=> root.compose_account_id;
             compose_contact_suggestions: root.compose_contact_suggestions;

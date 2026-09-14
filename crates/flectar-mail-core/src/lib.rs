@@ -60,6 +60,8 @@ const MAX_DRAFT_ATTACHMENT_BYTES: usize = 25 * 1024 * 1024;
 const MAX_DRAFT_BODY_BYTES: usize = 8 * 1024 * 1024;
 const MAX_CACHED_MESSAGE_BYTES: usize = 128 * 1024 * 1024;
 const MAX_CACHED_HEADER_BYTES: usize = 256 * 1024;
+const SEND_START_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
+const SEND_STATUS_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_millis(250);
 
 fn validate_folder_leaf(value: &str) -> Result<String> {
     let value = value.trim();
@@ -2971,6 +2973,75 @@ impl Core {
         }
     }
 
+    /// Wait for an explicitly requested send to finish.
+    ///
+    /// If the first delivery attempt fails, cancel its scheduled retry before
+    /// returning the error. This guarantees that the preserved, editable draft
+    /// cannot also be delivered later without another explicit Send.
+    pub async fn wait_for_send(&self, action_id: i64) -> Result<()> {
+        let started = tokio::time::Instant::now();
+        loop {
+            let status = self
+                .db
+                .read(move |conn| {
+                    Ok(conn
+                        .query_row(
+                            "SELECT kind, state, last_error FROM pending_actions WHERE id = ?1",
+                            rusqlite::params![action_id],
+                            |row| {
+                                Ok((
+                                    row.get::<_, String>(0)?,
+                                    row.get::<_, String>(1)?,
+                                    row.get::<_, Option<String>>(2)?,
+                                ))
+                            },
+                        )
+                        .optional()?)
+                })
+                .await?;
+            let Some((kind, state, last_error)) = status else {
+                return Err(CoreError::NotFound("send action".into()));
+            };
+            if kind != "send" {
+                return Err(CoreError::Other(format!(
+                    "action {action_id} is not a send action"
+                )));
+            }
+
+            match state.as_str() {
+                "done" => return Ok(()),
+                "failed" => {
+                    return Err(CoreError::Other(
+                        last_error.unwrap_or_else(|| "message delivery failed".into()),
+                    ));
+                }
+                "cancelled" => {
+                    return Err(CoreError::Other("message delivery was cancelled".into()));
+                }
+                "pending" if last_error.is_some() => {
+                    if self.cancel_send(action_id).await? {
+                        return Err(CoreError::Other(last_error.unwrap()));
+                    }
+                }
+                "pending" if started.elapsed() >= SEND_START_TIMEOUT => {
+                    if self.cancel_send(action_id).await? {
+                        return Err(CoreError::Smtp(
+                            "message delivery did not start within 60 seconds".into(),
+                        ));
+                    }
+                }
+                "pending" | "inflight" => {}
+                other => {
+                    return Err(CoreError::Other(format!(
+                        "send action entered an unknown state: {other}"
+                    )));
+                }
+            }
+
+            tokio::time::sleep(SEND_STATUS_POLL_INTERVAL).await;
+        }
+    }
+
     pub async fn save_draft(&self, args: SaveDraftArgs) -> Result<i64> {
         // Stage every attachment into an app-managed dir up front, so the paths
         // persisted to `draft_attachments` (and later read at dispatch) are
@@ -3581,6 +3652,7 @@ impl Core {
         }
         Ok(QueueSendResult {
             action_id,
+            draft_id,
             dispatch_at,
         })
     }
@@ -7610,6 +7682,84 @@ mod draft_action_race_tests {
                 assert_eq!(
                     repo::actions::get(conn, action_id)?.map(|action| action.state),
                     Some("inflight".into())
+                );
+                Ok(())
+            })
+            .await
+            .unwrap();
+    }
+}
+
+#[cfg(test)]
+mod send_confirmation_tests {
+    use super::*;
+
+    async fn send_action() -> (Core, tempfile::TempDir, i64) {
+        let temp = tempfile::tempdir().unwrap();
+        let core = Core::start_mail_ui(Paths::for_tests(temp.path()))
+            .await
+            .unwrap();
+        let action_id = core
+            .db
+            .write(|conn| {
+                db::testutil::seed_account(conn);
+                repo::actions::enqueue(
+                    conn,
+                    1,
+                    "send",
+                    None,
+                    None,
+                    &serde_json::json!({ "draftId": 1 }),
+                    None,
+                )
+            })
+            .await
+            .unwrap();
+        (core, temp, action_id)
+    }
+
+    #[tokio::test]
+    async fn confirmed_send_returns_only_after_done_state() {
+        let (core, _temp, action_id) = send_action().await;
+        let waiting_core = core.clone();
+        let waiter = tokio::spawn(async move { waiting_core.wait_for_send(action_id).await });
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        assert!(!waiter.is_finished());
+
+        core.db
+            .write(move |conn| repo::actions::set_state(conn, action_id, "done", None))
+            .await
+            .unwrap();
+
+        tokio::time::timeout(std::time::Duration::from_secs(1), waiter)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn failed_attempt_is_cancelled_before_returning_the_error() {
+        let (core, _temp, action_id) = send_action().await;
+        core.db
+            .write(move |conn| {
+                repo::actions::bump_attempt(
+                    conn,
+                    action_id,
+                    now_ms() + 60_000,
+                    "SMTP relay rejected the message",
+                )
+            })
+            .await
+            .unwrap();
+
+        let error = core.wait_for_send(action_id).await.unwrap_err();
+        assert!(error.to_string().contains("SMTP relay rejected"));
+        core.db
+            .read(move |conn| {
+                assert_eq!(
+                    repo::actions::get(conn, action_id)?.map(|action| action.state),
+                    Some("cancelled".into())
                 );
                 Ok(())
             })

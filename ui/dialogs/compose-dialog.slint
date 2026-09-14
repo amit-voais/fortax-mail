@@ -26,6 +26,7 @@ export component ComposeDialog inherits Rectangle {
     in-out property <string> compose_bcc: "";
     in-out property <string> compose_subject: "";
     in-out property <string> compose_body: "";
+    in property <bool> compose_sending: false;
     in property <[AccountRow]> compose_accounts: [];
     in-out property <int> compose_account_id: -1;
     in property <[ComposeContact]> compose_contact_suggestions: [];
@@ -96,6 +97,7 @@ export component ComposeDialog inherits Rectangle {
         bcc <=> root.compose_bcc;
         subject <=> root.compose_subject;
         body <=> root.compose_body;
+        sending: root.compose_sending;
         accounts: root.compose_accounts;
         selected-account-id <=> root.compose_account_id;
         contact-suggestions: root.compose_contact_suggestions;

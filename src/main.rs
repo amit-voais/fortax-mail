@@ -329,6 +329,11 @@ struct SyncUpdate {
     metadata: Option<mail::MailMetadata>,
 }
 
+struct ComposeSendUpdate {
+    action_id: i64,
+    result: Result<(), String>,
+}
+
 struct MailListUpdate {
     view_generation: u64,
     scope: String,
@@ -4600,6 +4605,12 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     ));
     let compose_intent = Rc::new(RefCell::new(ComposeIntent::default()));
     let compose_templates = Rc::new(RefCell::new(Vec::<Snippet>::new()));
+    let compose_send_action = Rc::new(Cell::new(None::<i64>));
+    let (compose_send_raw_tx, compose_send_rx) = bounded_ui_channel::<ComposeSendUpdate>();
+    let compose_send_tx = UiSender::new(
+        compose_send_raw_tx,
+        UiWake::new(app.as_weak(), |app| app.invoke_drain_compose_send_updates()),
+    );
     account_mail_preferences::register(&app, &state, &runtime, &compose_document, &compose_editor);
     apply_compose_files(&app, &compose_files.borrow());
     {
@@ -5054,8 +5065,12 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     let editor_for_close = Rc::clone(&compose_editor);
     let contacts_for_close = Rc::clone(&compose_contacts);
     let intent_for_close = Rc::clone(&compose_intent);
+    let send_action_for_close = Rc::clone(&compose_send_action);
     app.on_close_compose(move || {
         if let Some(app) = app_weak.upgrade() {
+            if send_action_for_close.get().is_some() {
+                return;
+            }
             clear_compose(
                 &app,
                 &files_for_close,
@@ -5397,10 +5412,15 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     let editor_for_save = Rc::clone(&compose_editor);
     let contacts_for_save = Rc::clone(&compose_contacts);
     let intent_for_save = Rc::clone(&compose_intent);
+    let send_action_for_save = Rc::clone(&compose_send_action);
+    let send_updates_for_save = compose_send_tx.clone();
     app.on_save_compose(move |account_id, to, cc, bcc, subject, body, send| {
         let Some(app) = app_weak.upgrade() else {
             return;
         };
+        if send_action_for_save.get().is_some() || app.get_compose_sending() {
+            return;
+        }
         if send
             && !app
                 .global::<AccountMailPreferences>()
@@ -5438,41 +5458,61 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             document.body_html()
         };
         let intent = intent_for_save.borrow().clone();
-        let result = if send {
-            runtime_for_compose
-                .block_on(core.send_new_message(ComposeMessage {
-                    draft_id: intent.draft_id,
-                    account_id: i64::from(account_id),
-                    to: to.as_str(),
-                    cc: cc.as_str(),
-                    bcc: bcc.as_str(),
-                    subject: subject.as_str(),
-                    body: body.as_str(),
-                    body_html: body_html.as_deref(),
-                    attachments: &attachments,
-                    mode: intent.mode.as_str(),
-                    in_reply_to_message_id: intent.in_reply_to_message_id,
-                }))
-                .map(|queued| {
-                    UiMessage::detail("Message queued for delivery (action {}).", queued.action_id)
-                })
-        } else {
-            runtime_for_compose
-                .block_on(core.save_new_draft(ComposeMessage {
-                    draft_id: intent.draft_id,
-                    account_id: i64::from(account_id),
-                    to: to.as_str(),
-                    cc: cc.as_str(),
-                    bcc: bcc.as_str(),
-                    subject: subject.as_str(),
-                    body: body.as_str(),
-                    body_html: body_html.as_deref(),
-                    attachments: &attachments,
-                    mode: intent.mode.as_str(),
-                    in_reply_to_message_id: intent.in_reply_to_message_id,
-                }))
-                .map(|draft_id| UiMessage::detail("Draft saved locally (#{}).", draft_id))
-        };
+        if send {
+            match runtime_for_compose.block_on(core.send_new_message(ComposeMessage {
+                draft_id: intent.draft_id,
+                account_id: i64::from(account_id),
+                to: to.as_str(),
+                cc: cc.as_str(),
+                bcc: bcc.as_str(),
+                subject: subject.as_str(),
+                body: body.as_str(),
+                body_html: body_html.as_deref(),
+                attachments: &attachments,
+                mode: intent.mode.as_str(),
+                in_reply_to_message_id: intent.in_reply_to_message_id,
+            })) {
+                Ok(queued) => {
+                    intent_for_save.borrow_mut().draft_id = Some(queued.draft_id);
+                    send_action_for_save.set(Some(queued.action_id));
+                    app.set_compose_sending(true);
+                    app.set_compose_notice(UiMessage::plain("Sending message…"));
+                    app.set_compose_notice_is_error(false);
+                    app.set_sync_status(UiMessage::plain("Sending message…"));
+
+                    let monitor = core.clone();
+                    let updates = send_updates_for_save.clone();
+                    let action_id = queued.action_id;
+                    runtime_for_compose.spawn(async move {
+                        let result = monitor.wait_for_send(action_id).await;
+                        let _ = updates.send(ComposeSendUpdate { action_id, result }).await;
+                    });
+                }
+                Err(error) => {
+                    let message = UiMessage::detail("Compose failed: {}", error);
+                    app.set_compose_notice(message.clone());
+                    app.set_compose_notice_is_error(true);
+                    app.set_sync_status(message);
+                }
+            }
+            return;
+        }
+
+        let result = runtime_for_compose
+            .block_on(core.save_new_draft(ComposeMessage {
+                draft_id: intent.draft_id,
+                account_id: i64::from(account_id),
+                to: to.as_str(),
+                cc: cc.as_str(),
+                bcc: bcc.as_str(),
+                subject: subject.as_str(),
+                body: body.as_str(),
+                body_html: body_html.as_deref(),
+                attachments: &attachments,
+                mode: intent.mode.as_str(),
+                in_reply_to_message_id: intent.in_reply_to_message_id,
+            }))
+            .map(|draft_id| UiMessage::detail("Draft saved locally (#{}).", draft_id));
         match result {
             Ok(message) => {
                 clear_compose(
@@ -5492,6 +5532,58 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                 app.set_compose_notice(message.clone());
                 app.set_compose_notice_is_error(true);
                 app.set_sync_status(message);
+            }
+        }
+    });
+
+    let compose_send_rx = Rc::new(RefCell::new(compose_send_rx));
+    let app_weak = app.as_weak();
+    let state_for_send_result = Rc::clone(&state);
+    let runtime_for_send_result = Rc::clone(&runtime);
+    let files_for_send_result = Rc::clone(&compose_files);
+    let document_for_send_result = Rc::clone(&compose_document);
+    let editor_for_send_result = Rc::clone(&compose_editor);
+    let contacts_for_send_result = Rc::clone(&compose_contacts);
+    let intent_for_send_result = Rc::clone(&compose_intent);
+    let send_action_for_result = Rc::clone(&compose_send_action);
+    app.on_drain_compose_send_updates(move || {
+        while let Ok(update) = compose_send_rx.borrow_mut().try_recv() {
+            if send_action_for_result.get() != Some(update.action_id) {
+                continue;
+            }
+            let Some(app) = app_weak.upgrade() else {
+                return;
+            };
+            send_action_for_result.set(None);
+            app.set_compose_sending(false);
+            match update.result {
+                Ok(()) => {
+                    clear_compose(
+                        &app,
+                        &files_for_send_result,
+                        &document_for_send_result,
+                        &editor_for_send_result,
+                        &contacts_for_send_result,
+                    );
+                    *intent_for_send_result.borrow_mut() = ComposeIntent::default();
+                    app.set_sync_status(UiMessage::plain("Message sent."));
+                    let _ = refresh_from_source(
+                        &app,
+                        &state_for_send_result,
+                        &runtime_for_send_result,
+                        true,
+                        &[],
+                    );
+                }
+                Err(error) => {
+                    let message = UiMessage::detail(
+                        "Message was not sent: {} Your draft is preserved.",
+                        error,
+                    );
+                    app.set_compose_notice(message.clone());
+                    app.set_compose_notice_is_error(true);
+                    app.set_sync_status(message);
+                }
             }
         }
     });
