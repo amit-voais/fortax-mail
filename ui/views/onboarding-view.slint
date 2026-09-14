@@ -6,6 +6,7 @@ import { Button } from "../components/button.slint";
 import { LineEdit } from "../components/controls.slint";
 import { ProviderButton } from "../components/provider-button.slint";
 import { OAuthSetupDialog } from "../dialogs/oauth-setup-dialog.slint";
+import { AppTheme } from "../design-system.slint";
 import { TypeScale } from "../typography.slint";
 
 export component OnboardingView inherits Rectangle {
@@ -50,6 +51,7 @@ export component OnboardingView inherits Rectangle {
     in-out property <string> smtp-host: "";
     in-out property <string> smtp-port: "465";
     in-out property <bool> imap-form-open: false;
+    private property <bool> show-account-status: false;
     callback add-password-account(string, string, string, string, string, string, string, string, string);
     callback start-oauth(string);
     callback cancel-oauth();
@@ -62,6 +64,23 @@ export component OnboardingView inherits Rectangle {
             && root.imap-port != ""
             && root.smtp-host != ""
             && root.smtp-port != ""));
+
+    function open-new-mail-account() {
+        root.account-email = "";
+        root.account-username = "";
+        root.account-password = "";
+        root.account-protocol = "imap";
+        root.jmap-url = "";
+        root.imap-security = "auto";
+        root.smtp-security = "auto";
+        root.trusted-certificate-pem = "";
+        root.imap-host = "";
+        root.imap-port = "993";
+        root.smtp-host = "";
+        root.smtp-port = "465";
+        root.show-account-status = false;
+        root.imap-form-open = true;
+    }
 
     background: root.page-bg;
 
@@ -158,7 +177,7 @@ export component OnboardingView inherits Rectangle {
                     surface: root.surface;
                     hover-surface: root.hover-surface;
                     button-border: root.ui-border;
-                    clicked => { root.imap-form-open = true; }
+                    clicked => { root.open-new-mail-account(); }
                 }
                 if !root.google-available || !root.microsoft-available : Text {
                     text: !root.google-available && !root.microsoft-available
@@ -346,12 +365,32 @@ export component OnboardingView inherits Rectangle {
                     import-certificate => { root.import-mail-certificate(); }
                 }
                 Rectangle { height: 2px; }
+                if root.show-account-status && root.status != "" : Rectangle {
+                    height: max(36px, setup-status.preferred-height + 16px);
+                    background: root.account-setup-in-progress ? root.hover-surface : AppTheme.destructive.transparentize(0.9);
+                    border-radius: 8px;
+                    border-width: 1px;
+                    border-color: root.account-setup-in-progress ? root.ui-border : AppTheme.destructive.transparentize(0.45);
+
+                    setup-status := Text {
+                        x: 10px;
+                        y: 8px;
+                        width: parent.width - 20px;
+                        text: root.status;
+                        color: root.account-setup-in-progress ? root.body-text : AppTheme.destructive;
+                        font-size: TypeScale.caption;
+                        horizontal-alignment: center;
+                        wrap: word-wrap;
+                        height: self.preferred-height;
+                    }
+                }
                 Button {
                     height: 42px;
                     text: root.account-setup-in-progress ? @tr("Connecting…") : @tr("Connect account");
                     primary: true;
                     enabled: root.imap-form-valid && !root.account-setup-in-progress;
                     clicked => {
+                        root.show-account-status = true;
                         root.add-password-account(
                             root.account-protocol,
                             root.account-email,
@@ -373,7 +412,7 @@ export component OnboardingView inherits Rectangle {
                 }
             }
 
-            if root.startup-ready && root.status != "" : VerticalBox {
+            if root.startup-ready && !root.imap-form-open && root.status != "" : VerticalBox {
                 padding: 0px;
                 padding-top: 12px;
                 Text {
