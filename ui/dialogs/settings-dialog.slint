@@ -100,6 +100,7 @@ export component SettingsDialog inherits Rectangle {
     in-out property <string> caldav_url: "";
     in-out property <string> caldav_username: "";
     in-out property <string> caldav_password: "";
+    in-out property <bool> caldav_manage_existing: false;
     in-out property <int> carddav_account_id: -1;
     in-out property <string> carddav_url: "";
     in-out property <string> carddav_username: "";
@@ -190,6 +191,7 @@ export component SettingsDialog inherits Rectangle {
     changed settings_open => {
         if !root.settings_open {
             theme-editor.discard-changes();
+            root.close-caldav-settings();
         }
     }
 
@@ -276,6 +278,20 @@ export component SettingsDialog inherits Rectangle {
         root.smtp_host = "";
         root.smtp_port = "465";
         root.imap_form_open = true;
+    }
+
+    function open-caldav-settings(account: AccountRow) {
+        root.caldav_account_id = account.id;
+        root.caldav_url = account.caldav_url;
+        root.caldav_username = account.caldav_username;
+        root.caldav_password = "";
+        root.caldav_manage_existing = account.calendar_connected;
+    }
+
+    function close-caldav-settings() {
+        root.caldav_account_id = -1;
+        root.caldav_password = "";
+        root.caldav_manage_existing = false;
     }
 
         Rectangle {
@@ -750,7 +766,7 @@ export component SettingsDialog inherits Rectangle {
                                 private property <bool> separate-actions: root.compact || self.width < 780px;
                                 private property <length> actions-y: root.compact ? 84px : account.sync_error != "" ? 112px : 88px;
                                 private property <length> divider-y: self.separate-actions ? self.actions-y + (self.stacked-actions ? 112px : 32px) + 12px : self.actions-y;
-                                height: self.divider-y + (root.compact ? 154px : 71px);
+                                height: self.divider-y + (root.compact ? (account.provider == "imap" ? 208px : 154px) : 71px);
                                 can-drop(event) => root.read_account_transfer(event.data) != "" ? DragAction.move : DragAction.none;
                                 dropped(event) => {
                                     let source = root.read_account_transfer(event.data);
@@ -832,7 +848,12 @@ export component SettingsDialog inherits Rectangle {
                                         if !root.compact && account.calendar_connected : HorizontalBox {
                                             width: 122px;
                                             spacing: 8px;
-                                            Text { text: @tr("Calendar"); color: root.body-text; font-size: TypeScale.caption; vertical-alignment: center; }
+                                            if account.provider == "imap" : Button {
+                                                text: @tr("CalDAV");
+                                                height: 30px;
+                                                clicked => { root.open-caldav-settings(account); }
+                                            }
+                                            if account.provider != "imap" : Text { text: @tr("Calendar"); color: root.body-text; font-size: TypeScale.caption; vertical-alignment: center; }
                                             Rectangle { horizontal-stretch: 1; }
                                             Switch { checked: account.calendar_enabled; toggled => { root.set_account_calendar_enabled(account.id, self.checked); } }
                                         }
@@ -847,10 +868,7 @@ export component SettingsDialog inherits Rectangle {
                                             width: 116px;
                                             height: 30px;
                                             text: @tr("Set up CalDAV");
-                                            clicked => {
-                                                root.caldav_account_id = account.id;
-                                                root.caldav_username = account.username;
-                                            }
+                                            clicked => { root.open-caldav-settings(account); }
                                         }
                                         if !root.compact && account.carddav_connected : HorizontalBox {
                                             width: 122px;
@@ -908,6 +926,19 @@ export component SettingsDialog inherits Rectangle {
                                         description-color: root.faint-text;
                                         selected(index, value) => { root.select-mail-history(account.id, index); }
                                     }
+                                    if root.compact && account.provider == "imap" : HorizontalBox {
+                                        x: 24px;
+                                        y: drop-target.divider-y + 139px;
+                                        width: parent.width - 48px;
+                                        height: 36px;
+                                        spacing: 10px;
+                                        Button {
+                                            text: account.calendar_connected ? @tr("CalDAV settings") : @tr("Set up CalDAV");
+                                            clicked => { root.open-caldav-settings(account); }
+                                        }
+                                        Rectangle { horizontal-stretch: 1; }
+                                        if account.calendar_connected : Switch { checked: account.calendar_enabled; toggled => { root.set_account_calendar_enabled(account.id, self.checked); } }
+                                    }
                                 }
                             }
                             AccountMailPreferencesPanel { accounts: root.connected_accounts; compact: root.compact; }
@@ -921,17 +952,6 @@ export component SettingsDialog inherits Rectangle {
                                     if root.compact : VerticalBox { spacing: 8px; LineEdit { enabled: !root.account_setup_in_progress && !root.oauth_in_progress && !root.oauth_settings_saving; text: root.google_client_id; placeholder-text: @tr("Gmail desktop client ID"); edited(text) => { root.google_client_id = text; } } LineEdit { enabled: !root.account_setup_in_progress && !root.oauth_in_progress && !root.oauth_settings_saving; text: root.google_client_secret; input-type: password; placeholder-text: @tr("Gmail client secret (optional)"); edited(text) => { root.google_client_secret = text; } } Button { enabled: !root.account_setup_in_progress && !root.oauth_in_progress && !root.oauth_settings_saving; text: @tr("Save Gmail settings"); clicked => { root.save_oauth_app("gmail", root.google_client_id, root.google_client_secret); } } }
                                     HorizontalBox { spacing: 8px; LineEdit { enabled: !root.account_setup_in_progress && !root.oauth_in_progress && !root.oauth_settings_saving; text: root.ms_client_id; placeholder-text: @tr("Microsoft Entra desktop client ID"); edited(text) => { root.ms_client_id = text; } } Button { enabled: !root.account_setup_in_progress && !root.oauth_in_progress && !root.oauth_settings_saving; text: @tr("Save Outlook"); clicked => { root.save_oauth_app("microsoft", root.ms_client_id, ""); } } }
                                     Text { text: @tr("Outlook public desktop clients use PKCE and do not need a client secret."); color: root.faint-text; font-size: TypeScale.caption; wrap: word-wrap; }
-                                }
-                            }
-                            Rectangle {
-                                visible: root.caldav_account_id > 0;
-                                height: 206px;
-                                SettingsCard { title: @tr("Connect CalDAV"); description: @tr("Works with iCloud, Fastmail, Nextcloud, and standards-compliant CalDAV servers."); surface: root.surface; card-border-color: root.border-subtle; heading: root.heading; secondary-text: root.faint-text; }
-                                VerticalBox {
-                                    padding-top: 70px; padding-right: 20px; padding-bottom: 16px; padding-left: 20px; spacing: 8px;
-                                    LineEdit { text: root.caldav_url; placeholder-text: @tr("https://calendar.example.com/"); edited(value) => { root.caldav_url = value; } }
-                                    HorizontalBox { spacing: 8px; LineEdit { text: root.caldav_username; placeholder-text: @tr("Username"); edited(value) => { root.caldav_username = value; } } LineEdit { text: root.caldav_password; input-type: password; placeholder-text: @tr("App password"); edited(value) => { root.caldav_password = value; } } }
-                                    HorizontalBox { spacing: 8px; Rectangle { horizontal-stretch: 1; } Button { text: @tr("Cancel"); clicked => { root.caldav_account_id = -1; } } Button { text: @tr("Connect"); primary: true; clicked => { root.connect_caldav(root.caldav_account_id, root.caldav_url, root.caldav_username, root.caldav_password); } } }
                                 }
                             }
                             Rectangle {
@@ -1263,6 +1283,113 @@ export component SettingsDialog inherits Rectangle {
                     SettingsNavItem { text: @tr("Data management"); icon: @image-url("../icons/phosphor/database-fill.svg"); selected: root.settings_tab == "Data"; accent: root.accent; accent-soft: root.accent-soft; body-text: root.body-text; muted-text: root.muted-text; clicked => { root.settings_tab = "Data"; root.compact-nav-open = false; } }
                     SettingsNavItem { text: @tr("About"); icon: @image-url("../icons/phosphor/info-fill.svg"); selected: root.settings_tab == "About"; accent: root.accent; accent-soft: root.accent-soft; body-text: root.body-text; muted-text: root.muted-text; clicked => { root.settings_tab = "About"; root.compact-nav-open = false; } }
                     Rectangle { vertical-stretch: 1; }
+                }
+            }
+        }
+
+        Rectangle {
+            visible: root.settings_open && root.caldav_account_id > 0;
+            width: parent.width;
+            height: parent.height;
+            background: #00000088;
+            z: 900;
+            accessible-role: groupbox;
+            accessible-label: root.caldav_manage_existing ? @tr("CalDAV settings") : @tr("Set up CalDAV");
+
+            TouchArea { clicked => { root.close-caldav-settings(); } }
+
+            caldav-panel := Rectangle {
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                width: min(520px, parent.width - 24px);
+                height: min(root.compact ? 410px : 354px, parent.height - 24px);
+                background: root.surface;
+                border-radius: 12px;
+                border-width: 1px;
+                border-color: root.border-subtle;
+                drop-shadow-blur: 24px;
+                drop-shadow-offset-y: 8px;
+                drop-shadow-color: #00000055;
+
+                caldav-focus := FocusScope {
+                    forward-focus: caldav-url-input;
+                    key-pressed(event) => {
+                        if event.text == Key.Escape {
+                            root.close-caldav-settings();
+                            return accept;
+                        }
+                        reject
+                    }
+
+                    VerticalBox {
+                        padding-top: 22px;
+                        padding-right: 22px;
+                        padding-bottom: 20px;
+                        padding-left: 22px;
+                        spacing: 12px;
+
+                        HorizontalBox {
+                            height: 46px;
+                            spacing: 12px;
+                            Rectangle {
+                                width: 44px;
+                                height: 44px;
+                                border-radius: 12px;
+                                background: root.accent-soft;
+                                Image { x: 11px; y: 11px; width: 22px; height: 22px; source: @image-url("../icons/phosphor/calendar.svg"); colorize: root.accent; image-fit: contain; accessible-role: none; }
+                            }
+                            VerticalBox {
+                                spacing: 2px;
+                                Text { text: root.caldav_manage_existing ? @tr("CalDAV settings") : @tr("Set up CalDAV"); color: root.title-color; font-size: TypeScale.heading; font-weight: 700; overflow: elide; }
+                                Text { text: root.caldav_manage_existing ? @tr("Discover new calendars.") : @tr("Works with iCloud, Fastmail, Nextcloud, and standards-compliant CalDAV servers."); color: root.faint-text; font-size: TypeScale.caption; overflow: elide; }
+                            }
+                            Rectangle { horizontal-stretch: 1; }
+                            IconButton { width: 40px; height: 40px; icon: @image-url("../icons/phosphor/x.svg"); icon-color: root.secondary-text; idle-background: transparent; hover-background: root.accent-soft; tooltip-text: @tr("Close"); clicked => { root.close-caldav-settings(); } }
+                        }
+
+                        caldav-url-input := FormField {
+                            height: 57px;
+                            label: @tr("Server address");
+                            value: root.caldav_url;
+                            placeholder: @tr("https://calendar.example.com/");
+                            label-color: root.secondary-text;
+                            edited(value) => { root.caldav_url = value; }
+                        }
+                        FormField {
+                            height: 57px;
+                            label: @tr("Username");
+                            value: root.caldav_username;
+                            placeholder: @tr("Usually your email address");
+                            label-color: root.secondary-text;
+                            edited(value) => { root.caldav_username = value; }
+                        }
+                        FormField {
+                            height: 57px;
+                            label: root.caldav_manage_existing ? @tr("New app password · Optional") : @tr("App password");
+                            value: root.caldav_password;
+                            placeholder: root.caldav_manage_existing ? @tr("Leave blank to keep the current password") : @tr("Stored securely in your system keyring");
+                            input-type: password;
+                            label-color: root.secondary-text;
+                            edited(value) => { root.caldav_password = value; }
+                        }
+
+                        if root.sync_status != "" : Text { text: root.sync_status; color: root.secondary-text; font-size: TypeScale.caption; wrap: word-wrap; height: self.preferred-height; }
+                        Rectangle { vertical-stretch: 1; }
+
+                        HorizontalBox {
+                            height: root.compact ? 44px : 34px;
+                            spacing: 8px;
+                            Rectangle { horizontal-stretch: 1; }
+                            Button { height: parent.height; text: @tr("Cancel"); clicked => { root.close-caldav-settings(); } }
+                            Button {
+                                height: parent.height;
+                                text: root.caldav_manage_existing ? @tr("Reconnect") : @tr("Connect");
+                                primary: true;
+                                enabled: root.caldav_url != "" && (root.caldav_manage_existing || root.caldav_password != "");
+                                clicked => { root.connect_caldav(root.caldav_account_id, root.caldav_url, root.caldav_username, root.caldav_password); }
+                            }
+                        }
+                    }
                 }
             }
         }

@@ -316,6 +316,7 @@ export component FormField inherits VerticalBox {
     in property <InputType> input-type: InputType.text;
     in property <color> label-color;
     callback edited(string);
+    forward-focus: field;
 
     padding: 0px;
     spacing: 5px;
@@ -327,7 +328,7 @@ export component FormField inherits VerticalBox {
         font-weight: 600;
         vertical-alignment: center;
     }
-    LineEdit {
+    field := LineEdit {
         enabled: root.enabled;
         height: 36px;
         text: root.value;

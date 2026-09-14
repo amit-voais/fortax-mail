@@ -5,6 +5,7 @@
 use crate::error::Result;
 use crate::models::Calendar;
 use rusqlite::{Connection, OptionalExtension, Row, params};
+use std::collections::HashSet;
 
 macro_rules! config_select {
     ($tail:literal) => {
@@ -210,6 +211,40 @@ pub fn upsert_calendar_with_initial_enabled(
     .map_err(Into::into)
 }
 
+/// Remove collections no longer advertised during an explicit reconnect.
+/// Their events stay available as local events and can be adopted again by
+/// UID if that collection is connected later.
+pub fn retain_calendars(
+    conn: &Connection,
+    account_id: i64,
+    urls: &HashSet<String>,
+) -> Result<()> {
+    let mut statement = conn.prepare("SELECT id, url FROM calendars WHERE account_id = ?1")?;
+    let calendars = statement
+        .query_map(params![account_id], |row| {
+            Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    drop(statement);
+    for (id, url) in calendars {
+        if !urls.contains(&url) {
+            conn.execute(
+                "UPDATE calendar_events
+                 SET calendar_id = NULL, caldav_href = NULL, etag = NULL, dirty = 0
+                 WHERE calendar_id = ?1",
+                params![id],
+            )?;
+            conn.execute(
+                "DELETE FROM calendar_events
+                 WHERE account_id = ?1 AND calendar_id IS NULL AND deleted = 1",
+                params![account_id],
+            )?;
+            conn.execute("DELETE FROM calendars WHERE id = ?1", params![id])?;
+        }
+    }
+    Ok(())
+}
+
 pub fn list_calendars(conn: &Connection, account_id: Option<i64>) -> Result<Vec<Calendar>> {
     let mut out = Vec::new();
     match account_id {
@@ -374,6 +409,13 @@ mod tests {
             true,
         )
         .unwrap();
+        c.execute(
+            "INSERT INTO calendar_events
+             (account_id, ical_uid, starts_at, calendar_id, caldav_href, etag, dirty)
+             VALUES (1, 'removed@test', 1000, ?1, '/cal/b/removed.ics', 'etag', 1)",
+            params![b],
+        )
+        .unwrap();
         // Re-discovery keeps ids and sync state.
         set_sync_state(&c, a, Some("c1"), Some("t1"), 42).unwrap();
         let a2 = upsert_calendar(
@@ -412,6 +454,26 @@ mod tests {
         set_calendar_enabled(&c, b, false).unwrap();
         // Default falls back to an enabled calendar.
         assert_eq!(default_calendar(&c, 1).unwrap().unwrap().id, a);
+
+        retain_calendars(&c, 1, &HashSet::from(["https://dav.example.com/cal/a/".into()]))
+            .unwrap();
+        assert_eq!(list_calendars(&c, Some(1)).unwrap().len(), 1);
+        let detached: (Option<i64>, Option<String>, Option<String>, bool) = c
+            .query_row(
+                "SELECT calendar_id, caldav_href, etag, dirty
+                 FROM calendar_events WHERE ical_uid = 'removed@test'",
+                [],
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get::<_, i64>(3)? != 0,
+                    ))
+                },
+            )
+            .unwrap();
+        assert_eq!(detached, (None, None, None, false));
 
         delete_config(&c, 1).unwrap();
         assert!(all_configs(&c).unwrap().is_empty());

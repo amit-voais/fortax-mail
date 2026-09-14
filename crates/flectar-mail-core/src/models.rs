@@ -1455,6 +1455,8 @@ pub struct CalendarConnection {
     pub account_id: i64,
     /// google | microsoft | generic
     pub kind: String,
+    pub base_url: String,
+    pub username: String,
     pub enabled: bool,
     pub last_error: Option<String>,
 }

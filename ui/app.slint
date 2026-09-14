@@ -745,6 +745,7 @@ export component AppWindow inherits Window {
     in-out property <string> caldav_url: "";
     in-out property <string> caldav_username: "";
     in-out property <string> caldav_password: "";
+    in-out property <bool> caldav_manage_existing: false;
     in-out property <int> carddav_account_id: -1;
     in-out property <string> carddav_url: "";
     in-out property <string> carddav_username: "";
@@ -1348,6 +1349,7 @@ export component AppWindow inherits Window {
             caldav_url <=> root.caldav_url;
             caldav_username <=> root.caldav_username;
             caldav_password <=> root.caldav_password;
+            caldav_manage_existing <=> root.caldav_manage_existing;
             carddav_account_id <=> root.carddav_account_id;
             carddav_url <=> root.carddav_url;
             carddav_username <=> root.carddav_username;

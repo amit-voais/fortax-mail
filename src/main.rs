@@ -5616,24 +5616,34 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     let state_for_caldav = Rc::clone(&state);
     let runtime_for_caldav = Rc::clone(&runtime);
     let updates_for_caldav = ui_task_tx.clone();
+    let app_for_caldav = app.as_weak();
     app.on_connect_caldav(move |account_id, url, username, password| {
         let Some(core) = state_for_caldav.borrow().core.clone() else {
             return;
         };
         let updates = updates_for_caldav.clone();
+        let app = app_for_caldav.clone();
         runtime_for_caldav.spawn(async move {
-            let message = match core
+            let result = core
                 .connect_caldav(
                     i64::from(account_id),
                     url.to_string(),
                     username.to_string(),
                     password.to_string(),
                 )
-                .await
-            {
+                .await;
+            let connected = result.is_ok();
+            let message = match result {
                 Ok(_) => UiMessage::plain("CalDAV connected and initial sync started."),
                 Err(error) => UiMessage::detail("Could not connect CalDAV: {}", error),
             };
+            if connected {
+                let _ = app.upgrade_in_event_loop(|app| {
+                    app.set_caldav_account_id(-1);
+                    app.set_caldav_password("".into());
+                    app.set_caldav_manage_existing(false);
+                });
+            }
             let connections = core.load_calendar_connections().await.ok();
             let _ = updates
                 .send(UiTaskUpdate {

@@ -174,6 +174,16 @@ pub(super) fn apply_connected_accounts(
                     .or_else(|| calendar_errors.get(&account.id).cloned())
                     .unwrap_or_default()
                     .into(),
+                caldav_url: calendar
+                    .filter(|connection| connection.kind == "generic")
+                    .map(|connection| connection.base_url.clone())
+                    .unwrap_or_default()
+                    .into(),
+                caldav_username: calendar
+                    .filter(|connection| connection.kind == "generic")
+                    .map(|connection| connection.username.clone())
+                    .unwrap_or_else(|| config.username.clone())
+                    .into(),
                 carddav_connected: carddav.is_some(),
                 carddav_enabled: carddav.is_some_and(|connection| connection.enabled),
                 carddav_status: carddav

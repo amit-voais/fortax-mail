@@ -4532,7 +4532,11 @@ impl Core {
             }
         };
 
-        // Build auth without persisting anything yet.
+        let submitted_password = args.password.clone().filter(|p| !p.is_empty());
+
+        // Build auth without persisting anything yet. An empty password on an
+        // existing generic connection means "keep the current app password",
+        // so settings can be edited without exposing or re-entering it.
         let auth = match kind {
             "google" => caldav::DavAuth::Bearer(
                 self.tokens
@@ -4541,12 +4545,28 @@ impl Core {
             ),
             _ => {
                 let user = args.username.clone().unwrap_or_default();
-                let pass = args
-                    .password
-                    .clone()
-                    .filter(|p| !p.is_empty())
-                    .ok_or_else(|| CoreError::CalDav("password is required".into()))?;
                 credentials::check_available_async(self.credentials.clone()).await?;
+                let pass = match submitted_password.clone() {
+                    Some(password) => password,
+                    None => {
+                        let has_existing_generic_config = self
+                            .calendar_db
+                            .read(move |conn| {
+                                Ok(repo::caldav::get_config(conn, account_id)?
+                                    .is_some_and(|config| config.kind == "generic"))
+                            })
+                            .await?;
+                        if !has_existing_generic_config {
+                            return Err(CoreError::CalDav("password is required".into()));
+                        }
+                        credentials::load_async(
+                            self.credentials.clone(),
+                            account_id,
+                            Slot::CaldavPassword,
+                        )
+                        .await?
+                    }
+                };
                 caldav::DavAuth::Basic(user, pass)
             }
         };
@@ -4579,7 +4599,7 @@ impl Core {
 
         // Persist: keyring first, then config + collections.
         if kind == "generic"
-            && let Some(pass) = args.password.clone()
+            && let Some(pass) = submitted_password
         {
             credentials::store_async(
                 self.credentials.clone(),
@@ -4608,6 +4628,10 @@ impl Core {
                 if let Some(google_calendars) = &google_calendars {
                     googlecal::reconcile_calendars(&tx, account_id, google_calendars)?;
                 } else {
+                    let calendar_urls = calendars
+                        .iter()
+                        .map(|calendar| calendar.url.clone())
+                        .collect::<HashSet<_>>();
                     let mut first_id = None;
                     for c in &calendars {
                         let id = repo::caldav::upsert_calendar(
@@ -4620,6 +4644,7 @@ impl Core {
                         )?;
                         first_id.get_or_insert(id);
                     }
+                    repo::caldav::retain_calendars(&tx, account_id, &calendar_urls)?;
                     if let Some(id) = first_id {
                         // Keep an existing default if one is set; else first wins.
                         let has_default: i64 = tx.query_row(
@@ -4895,6 +4920,8 @@ impl Core {
                     .map(|cfg| CalendarConnection {
                         account_id: cfg.account_id,
                         kind: cfg.kind,
+                        base_url: cfg.base_url,
+                        username: cfg.username.unwrap_or_default(),
                         enabled: cfg.enabled,
                         last_error: cfg.last_error,
                     })
