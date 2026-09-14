@@ -1495,28 +1495,59 @@ fn build_email_font_ctx() -> parley::FontContext {
     FONTS.with(Clone::clone)
 }
 fn create_email_font_ctx() -> parley::FontContext {
-    use parley::fontique::{Blob, Collection, CollectionOptions, GenericFamily, SourceCache};
+    create_email_font_ctx_with_system_fonts(!cfg!(target_arch = "wasm32"))
+}
+
+fn create_email_font_ctx_with_system_fonts(system_fonts: bool) -> parley::FontContext {
+    use parley::fontique::{
+        Blob, Collection, CollectionOptions, FallbackKey, GenericFamily, Script, SourceCache,
+    };
 
     let mut font_ctx = parley::FontContext {
         source_cache: SourceCache::new_shared(),
         collection: Collection::new(CollectionOptions {
             shared: false,
-            system_fonts: !cfg!(target_arch = "wasm32"),
+            system_fonts,
         }),
     };
     font_ctx
         .collection
         .register_fonts(Blob::new(Arc::new(blitz_dom::BULLET_FONT) as _), None);
 
+    // Keep the host's preferred sans-serif families, then use the font that is
+    // already bundled for the composer as the guaranteed final fallback.
+    let bundled_sans = font_ctx
+        .collection
+        .register_fonts(
+            Blob::new(Arc::new(crate::compose_editor::UI_FONT_DATA) as _),
+            None,
+        )
+        .first()
+        .map(|(family, _)| *family)
+        .expect("bundled UI font must be valid");
+    let mut sans_families: Vec<_> = font_ctx
+        .collection
+        .generic_families(GenericFamily::SansSerif)
+        .collect();
+
     if let Some(helvetica_neue) = font_ctx.collection.family_id("Helvetica Neue") {
-        let existing: Vec<_> = font_ctx
-            .collection
-            .generic_families(GenericFamily::SansSerif)
-            .collect();
-        font_ctx.collection.set_generic_families(
-            GenericFamily::SansSerif,
-            std::iter::once(helvetica_neue).chain(existing),
-        );
+        sans_families.retain(|family| *family != helvetica_neue);
+        sans_families.insert(0, helvetica_neue);
+    }
+    sans_families.retain(|family| *family != bundled_sans);
+    sans_families.push(bundled_sans);
+    font_ctx
+        .collection
+        .set_generic_families(GenericFamily::SansSerif, sans_families.into_iter());
+
+    // Runs with only an unavailable named family resolve through script
+    // fallback. Cover Latin plus Common, which contains digits and punctuation.
+    for script in [*b"Latn", *b"Zyyy"] {
+        let key = FallbackKey::new(Script::from_bytes(script), None);
+        let mut fallbacks: Vec<_> = font_ctx.collection.fallback_families(key).collect();
+        fallbacks.retain(|family| *family != bundled_sans);
+        fallbacks.push(bundled_sans);
+        font_ctx.collection.set_fallbacks(key, fallbacks.into_iter());
     }
 
     font_ctx
@@ -1535,6 +1566,39 @@ fn prepare_email_html_at(
     width: u32,
     height: u32,
     scale: f32,
+) -> Result<PreparedEmail, String> {
+    prepare_email_html_at_with_font_ctx(
+        html,
+        net_provider,
+        width,
+        height,
+        scale,
+        build_email_font_ctx(),
+    )
+}
+
+#[cfg(test)]
+fn prepare_email_html_with_font_ctx(
+    html: &str,
+    font_ctx: parley::FontContext,
+) -> Result<PreparedEmail, String> {
+    prepare_email_html_at_with_font_ctx(
+        html,
+        None,
+        INITIAL_WIDTH,
+        INITIAL_HEIGHT,
+        1.0,
+        font_ctx,
+    )
+}
+
+fn prepare_email_html_at_with_font_ctx(
+    html: &str,
+    net_provider: Option<Arc<dyn NetProvider>>,
+    width: u32,
+    height: u32,
+    scale: f32,
+    font_ctx: parley::FontContext,
 ) -> Result<PreparedEmail, String> {
     let started = render_timings_enabled().then(Instant::now);
     let (html, notice) = crate::email_document::bounded_html(html);
@@ -1555,7 +1619,7 @@ fn prepare_email_html_at(
             viewport: Some(Viewport::new(width, height, scale, ColorScheme::Light)),
             net_provider,
             abort_signal: Some(abort.0.as_ref().unwrap().signal.clone()),
-            font_ctx: Some(build_email_font_ctx()),
+            font_ctx: Some(font_ctx),
             ..Default::default()
         },
     );

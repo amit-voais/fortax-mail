@@ -8,9 +8,11 @@ fn renderer(html: &str) -> GpuEmailRenderer {
 const BODY: &str = "<body style='margin:0'><p style='margin:0;font-size:20px'>Cafe\u{301} hello <a href='https://example.com'>linked world</a></p></body>";
 
 #[test]
-fn issue_16_segoe_ui_digits_paint_as_visible_content() {
-    let mut prepared = prepare_email_html(
-        r#"<body style="margin:0;background:#fff"><div style="font-family:Segoe UI;font-size:20px;color:#000">0123456789</div></body>"#,
+fn issue_16_digits_paint_with_a_deterministic_fallback() {
+    let font_ctx = create_email_font_ctx_with_system_fonts(false);
+    let mut prepared = prepare_email_html_with_font_ctx(
+        r#"<body style="margin:0;background:#fff"><div style="font-family:'Segoe UI';font-size:20px;color:#000">0123456789</div></body>"#,
+        font_ctx,
     )
     .unwrap();
     let frame = render_prepared_cpu(&mut prepared, 240, 60, 1.0).unwrap();
@@ -20,7 +22,7 @@ fn issue_16_segoe_ui_digits_paint_as_visible_content() {
         .iter()
         .filter(|pixel| pixel.a > 0 && pixel.r < 100 && pixel.g < 100 && pixel.b < 100)
         .count();
-    assert!(dark_pixels > 100, "Segoe UI digits produced no visible outlines");
+    assert!(dark_pixels > 100, "digits produced no visible outlines");
 }
 
 #[test]

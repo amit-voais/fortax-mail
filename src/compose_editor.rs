@@ -14,8 +14,8 @@ use std::{
 
 const FONT_SIZE_LOGICAL: f32 = 13.0;
 const LINE_HEIGHT_LOGICAL: f32 = 18.0;
-const UI_FONT_FAMILY: &str = "Google Sans Flex";
-const UI_FONT_DATA: &[u8] = include_bytes!(
+pub(crate) const UI_FONT_FAMILY: &str = "Google Sans Flex";
+pub(crate) const UI_FONT_DATA: &[u8] = include_bytes!(
     "../resources/fonts/google-sans-flex/GoogleSansFlex-VariableFont_GRAD,ROND,opsz,slnt,wdth,wght.ttf"
 );
 const TILE_HEIGHT_LOGICAL: f32 = 384.0;
