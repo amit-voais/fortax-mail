@@ -181,6 +181,192 @@ async fn untrusted_certificate_is_rejected() {
     task.await.unwrap();
 }
 
+#[derive(Clone, Copy)]
+enum ImapMoveFixture {
+    LegacyUidPlus,
+    AdvertisedMoveRejected,
+    LegacyWithoutUidPlus,
+}
+
+async fn imap_move_server(fixture: ImapMoveFixture) -> (u16, tokio::task::JoinHandle<()>) {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let task = tokio::spawn(async move {
+        let (tcp, _) = listener.accept().await.unwrap();
+        let tls = acceptor_for(CERT).accept(tcp).await.unwrap();
+        let mut stream = BufReader::new(tls);
+        stream.write_all(b"* OK test IMAP ready\r\n").await.unwrap();
+
+        let login = line(&mut stream).await;
+        assert!(login.contains(" LOGIN "), "unexpected command: {login:?}");
+        let tag = login.split_whitespace().next().unwrap();
+        stream
+            .write_all(format!("{tag} OK logged in\r\n").as_bytes())
+            .await
+            .unwrap();
+
+        let select = line(&mut stream).await;
+        assert!(
+            select.contains(" SELECT "),
+            "unexpected command: {select:?}"
+        );
+        let tag = select.split_whitespace().next().unwrap();
+        stream
+            .write_all(
+                format!(
+                    "* FLAGS (\\Seen \\Deleted)\r\n\
+                     * 2 EXISTS\r\n\
+                     * OK [UIDVALIDITY 1] valid\r\n\
+                     * OK [UIDNEXT 43] next\r\n\
+                     {tag} OK [READ-WRITE] selected\r\n"
+                )
+                .as_bytes(),
+            )
+            .await
+            .unwrap();
+
+        let capability = line(&mut stream).await;
+        assert!(
+            capability.contains(" CAPABILITY"),
+            "unexpected command: {capability:?}"
+        );
+        let tag = capability.split_whitespace().next().unwrap();
+        let capabilities = match fixture {
+            ImapMoveFixture::LegacyUidPlus => "IMAP4rev1 UIDPLUS",
+            ImapMoveFixture::AdvertisedMoveRejected => "IMAP4rev1 UIDPLUS MOVE",
+            ImapMoveFixture::LegacyWithoutUidPlus => "IMAP4rev1",
+        };
+        stream
+            .write_all(format!("* CAPABILITY {capabilities}\r\n{tag} OK capability\r\n").as_bytes())
+            .await
+            .unwrap();
+
+        match fixture {
+            ImapMoveFixture::LegacyUidPlus => {
+                let copy = line(&mut stream).await;
+                assert!(
+                    copy.contains(" UID COPY 42 "),
+                    "unexpected command: {copy:?}"
+                );
+                let tag = copy.split_whitespace().next().unwrap();
+                stream
+                    .write_all(format!("{tag} OK copied\r\n").as_bytes())
+                    .await
+                    .unwrap();
+
+                let store = line(&mut stream).await;
+                assert!(
+                    store.contains(" UID STORE 42 +FLAGS.SILENT (\\Deleted)"),
+                    "unexpected command: {store:?}"
+                );
+                let tag = store.split_whitespace().next().unwrap();
+                stream
+                    .write_all(format!("{tag} OK stored\r\n").as_bytes())
+                    .await
+                    .unwrap();
+
+                let expunge = line(&mut stream).await;
+                assert!(
+                    expunge.contains(" UID EXPUNGE 42"),
+                    "unexpected command: {expunge:?}"
+                );
+                let tag = expunge.split_whitespace().next().unwrap();
+                stream
+                    .write_all(format!("* 1 EXPUNGE\r\n{tag} OK expunged\r\n").as_bytes())
+                    .await
+                    .unwrap();
+            }
+            ImapMoveFixture::AdvertisedMoveRejected => {
+                let move_command = line(&mut stream).await;
+                assert!(
+                    move_command.contains(" UID MOVE 42 "),
+                    "unexpected command: {move_command:?}"
+                );
+                let tag = move_command.split_whitespace().next().unwrap();
+                stream
+                    .write_all(format!("{tag} NO [NOPERM] move denied\r\n").as_bytes())
+                    .await
+                    .unwrap();
+            }
+            ImapMoveFixture::LegacyWithoutUidPlus => {
+                let copy = line(&mut stream).await;
+                assert!(
+                    copy.contains(" UID COPY 42 "),
+                    "unexpected command: {copy:?}"
+                );
+                let tag = copy.split_whitespace().next().unwrap();
+                stream
+                    .write_all(format!("{tag} OK copied\r\n").as_bytes())
+                    .await
+                    .unwrap();
+
+                let store = line(&mut stream).await;
+                assert!(
+                    store.contains(" UID STORE 42 +FLAGS.SILENT (\\Deleted)"),
+                    "unexpected command: {store:?}"
+                );
+                let tag = store.split_whitespace().next().unwrap();
+                stream
+                    .write_all(format!("{tag} OK stored\r\n").as_bytes())
+                    .await
+                    .unwrap();
+            }
+        }
+
+        // In the rejection case this proves the client did not issue a second
+        // COPY. Without UIDPLUS it proves the client did not use the unsafe,
+        // mailbox-wide EXPUNGE command.
+        let logout = line(&mut stream).await;
+        assert!(
+            logout.contains(" LOGOUT"),
+            "unsafe command after move result: {logout:?}"
+        );
+        let tag = logout.split_whitespace().next().unwrap();
+        stream
+            .write_all(format!("* BYE closing\r\n{tag} OK logout\r\n").as_bytes())
+            .await
+            .unwrap();
+    });
+    (port, task)
+}
+
+async fn run_imap_move(fixture: ImapMoveFixture) -> flectar_mail_core::error::Result<()> {
+    let (port, task) = imap_move_server(fixture).await;
+    let mut session = imap::connect_with_settings(
+        "127.0.0.1",
+        port,
+        credentials(),
+        &settings(ConnectionSecurity::Tls),
+    )
+    .await
+    .unwrap();
+    imap::select(&mut session, "INBOX").await.unwrap();
+    let result = imap::uid_move(&mut session, 42, "Archive").await;
+    imap::logout(session).await;
+    task.await.unwrap();
+    result
+}
+
+#[tokio::test]
+async fn imap_move_uses_uidplus_fallback_when_move_is_not_advertised() {
+    run_imap_move(ImapMoveFixture::LegacyUidPlus).await.unwrap();
+}
+
+#[tokio::test]
+async fn rejected_advertised_move_does_not_fall_back_to_copy() {
+    let error = run_imap_move(ImapMoveFixture::AdvertisedMoveRejected)
+        .await
+        .unwrap_err();
+    assert!(error.to_string().contains("move denied"));
+}
+
+#[tokio::test]
+async fn legacy_move_without_uidplus_never_uses_mailbox_wide_expunge() {
+    run_imap_move(ImapMoveFixture::LegacyWithoutUidPlus)
+        .await
+        .unwrap();
+}
+
 async fn smtp_connection(mode: ConnectionSecurity) {
     smtp_connection_with_certificate(mode, CERT).await;
 }

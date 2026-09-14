@@ -7062,6 +7062,13 @@ fn apply_thread_action(
             let target = params
                 .and_then(|p| p.target_folder_id)
                 .ok_or_else(|| CoreError::Other("move requires targetFolderId".into()))?;
+            let target_folder = repo::folders::get(&tx, target)?
+                .ok_or_else(|| CoreError::NotFound(format!("folder {target}")))?;
+            if target_folder.account_id != account_id {
+                return Err(CoreError::Other(
+                    "messages cannot be moved between accounts".into(),
+                ));
+            }
             for (id, f, u, _r, _s, _role) in &msgs {
                 if f.is_some() && *f != Some(target) {
                     let aid = enqueue_move(
@@ -7148,6 +7155,56 @@ fn apply_thread_action(
     repo::threads::recompute(&tx, thread_id)?;
     tx.commit()?;
     Ok(out)
+}
+
+#[cfg(test)]
+mod move_action_validation_tests {
+    use super::*;
+
+    #[test]
+    fn move_rejects_a_folder_owned_by_another_account_without_local_mutation() {
+        let mut conn = db::testutil::conn();
+        db::testutil::seed_account(&conn);
+        conn.execute(
+            "INSERT INTO accounts (id, email, provider, auth_kind, username,
+             imap_host, imap_port, smtp_host, smtp_port, created_at)
+             VALUES (2,'other@test.dev','imap','password','other','h',993,'h',587,0)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO folders (id, account_id, imap_name, role)
+             VALUES (2, 2, 'Archive', 'archive')",
+            [],
+        )
+        .unwrap();
+        let (thread_id, message_id) =
+            db::testutil::seed_message(&conn, "sender@test.dev", "cross account", false);
+        let before = repo::messages::get_row(&conn, message_id).unwrap().unwrap();
+
+        let error = apply_thread_action(
+            &mut conn,
+            thread_id,
+            ActionKind::Move,
+            Some(&ActionParams {
+                wake_at: None,
+                target_folder_id: Some(2),
+                label_id: None,
+            }),
+        )
+        .unwrap_err();
+
+        assert!(error.to_string().contains("between accounts"));
+        let after = repo::messages::get_row(&conn, message_id).unwrap().unwrap();
+        assert_eq!(after.folder_id, before.folder_id);
+        assert_eq!(after.uid, before.uid);
+        assert_eq!(
+            conn.query_row("SELECT COUNT(*) FROM pending_actions", [], |row| row
+                .get::<_, i64>(0))
+                .unwrap(),
+            0
+        );
+    }
 }
 
 /// Inverse of an action: cancel if pending, revert the local mutation, and

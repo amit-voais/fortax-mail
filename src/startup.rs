@@ -409,6 +409,7 @@ pub(crate) struct PendingCoreUpdates {
     pub(crate) changed_threads: HashSet<i64>,
     pub(crate) all_mail_changed: bool,
     pub(crate) account_states: HashMap<i64, (String, Option<String>)>,
+    pub(crate) action_error: Option<String>,
     pub(crate) calendar_changed: bool,
     pub(crate) contacts_changed: bool,
 }
@@ -539,6 +540,17 @@ pub(crate) fn spawn_core_event_listener(
                         .unwrap_or_else(|poisoned| poisoned.into_inner())
                         .account_states
                         .insert(account_id, (sync_state, sync_error));
+                    true
+                }
+                Ok(CoreEvent::ActionState {
+                    state,
+                    error: Some(error),
+                    ..
+                }) if state == "failed" => {
+                    pending
+                        .lock()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner())
+                        .action_error = Some(error);
                     true
                 }
                 Ok(CoreEvent::CalendarUpdated { .. })

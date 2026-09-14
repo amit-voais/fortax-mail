@@ -2882,6 +2882,13 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         {
             apply_account_states(&app, &mail_update_state, &pending.account_states);
         }
+        if let Some(error) = pending.action_error
+            && let Some(app) = mail_update_app.upgrade()
+        {
+            let message = UiMessage::detail("Message action failed: {}", error);
+            app.set_render_status(message.clone());
+            app.set_sync_status(message);
+        }
         if pending.calendar_changed
             && let Some(app) = mail_update_app.upgrade()
             && app.get_active_view() == "calendar"

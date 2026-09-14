@@ -1097,9 +1097,22 @@ pub async fn store_flag(session: &mut Session, uid: u32, flag: &str, add: bool) 
 }
 
 async fn store_flag_inner(session: &mut Session, uid: u32, flag: &str, add: bool) -> Result<()> {
-    let op = if add { "+FLAGS" } else { "-FLAGS" };
+    store_flag_set_inner(session, &uid.to_string(), flag, add).await
+}
+
+async fn store_flag_set_inner(
+    session: &mut Session,
+    uid_set: &str,
+    flag: &str,
+    add: bool,
+) -> Result<()> {
+    let op = if add {
+        "+FLAGS.SILENT"
+    } else {
+        "-FLAGS.SILENT"
+    };
     let mut stream = session
-        .uid_store(uid.to_string(), format!("{op} ({flag})"))
+        .uid_store(uid_set, format!("{op} ({flag})"))
         .await
         .map_err(|e| CoreError::Imap(e.to_string()))?;
     while let Some(item) = stream.next().await {
@@ -1108,7 +1121,12 @@ async fn store_flag_inner(session: &mut Session, uid: u32, flag: &str, add: bool
     Ok(())
 }
 
-/// MOVE if the server supports it, else COPY + \Deleted + EXPUNGE.
+/// Move one UID without guessing at unsupported server extensions.
+///
+/// RFC 6851 only permits `UID MOVE` when `MOVE` is advertised. Legacy IMAP
+/// servers use COPY + \Deleted instead. Prefer UID EXPUNGE for that fallback;
+/// without UIDPLUS, leave the source marked \Deleted because mailbox-wide
+/// EXPUNGE could remove another client's deleted mail.
 pub async fn uid_move(session: &mut Session, uid: u32, target: &str) -> Result<()> {
     with_deadline(
         "UID MOVE",
@@ -1119,25 +1137,50 @@ pub async fn uid_move(session: &mut Session, uid: u32, target: &str) -> Result<(
 }
 
 async fn uid_move_inner(session: &mut Session, uid: u32, target: &str) -> Result<()> {
-    match session.uid_mv(uid.to_string(), target).await {
-        Ok(()) => Ok(()),
-        Err(_) => {
-            session
-                .uid_copy(uid.to_string(), target)
-                .await
-                .map_err(|e| CoreError::Imap(e.to_string()))?;
-            store_flag(session, uid, "\\Deleted", true).await?;
-            let stream = session
-                .expunge()
-                .await
-                .map_err(|e| CoreError::Imap(e.to_string()))?;
-            futures::pin_mut!(stream);
-            while let Some(item) = stream.next().await {
-                item.map_err(|e| CoreError::Imap(e.to_string()))?;
-            }
-            Ok(())
-        }
+    if uid == 0 {
+        return Err(CoreError::Imap("IMAP UID must be greater than zero".into()));
     }
+
+    let capabilities = session
+        .capabilities()
+        .await
+        .map_err(|e| CoreError::Imap(e.to_string()))?;
+    if capabilities.has_str("MOVE") {
+        // A failed RFC 6851 MOVE may already have moved this UID. Falling back
+        // after such a failure can duplicate the message, so propagate it and
+        // let the durable action reconcile before retrying.
+        return session
+            .uid_mv(uid.to_string(), target)
+            .await
+            .map_err(|e| CoreError::Imap(e.to_string()));
+    }
+
+    session
+        .uid_copy(uid.to_string(), target)
+        .await
+        .map_err(|e| CoreError::Imap(e.to_string()))?;
+    store_flag_set_inner(session, &uid.to_string(), "\\Deleted", true).await?;
+
+    if capabilities.has_str("UIDPLUS") {
+        let stream = session
+            .uid_expunge(uid.to_string())
+            .await
+            .map_err(|e| CoreError::Imap(e.to_string()))?;
+        futures::pin_mut!(stream);
+        while let Some(item) = stream.next().await {
+            item.map_err(|e| CoreError::Imap(e.to_string()))?;
+        }
+        return Ok(());
+    }
+
+    // There is no race-free way to expunge one UID in base IMAP. Even a
+    // SEARCH immediately before EXPUNGE cannot prevent another client from
+    // marking a different message \Deleted between those commands.
+    tracing::debug!(
+        uid,
+        "legacy IMAP move left source marked deleted because UIDPLUS is unavailable"
+    );
+    Ok(())
 }
 
 pub async fn append(session: &mut Session, folder: &str, raw: &[u8], seen: bool) -> Result<()> {

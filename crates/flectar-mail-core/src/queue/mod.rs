@@ -78,19 +78,14 @@ pub async fn execute_due(
                     account_id, action_id, kind = %action.kind, error = %e,
                     "action needs auth; pausing (check mail-host auth / SMTP AUTH enabled)",
                 );
-                // A queued send that can't authenticate would otherwise sit in the
-                // outbox indefinitely with the composer already closed: the message
-                // just vanishes with no warning (only a needs-reauth dot buried in
-                // Settings). Tell the UI so it can surface that the mail wasn't sent
-                // and point the user at re-authentication. Other action kinds stay
-                // quiet; the account's needs_reauth state already covers them.
-                if action.kind == "send" {
-                    ctx.bus.emit(CoreEvent::ActionState {
-                        action_id,
-                        state: "paused".into(),
-                        error: Some(e.to_string()),
-                    });
-                }
+                // The optimistic local mutation remains visible while auth is
+                // paused, so every action kind must tell the UI it has not yet
+                // reached the server.
+                ctx.bus.emit(CoreEvent::ActionState {
+                    action_id,
+                    state: "paused".into(),
+                    error: Some(e.to_string()),
+                });
                 let msg = "authentication required".to_string();
                 ctx.db
                     .write(move |conn| {
@@ -106,18 +101,8 @@ pub async fn execute_due(
                     account_id, action_id, kind = %action.kind, attempts, error = %msg,
                     "action attempt failed",
                 );
-                if attempts >= MAX_ATTEMPTS || is_permanent(&msg) {
-                    let m = msg.clone();
-                    ctx.db
-                        .write(move |conn| {
-                            repo::actions::set_state(conn, action_id, "failed", Some(&m))
-                        })
-                        .await?;
-                    ctx.bus.emit(CoreEvent::ActionState {
-                        action_id,
-                        state: "failed".into(),
-                        error: Some(msg),
-                    });
+                if attempts >= MAX_ATTEMPTS || is_permanent(&e) {
+                    fail_action(ctx, &action, msg).await?;
                 } else {
                     // Exponential backoff with jitter.
                     let delay = (1 << attempts.min(8)) * 1000 + (action_id % 997);
@@ -127,6 +112,11 @@ pub async fn execute_due(
                             repo::actions::bump_attempt(conn, action_id, now_ms() + delay, &m)
                         })
                         .await?;
+                    ctx.bus.emit(CoreEvent::ActionState {
+                        action_id,
+                        state: "retrying".into(),
+                        error: Some(msg.clone()),
+                    });
                     // Connection-level errors: bail out, actor reconnects.
                     if is_connection_failure(&msg) {
                         return Err(e);
@@ -146,9 +136,28 @@ pub async fn execute_due(
     })
 }
 
-fn is_permanent(msg: &str) -> bool {
-    // IMAP tagged NO responses and SMTP 5xx are not going to succeed on retry.
-    msg.contains("NO ") || msg.contains("550") || msg.contains("553") || msg.contains("bad ")
+fn is_permanent(error: &CoreError) -> bool {
+    match error {
+        CoreError::NotFound(_) => true,
+        // Tagged NO/BAD responses reject the command itself. Async IMAP has
+        // used both `NO ...` and `no: ...` display forms across versions.
+        CoreError::Imap(message) => {
+            let message = message.trim().to_ascii_lowercase();
+            ["no", "bad"].iter().any(|status| {
+                message == *status
+                    || message
+                        .strip_prefix(status)
+                        .is_some_and(|tail| matches!(tail.chars().next(), Some(' ' | ':' | '[')))
+            })
+        }
+        // All SMTP 5xx replies are permanent failures of the current request.
+        CoreError::Smtp(message) => message.split(|c: char| !c.is_ascii_digit()).any(|token| {
+            token.len() == 3
+                && token.starts_with('5')
+                && token.bytes().all(|byte| byte.is_ascii_digit())
+        }),
+        _ => false,
+    }
 }
 
 fn is_connection_failure(msg: &str) -> bool {
@@ -158,6 +167,107 @@ fn is_connection_failure(msg: &str) -> bool {
         || msg.contains("closed")
         || msg.contains("timed out")
         || msg.contains("unexpected eof")
+}
+
+fn is_move_kind(kind: &str) -> bool {
+    matches!(
+        kind,
+        "archive" | "unarchive" | "trash" | "spam" | "not_spam" | "move"
+    )
+}
+
+/// Mark an exhausted action failed and undo its optimistic move when it is
+/// still the newest intent for that message. A later queued move owns the
+/// visible location and must not be overwritten by an older failure.
+async fn fail_action(
+    ctx: &SyncCtx,
+    action: &repo::actions::PendingAction,
+    message: String,
+) -> Result<()> {
+    let failed = action.clone();
+    let saved_message = message.clone();
+    let changed_thread = ctx
+        .db
+        .write(move |conn| mark_failed_and_rollback(conn, &failed, &saved_message))
+        .await?;
+
+    if let Some(thread_id) = changed_thread {
+        ctx.bus.emit(CoreEvent::MailUpdated {
+            thread_ids: vec![thread_id],
+        });
+    }
+    ctx.bus.emit(CoreEvent::ActionState {
+        action_id: action.id,
+        state: "failed".into(),
+        error: Some(message),
+    });
+    Ok(())
+}
+
+fn mark_failed_and_rollback(
+    conn: &mut rusqlite::Connection,
+    failed: &repo::actions::PendingAction,
+    message: &str,
+) -> Result<Option<i64>> {
+    let tx = conn.transaction()?;
+    repo::actions::set_state(&tx, failed.id, "failed", Some(message))?;
+    if !is_move_kind(&failed.kind) {
+        tx.commit()?;
+        return Ok(None);
+    }
+
+    let (Some(message_id), Some(source_folder), target_folder) = (
+        failed.message_id,
+        failed.payload["srcFolderId"].as_i64(),
+        failed.payload["targetFolderId"].as_i64(),
+    ) else {
+        tx.commit()?;
+        return Ok(None);
+    };
+    let has_newer_move: bool = tx.query_row(
+        "SELECT EXISTS(
+           SELECT 1 FROM pending_actions
+           WHERE message_id=?1 AND id>?2
+             AND kind IN ('archive','unarchive','trash','spam','not_spam','move')
+             AND state IN ('pending','inflight','done')
+         )",
+        rusqlite::params![message_id, failed.id],
+        |row| row.get(0),
+    )?;
+    let row = repo::messages::get_row(&tx, message_id)?;
+    if has_newer_move
+        || row
+            .as_ref()
+            .is_none_or(|row| row.folder_id != target_folder)
+    {
+        tx.commit()?;
+        return Ok(None);
+    }
+
+    let source_uid = failed.payload["srcUid"].as_i64();
+    repo::messages::set_uid_and_folder(&tx, message_id, source_folder, source_uid)?;
+    let multi_mailbox: bool = tx.query_row(
+        "SELECT provider='gmail' OR mail_protocol='jmap' FROM accounts WHERE id=?1",
+        rusqlite::params![failed.account_id],
+        |row| row.get(0),
+    )?;
+    if multi_mailbox {
+        if let Some(target_folder) = target_folder {
+            tx.execute(
+                "DELETE FROM message_folders WHERE message_id=?1 AND folder_id=?2",
+                rusqlite::params![message_id, target_folder],
+            )?;
+        }
+        tx.execute(
+            "INSERT OR IGNORE INTO message_folders (message_id, folder_id) VALUES (?1, ?2)",
+            rusqlite::params![message_id, source_folder],
+        )?;
+    }
+    if let Some(thread_id) = failed.thread_id {
+        repo::threads::recompute(&tx, thread_id)?;
+    }
+    tx.commit()?;
+    Ok(failed.thread_id)
 }
 
 async fn execute_one(
@@ -220,21 +330,27 @@ async fn resolve_source(
     ctx: &SyncCtx,
     session: &mut Session,
     action: &repo::actions::PendingAction,
-) -> Result<Option<(repo::folders::Folder, u32)>> {
-    let src_folder_id = action.payload["srcFolderId"].as_i64();
-    let src_uid = action.payload["srcUid"].as_i64();
-    let (Some(fid), Some(uid)) = (src_folder_id, src_uid) else {
-        return Ok(None);
-    };
+) -> Result<(repo::folders::Folder, u32)> {
+    let fid = action.payload["srcFolderId"]
+        .as_i64()
+        .ok_or_else(|| CoreError::NotFound("source mailbox for queued move".into()))?;
+    let uid = action.payload["srcUid"]
+        .as_i64()
+        .and_then(|uid| u32::try_from(uid).ok())
+        .filter(|uid| *uid > 0)
+        .ok_or_else(|| CoreError::NotFound("valid source UID for queued move".into()))?;
     let folder = ctx
         .db
         .read(move |conn| repo::folders::get(conn, fid))
         .await?;
-    let Some(folder) = folder else {
-        return Ok(None);
-    };
+    let folder = folder.ok_or_else(|| CoreError::NotFound("source folder".into()))?;
+    if folder.account_id != action.account_id {
+        return Err(CoreError::Other(
+            "queued move source belongs to another account".into(),
+        ));
+    }
     imap::select(session, &folder.imap_name).await?;
-    Ok(Some((folder, uid as u32)))
+    Ok((folder, uid))
 }
 
 async fn flag_action(
@@ -278,27 +394,28 @@ async fn move_action(
     session: &mut Session,
     action: &repo::actions::PendingAction,
 ) -> Result<()> {
-    let Some(message_id) = action.message_id else {
-        return Ok(());
-    };
-    let Some((_src, uid)) = resolve_source(ctx, session, action).await? else {
-        return Ok(());
-    };
-    let target_folder_id = action.payload["targetFolderId"].as_i64();
-    let Some(tfid) = target_folder_id else {
-        return Ok(());
-    };
+    let message_id = action
+        .message_id
+        .ok_or_else(|| CoreError::NotFound("message for queued move".into()))?;
+    let (_src, uid) = resolve_source(ctx, session, action).await?;
+    let tfid = action.payload["targetFolderId"]
+        .as_i64()
+        .ok_or_else(|| CoreError::NotFound("target mailbox for queued move".into()))?;
     let target = ctx
         .db
         .read(move |conn| repo::folders::get(conn, tfid))
         .await?
         .ok_or_else(|| CoreError::NotFound("target folder".into()))?;
+    if target.account_id != action.account_id || target.account_id != config.id {
+        return Err(CoreError::Other(
+            "queued move target belongs to another account".into(),
+        ));
+    }
 
     imap::uid_move(session, uid, &target.imap_name).await?;
 
     // The message's new UID in the target is unknown (COPYUID not parsed in
     // v1); clear it so the next target-folder sync re-links by Message-ID.
-    let _ = config;
     ctx.db
         .write(move |conn| repo::messages::set_uid_and_folder(conn, message_id, tfid, None))
         .await?;
@@ -628,5 +745,142 @@ mod tests {
         assert!(is_connection_failure("UID MOVE timed out after 30s"));
         assert!(is_connection_failure("connection closed"));
         assert!(!is_connection_failure("temporary mailbox quota"));
+    }
+
+    #[test]
+    fn command_rejections_are_permanent_but_transport_errors_retry() {
+        assert!(is_permanent(&CoreError::Imap(
+            "NO [NOPERM] permission denied".into()
+        )));
+        assert!(is_permanent(&CoreError::Imap(
+            "bad: invalid command".into()
+        )));
+        assert!(is_permanent(&CoreError::Smtp(
+            "554 transaction failed".into()
+        )));
+        assert!(is_permanent(&CoreError::NotFound("source mailbox".into())));
+        assert!(!is_permanent(&CoreError::Imap(
+            "connection timed out".into()
+        )));
+        assert!(!is_permanent(&CoreError::Smtp(
+            "451 temporary failure".into()
+        )));
+    }
+
+    fn optimistic_move(
+        conn: &rusqlite::Connection,
+        message_id: i64,
+        thread_id: i64,
+        target_folder: i64,
+    ) -> repo::actions::PendingAction {
+        let source_uid = repo::messages::get_row(conn, message_id)
+            .unwrap()
+            .unwrap()
+            .uid;
+        let action_id = repo::actions::enqueue(
+            conn,
+            1,
+            "move",
+            Some(message_id),
+            Some(thread_id),
+            &serde_json::json!({
+                "srcFolderId": 1,
+                "srcUid": source_uid,
+                "targetFolderId": target_folder,
+            }),
+            None,
+        )
+        .unwrap();
+        repo::messages::set_uid_and_folder(conn, message_id, target_folder, None).unwrap();
+        repo::actions::get(conn, action_id).unwrap().unwrap()
+    }
+
+    #[test]
+    fn terminal_move_failure_restores_the_remote_source_mapping() {
+        let mut conn = crate::db::testutil::conn();
+        crate::db::testutil::seed_account(&conn);
+        conn.execute(
+            "INSERT INTO folders (id, account_id, imap_name, role)
+             VALUES (2, 1, 'Archive', 'archive')",
+            [],
+        )
+        .unwrap();
+        let (thread_id, message_id) =
+            crate::db::testutil::seed_message(&conn, "sender@test.dev", "move", false);
+        let source_uid = repo::messages::get_row(&conn, message_id)
+            .unwrap()
+            .unwrap()
+            .uid;
+        let action = optimistic_move(&conn, message_id, thread_id, 2);
+
+        assert_eq!(
+            mark_failed_and_rollback(&mut conn, &action, "server rejected move").unwrap(),
+            Some(thread_id)
+        );
+        let restored = repo::messages::get_row(&conn, message_id).unwrap().unwrap();
+        assert_eq!(restored.folder_id, Some(1));
+        assert_eq!(restored.uid, source_uid);
+        assert_eq!(
+            repo::actions::get(&conn, action.id).unwrap().unwrap().state,
+            "failed"
+        );
+    }
+
+    #[test]
+    fn older_failure_does_not_overwrite_a_completed_newer_move() {
+        let mut conn = crate::db::testutil::conn();
+        crate::db::testutil::seed_account(&conn);
+        conn.execute_batch(
+            "INSERT INTO folders (id, account_id, imap_name, role)
+             VALUES (2, 1, 'Archive', 'archive');
+             INSERT INTO folders (id, account_id, imap_name, role)
+             VALUES (3, 1, 'Later', '');",
+        )
+        .unwrap();
+        let (thread_id, message_id) =
+            crate::db::testutil::seed_message(&conn, "sender@test.dev", "move race", false);
+        let first = optimistic_move(&conn, message_id, thread_id, 2);
+        let newer = repo::actions::enqueue(
+            &conn,
+            1,
+            "move",
+            Some(message_id),
+            Some(thread_id),
+            &serde_json::json!({
+                "srcFolderId": 2,
+                "srcUid": 84,
+                "targetFolderId": 3,
+            }),
+            None,
+        )
+        .unwrap();
+        repo::actions::set_state(&conn, newer, "done", None).unwrap();
+        let newest = repo::actions::enqueue(
+            &conn,
+            1,
+            "move",
+            Some(message_id),
+            Some(thread_id),
+            &serde_json::json!({
+                "srcFolderId": 3,
+                "srcUid": 126,
+                "targetFolderId": 2,
+            }),
+            None,
+        )
+        .unwrap();
+        repo::actions::set_state(&conn, newest, "done", None).unwrap();
+
+        assert_eq!(
+            mark_failed_and_rollback(&mut conn, &first, "server rejected move").unwrap(),
+            None
+        );
+        assert_eq!(
+            repo::messages::get_row(&conn, message_id)
+                .unwrap()
+                .unwrap()
+                .folder_id,
+            Some(2)
+        );
     }
 }
