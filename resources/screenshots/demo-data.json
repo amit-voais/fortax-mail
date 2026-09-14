@@ -4,7 +4,6 @@
   "active_view": "mail",
   "selected_scope": "Unified Inbox",
   "unified_count": "14",
-  "total_count": "25 messages",
   "has_selected": true,
   "text_mode": false,
   "email-content-aspect": 1.055556,
@@ -101,9 +100,6 @@
     { "id": 4, "editable": true, "title": "Customer call", "detail": "14:00 – 15:00", "iso_date": "2026-09-11", "day_index": 4, "month_index": 11, "start_minutes": 840, "duration_minutes": 60, "color_index": 3, "all_day": false, "provider": "Google", "account": "Flectar", "calendar": "Work", "location": "Video call", "organizer": "", "description": "", "attendees": "", "join_url": "", "rsvp_status": "accepted", "recurrence": "", "status": "confirmed", "source": "local" }
   ],
   "contact_scope": "All contacts",
-  "contact_scope_label": "All contacts",
-  "contact_visible_count": 6,
-  "contact_shown_count": 6,
   "contact_has_selection": true,
   "contact_id": 1,
   "contact_name": "Alex Morgan",

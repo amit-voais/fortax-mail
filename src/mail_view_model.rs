@@ -128,7 +128,6 @@ pub(super) fn apply_background_mail_page(
         } else {
             next_cursor
         };
-        state.total_count = state.total_count.max(state.messages.len());
         // Check against `rendered_id` (what the reading pane actually shows),
         // not `selected_id`: callers are free to clear or redirect the latter
         // before refreshing, and doing so must not be able to make this look
@@ -276,7 +275,6 @@ pub(super) fn render_current(
         using_core,
         favicon_icons,
         search_filter,
-        total_count,
         inbox_count,
         labels,
     ) = {
@@ -299,7 +297,6 @@ pub(super) fn render_current(
             state.using_core,
             state.favicon_icons.clone(),
             state.search_filter.clone(),
-            state.total_count,
             state.inbox_count,
             state.labels.clone(),
         )
@@ -309,11 +306,6 @@ pub(super) fn render_current(
         messages.len()
     } else {
         paged_visible_count(page, messages.len())
-    };
-    let total_count = if using_core {
-        total_count
-    } else {
-        messages.len()
     };
     let visible = &messages[..visible_count];
     let selected_id = if preview_closed {
@@ -370,15 +362,7 @@ pub(super) fn render_current(
     app.set_selected_scope(scope.into());
     app.set_search_query(query.clone().into());
     app.set_unified_count(sidebar_badge_text(inbox_count).into());
-    app.set_total_count(total_count.to_string().into());
     app.set_search_filter(search_filter.into());
-    app.set_list_status(list_status(
-        &query,
-        visible_count,
-        total_count,
-        using_core,
-        next_cursor.is_some(),
-    ));
     app.set_can_load_more(if using_core {
         next_cursor.is_some()
     } else {
@@ -682,85 +666,6 @@ pub(super) fn scope_matches(email: &MailMessage, scope: &str) -> bool {
     email.account == scope
 }
 
-pub(super) fn list_status(
-    query: &str,
-    visible_count: usize,
-    total_count: usize,
-    using_core: bool,
-    can_load_more: bool,
-) -> UiMessage {
-    let singular = total_count == 1;
-    match (
-        query.trim().is_empty(),
-        singular,
-        using_core && can_load_more,
-        using_core && !can_load_more,
-    ) {
-        (true, true, true, _) => UiMessage::arguments(
-            "Showing {} of {} conversation · more available",
-            visible_count,
-            total_count,
-        ),
-        (true, true, _, true) => UiMessage::arguments(
-            "Showing {} of {} conversation · current results complete",
-            visible_count,
-            total_count,
-        ),
-        (true, true, _, _) => {
-            UiMessage::arguments("Showing {} of {} conversation", visible_count, total_count)
-        }
-        (true, false, true, _) => UiMessage::arguments(
-            "Showing {} of {} conversations · more available",
-            visible_count,
-            total_count,
-        ),
-        (true, false, _, true) => UiMessage::arguments(
-            "Showing {} of {} conversations · current results complete",
-            visible_count,
-            total_count,
-        ),
-        (true, false, _, _) => {
-            UiMessage::arguments("Showing {} of {} conversations", visible_count, total_count)
-        }
-        (false, true, true, _) => UiMessage::three_arguments(
-            "Showing {} of {} conversation matching \"{}\" · more available",
-            visible_count,
-            total_count,
-            query.trim(),
-        ),
-        (false, true, _, true) => UiMessage::three_arguments(
-            "Showing {} of {} conversation matching \"{}\" · current results complete",
-            visible_count,
-            total_count,
-            query.trim(),
-        ),
-        (false, true, _, _) => UiMessage::three_arguments(
-            "Showing {} of {} conversation matching \"{}\"",
-            visible_count,
-            total_count,
-            query.trim(),
-        ),
-        (false, false, true, _) => UiMessage::three_arguments(
-            "Showing {} of {} conversations matching \"{}\" · more available",
-            visible_count,
-            total_count,
-            query.trim(),
-        ),
-        (false, false, _, true) => UiMessage::three_arguments(
-            "Showing {} of {} conversations matching \"{}\" · current results complete",
-            visible_count,
-            total_count,
-            query.trim(),
-        ),
-        (false, false, _, _) => UiMessage::three_arguments(
-            "Showing {} of {} conversations matching \"{}\"",
-            visible_count,
-            total_count,
-            query.trim(),
-        ),
-    }
-}
-
 // Compare visible contents: empty Slint images are not reflexively equal,
 // and freshly projected label models have different identities.
 fn same_email_row(a: &EmailRow, b: &EmailRow) -> bool {
@@ -983,7 +888,6 @@ pub(super) fn refresh_list_metadata(app: &AppWindow, state: &Rc<RefCell<InboxSta
         unified_mailboxes,
         next_cursor,
         search_filter,
-        total_count,
         inbox_count,
         labels,
     ) = {
@@ -1003,7 +907,6 @@ pub(super) fn refresh_list_metadata(app: &AppWindow, state: &Rc<RefCell<InboxSta
             state.unified_mailboxes.clone(),
             state.next_cursor,
             state.search_filter.clone(),
-            state.total_count,
             state.inbox_count,
             state.labels.clone(),
         )
@@ -1012,11 +915,6 @@ pub(super) fn refresh_list_metadata(app: &AppWindow, state: &Rc<RefCell<InboxSta
         messages.len()
     } else {
         paged_visible_count(page, messages.len())
-    };
-    let total_count = if using_core {
-        total_count
-    } else {
-        messages.len()
     };
     let can_load_more = if using_core {
         next_cursor.is_some()
@@ -1031,15 +929,7 @@ pub(super) fn refresh_list_metadata(app: &AppWindow, state: &Rc<RefCell<InboxSta
     app.set_selected_scope(scope.into());
     app.set_search_query(query.clone().into());
     app.set_unified_count(sidebar_badge_text(inbox_count).into());
-    app.set_total_count(total_count.to_string().into());
     app.set_search_filter(search_filter.into());
-    app.set_list_status(list_status(
-        &query,
-        visible_count,
-        total_count,
-        using_core,
-        can_load_more,
-    ));
     app.set_can_load_more(can_load_more);
     state.borrow().queue_warm_start_update();
 }

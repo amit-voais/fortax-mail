@@ -176,7 +176,6 @@ pub(super) fn register(
                 let mut state = page_state.borrow_mut();
                 state.messages = page.messages;
                 state.labels = page.labels;
-                state.total_count = state.messages.len();
                 state.next_cursor = page.next_cursor;
                 drop(state);
                 if let Err(error) = render_current(&app, &page_state, &page_runtime) {
@@ -264,7 +263,6 @@ pub(super) fn refresh(
             state.messages.clear();
             state.selected_id = None;
             state.next_cursor = None;
-            state.total_count = 0;
         }
     }
     if !preserve {

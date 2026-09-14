@@ -8,7 +8,7 @@ import { SidebarItem, SidebarSectionHeader } from "../components/sidebar-control
 import { TypeScale } from "../typography.slint";
 import { LayoutMetrics } from "../design-system.slint";
 import { ScrollFade } from "../components/scroll-fade.slint";
-import { CollapsibleWorkspaceSidebar, WorkspaceMiniHeading, WorkspaceSearchToolbar, WorkspaceTitleRow } from "../components/workspace-layout.slint";
+import { CollapsibleWorkspaceSidebar, WorkspaceMiniHeading, WorkspaceSearchToolbar } from "../components/workspace-layout.slint";
 
 component FieldLabel inherits Text {
     in property <string> label;
@@ -34,9 +34,7 @@ export component ContactsView inherits Rectangle {
     in property <string> query: "";
     in-out property <string> filter: "all";
     in property <string> selected-scope: "All contacts";
-    in property <string> scope-label: "All contacts";
     in property <string> status: "";
-    in property <int> visible-count: 0;
     in property <bool> can-load-more: false;
     in property <bool> loading-more: false;
     in property <int> content-revision: 0;
@@ -264,73 +262,32 @@ export component ContactsView inherits Rectangle {
                 spacing: 0px;
 
                 Rectangle {
-                    height: root.compact ? 116px : 102px;
-                    VerticalBox {
-                        padding-top: root.compact ? 8px : LayoutMetrics.workspace-action-center-y - 20px;
-                        padding-right: root.compact ? 10px : 12px;
-                        padding-bottom: root.compact ? 8px : 2px;
-                        padding-left: root.compact ? 10px : 12px;
-                        spacing: 8px;
-
-                        WorkspaceTitleRow {
-                            height: root.compact ? LayoutMetrics.touch-target : LayoutMetrics.desktop-icon-button-size;
-                            item-spacing: 6px;
-                            title: root.selected-scope == "All contacts" ? @tr("All contacts")
-                                : root.selected-scope == "Favorites" ? @tr("Favorites")
-                                : root.scope-label;
-                            title-font-size: root.compact ? TypeScale.title-small : TypeScale.heading-small;
-                            title-weight: 600;
-                            show-leading: !root.compact;
-                            leading-icon: root.sidebar-collapsed
-                                ? @image-url("../icons/phosphor/sidebar.svg")
-                                : @image-url("../icons/phosphor/sidebar-fill.svg");
-                            leading-tooltip: root.sidebar-collapsed ? @tr("Show contact groups") : @tr("Hide contact groups");
-                            leading-accessible-id: "contacts-sidebar-button";
-                            leading-ghost: true;
-                            leading-clicked => { root.sidebar-collapsed = !root.sidebar-collapsed; }
-                            Text {
-                                text: root.visible-count;
-                                color: root.muted-text;
-                                font-size: TypeScale.caption;
-                                vertical-alignment: center;
-                            }
-                        }
-
-                        WorkspaceSearchToolbar {
-                            text: root.query;
-                            placeholder-text: @tr("Search contacts");
-                            filters: [
-                                { title: @tr("All contacts"), value: "all" },
-                                { title: @tr("Favorites"), value: "favorites" },
-                            ];
-                            filter-active: root.filter != "all";
-                            filter-tooltip: @tr("Filter contacts");
-                            filter-accessible-id: "contacts-filter-button";
-                            refresh-tooltip: @tr("Reload contacts");
-                            refresh-accessible-id: "contacts-refresh-button";
-                            edited(value) => { root.search(value); }
-                            filter-selected(value) => { root.open-filter(value); }
-                            refresh => { root.refresh(); }
-                        }
-                    }
-                }
-
-                Rectangle {
-                    height: 40px;
-                    HorizontalBox {
-                        padding-top: 8px;
-                        padding-right: 12px;
-                        padding-bottom: 8px;
-                        padding-left: 12px;
-                        Text {
-                            height: 24px;
-                            horizontal-stretch: 1;
-                            text: root.status;
-                            color: root.muted-text;
-                            font-size: TypeScale.caption;
-                            vertical-alignment: center;
-                            overflow: elide;
-                        }
+                    height: root.compact ? LayoutMetrics.compact-header-height : LayoutMetrics.desktop-mail-toolbar-height;
+                    WorkspaceSearchToolbar {
+                        x: root.compact ? LayoutMetrics.compact-inset : LayoutMetrics.content-inset;
+                        y: (parent.height - self.height) / 2;
+                        width: parent.width - 2 * self.x;
+                        show-leading: !root.compact;
+                        leading-icon: root.sidebar-collapsed
+                            ? @image-url("../icons/phosphor/sidebar.svg")
+                            : @image-url("../icons/phosphor/sidebar-fill.svg");
+                        leading-tooltip: root.sidebar-collapsed ? @tr("Show contact groups") : @tr("Hide contact groups");
+                        leading-accessible-id: "contacts-sidebar-button";
+                        text: root.query;
+                        placeholder-text: @tr("Search contacts");
+                        filters: [
+                            { title: @tr("All contacts"), value: "all" },
+                            { title: @tr("Favorites"), value: "favorites" },
+                        ];
+                        filter-active: root.filter != "all";
+                        filter-tooltip: @tr("Filter contacts");
+                        filter-accessible-id: "contacts-filter-button";
+                        refresh-tooltip: @tr("Reload contacts");
+                        refresh-accessible-id: "contacts-refresh-button";
+                        leading-clicked => { root.sidebar-collapsed = !root.sidebar-collapsed; }
+                        edited(value) => { root.search(value); }
+                        filter-selected(value) => { root.open-filter(value); }
+                        refresh => { root.refresh(); }
                     }
                 }
 
@@ -648,6 +605,12 @@ export component ContactsView inherits Rectangle {
                         TextEdit { height: 110px; text <=> root.edit-notes; placeholder-text: @tr("Notes about this contact"); }
 
                         Rectangle { height: 8px; }
+                        if root.status != "" : Text {
+                            text: root.status;
+                            color: root.muted-text;
+                            font-size: TypeScale.caption;
+                            wrap: word-wrap;
+                        }
                         HorizontalBox {
                             height: 36px;
                             spacing: 8px;

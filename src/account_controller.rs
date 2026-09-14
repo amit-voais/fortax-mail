@@ -85,7 +85,6 @@ pub(super) fn reconcile_removed_account(state: &mut InboxState, account_id: i64)
     state.checked_ids.clear();
     state.next_cursor = None;
     state.page = 1;
-    state.total_count = state.messages.len();
     state.inbox_count = 0;
     for mailbox in &mut state.unified_mailboxes {
         mailbox.count.clear();
@@ -98,7 +97,6 @@ pub(super) fn reconcile_removed_account(state: &mut InboxState, account_id: i64)
         state.scope = "Unified Inbox".into();
         state.query.clear();
         state.selected_id = None;
-        state.total_count = 0;
     }
     mail_work::invalidate(state);
 }

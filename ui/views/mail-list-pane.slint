@@ -6,7 +6,7 @@ import { FloatingActionButton, SelectionCheckBox } from "../components/controls.
 import { TypeScale } from "../typography.slint";
 import { LayoutMetrics } from "../design-system.slint";
 import { ScrollFade } from "../components/scroll-fade.slint";
-import { WorkspaceSearchToolbar, WorkspaceTitleRow } from "../components/workspace-layout.slint";
+import { WorkspaceSearchToolbar } from "../components/workspace-layout.slint";
 
 component MailListLabelChip inherits Rectangle {
     in property <string> name;
@@ -59,10 +59,8 @@ export component MailListPane inherits Rectangle {
     in property <[EmailRow]> emails: [];
     in property <string> selected_scope: "Unified Inbox";
     in property <string> scope_title: selected_scope;
-    in property <string> total_count: "";
     in property <string> search_query: "";
     in property <string> search_filter: "All mail";
-    in property <string> list_status: "";
     in property <bool> sync_in_progress: false;
     in property <bool> can_load_more: false;
     in property <bool> loading_more: false;
@@ -130,120 +128,66 @@ export component MailListPane inherits Rectangle {
                     spacing: 0px;
 
                     Rectangle {
-                        height: root.compact ? 116px : 102px;
+                        height: root.compact ? LayoutMetrics.compact-header-height : LayoutMetrics.desktop-mail-toolbar-height;
                         background: root.surface;
-                        VerticalBox {
-                            x: 0px;
-                            y: 0px;
-                            width: parent.width;
-                            height: parent.height;
-                            // Center the 26px title row on the shared 27px
-                            // workspace-toolbar centerline.
-                            padding-top: root.compact ? 8px : LayoutMetrics.workspace-action-center-y - 20px;
-                            padding-right: root.compact ? 10px : 12px;
-                            padding-bottom: root.compact ? 8px : 2px;
-                            padding-left: root.compact ? 10px : 12px;
-                            spacing: 8px;
-
-                            WorkspaceTitleRow {
-                                // Match the 40px toolbar controls below.
-                                height: root.compact ? LayoutMetrics.touch-target : 40px;
-                                item-spacing: 6px;
-                                title: root.scope_title;
-                                title-font-size: root.compact ? TypeScale.title-small : TypeScale.heading-small;
-                                title-weight: 600;
-                                show-leading: true;
-                                leading-icon: root.mail_sidebar_collapsed
-                                    ? @image-url("../icons/phosphor/sidebar.svg")
-                                    : @image-url("../icons/phosphor/sidebar-fill.svg");
-                                leading-tooltip: root.mail_sidebar_collapsed ? @tr("Show folders") : @tr("Hide folders");
-                                leading-accessible-id: "mail-folders-button";
-                                leading-ghost: true;
-                                leading-clicked => {
-                                    if (root.single-pane-navigation) {
-                                        root.open_folders();
-                                    } else {
-                                        root.mail_sidebar_collapsed = !root.mail_sidebar_collapsed;
-                                    }
+                        WorkspaceSearchToolbar {
+                            x: root.compact ? LayoutMetrics.compact-inset : LayoutMetrics.content-inset;
+                            y: (parent.height - self.height) / 2;
+                            width: parent.width - 2 * self.x;
+                            show-leading: true;
+                            leading-icon: root.mail_sidebar_collapsed
+                                ? @image-url("../icons/phosphor/sidebar.svg")
+                                : @image-url("../icons/phosphor/sidebar-fill.svg");
+                            leading-tooltip: root.mail_sidebar_collapsed ? @tr("Show folders") : @tr("Hide folders");
+                            leading-accessible-id: "mail-folders-button";
+                            text: root.search_query;
+                            placeholder-text: @tr("Search mail");
+                            filters: [
+                                { title: @tr("All mail"), value: "All mail" },
+                                { title: @tr("Unread"), value: "Unread" },
+                                { title: @tr("Starred"), value: "Starred" },
+                                { title: @tr("Has attachments"), value: "Has attachments" },
+                            ];
+                            filter-active: root.search_filter != "All mail";
+                            filter-tooltip: @tr("Filter mail");
+                            filter-accessible-id: "mail-filter-button";
+                            refresh-enabled: !root.sync_in_progress;
+                            refresh-tooltip: root.sync_in_progress ? @tr("Synchronizing mail") : @tr("Reload mail");
+                            refresh-accessible-id: "mail-refresh-button";
+                            leading-clicked => {
+                                if (root.single-pane-navigation) {
+                                    root.open_folders();
+                                } else {
+                                    root.mail_sidebar_collapsed = !root.mail_sidebar_collapsed;
                                 }
-                                Text { height: parent.height; text: root.total_count; color: root.muted-text; font-size: TypeScale.caption; vertical-alignment: center; }
                             }
+                            edited(text) => { root.search_changed(text); }
+                            filter-selected(value) => { root.set_search_filter(value); }
+                            refresh => { root.sync_mail(); }
 
-                            HorizontalBox {
+                            // Selection mode remains available without reserving
+                            // a separate status row below the toolbar.
+                            selection-slot := Rectangle {
+                                private property <length> animated-width: root.selection-mode
+                                    ? LayoutMetrics.control-height : 0px;
+                                width: self.animated-width;
                                 height: LayoutMetrics.control-height;
-                                padding: 0px;
-                                spacing: 0px;
+                                clip: true;
+                                background: transparent;
+                                animate animated-width { duration: 160ms; easing: ease-in-out; }
 
-                                // Reveal selection controls by animating the space
-                                // they occupy. This lets the search field resize with
-                                // the same motion as the collapsible workspace sidebar.
-                                selection-slot := Rectangle {
-                                    private property <length> animated-width: root.selection-mode
-                                        ? LayoutMetrics.control-height + 6px : 0px;
-                                    width: self.animated-width;
+                                SelectionCheckBox {
+                                    visible: selection-slot.animated-width > 0px;
+                                    width: LayoutMetrics.control-height;
                                     height: LayoutMetrics.control-height;
-                                    clip: true;
-                                    background: transparent;
-                                    animate animated-width { duration: 160ms; easing: ease-in-out; }
-
-                                    SelectionCheckBox {
-                                        visible: selection-slot.animated-width > 0px;
-                                        width: LayoutMetrics.control-height;
-                                        height: LayoutMetrics.control-height;
-                                        opacity: root.selection-mode ? 1 : 0;
-                                        enabled: root.selection-mode && root.emails.length > 0;
-                                        checked: root.emails.length > 0 && root.selection-count == root.emails.length;
-                                        indeterminate: root.selection-count > 0 && root.selection-count < root.emails.length;
-                                        accessible-label: self.checked ? @tr("Clear selection") : @tr("Select all messages on this page");
-                                        animate opacity { duration: 120ms; }
-                                        toggled(checked) => { root.set_all_emails_checked(checked); }
-                                    }
+                                    opacity: root.selection-mode ? 1 : 0;
+                                    enabled: root.selection-mode && root.emails.length > 0;
+                                    checked: root.emails.length > 0 && root.selection-count == root.emails.length;
+                                    indeterminate: root.selection-count > 0 && root.selection-count < root.emails.length;
+                                    accessible-label: self.checked ? @tr("Clear selection") : @tr("Select all messages on this page");
+                                    animate opacity { duration: 120ms; }
+                                    toggled(checked) => { root.set_all_emails_checked(checked); }
                                 }
-
-                                WorkspaceSearchToolbar {
-                                    horizontal-stretch: 1;
-                                    text: root.search_query;
-                                    placeholder-text: @tr("Search mail");
-                                    filters: [
-                                        { title: @tr("All mail"), value: "All mail" },
-                                        { title: @tr("Unread"), value: "Unread" },
-                                        { title: @tr("Starred"), value: "Starred" },
-                                        { title: @tr("Has attachments"), value: "Has attachments" },
-                                    ];
-                                    filter-active: root.search_filter != "All mail";
-                                    filter-tooltip: @tr("Filter mail");
-                                    filter-accessible-id: "mail-filter-button";
-                                    refresh-enabled: !root.sync_in_progress;
-                                    refresh-tooltip: root.sync_in_progress ? @tr("Synchronizing mail") : @tr("Reload mail");
-                                    refresh-accessible-id: "mail-refresh-button";
-                                    edited(text) => { root.search_changed(text); }
-                                    filter-selected(value) => { root.set_search_filter(value); }
-                                    refresh => { root.sync_mail(); }
-                                }
-                            }
-                        }
-                    }
-
-                    Rectangle {
-                        height: 40px;
-                        background: root.surface;
-                        HorizontalBox {
-                            x: 0px;
-                            y: 0px;
-                            width: parent.width;
-                            height: parent.height;
-                            padding-top: 8px;
-                            padding-left: 12px;
-                            padding-right: 12px;
-                            padding-bottom: 8px;
-                            Text {
-                                height: 24px;
-                                horizontal-stretch: 1;
-                                text: root.selection-count > 0 ? @tr("{} selected", root.selection-count) : root.list_status;
-                                color: root.muted-text;
-                                font-size: TypeScale.caption;
-                                vertical-alignment: center;
-                                overflow: elide;
                             }
                         }
                     }

@@ -467,7 +467,6 @@ pub(super) fn register_data_management_callbacks(
                         state.messages.clear();
                         state.mailboxes.clear();
                         state.unified_mailboxes.clear();
-                        state.total_count = 0;
                         state.inbox_count = 0;
                         state.next_cursor = None;
                         state.selected_id = None;
@@ -485,7 +484,6 @@ pub(super) fn register_data_management_callbacks(
                         contacts.scope = "All contacts".to_owned();
                         contacts.page = 1;
                         contacts.next_cursor = None;
-                        contacts.matching_count = 0;
                         contacts.total_count = 0;
                         contacts.favorite_count = 0;
                         contacts.account_counts.clear();

@@ -131,12 +131,16 @@ export component WorkspaceTitleRow inherits Rectangle {
     }
 }
 
-// Mail and contacts share one search, filter, and refresh contract. Feature
-// views provide only their text, filter choices, and callbacks so visual state
-// and control geometry cannot drift between otherwise identical list headers.
+// Mail, contacts, and files share one search, filter, and refresh contract.
+// The optional leading action keeps each workspace's sidebar toggle on the
+// same line, while feature-specific actions are injected before refresh.
 export component WorkspaceSearchToolbar inherits Rectangle {
     in property <string> text;
     in property <string> placeholder-text;
+    in property <bool> show-leading: false;
+    in property <image> leading-icon;
+    in property <string> leading-tooltip: "";
+    in property <string> leading-accessible-id: "";
     in property <[WorkspaceSearchFilter]> filters: [];
     in property <bool> filter-active: false;
     in property <string> filter-tooltip;
@@ -147,6 +151,7 @@ export component WorkspaceSearchToolbar inherits Rectangle {
     callback edited(string);
     callback submitted(string);
     callback filter-selected(string);
+    callback leading-clicked;
     callback refresh;
 
     height: LayoutMetrics.control-height;
@@ -155,6 +160,19 @@ export component WorkspaceSearchToolbar inherits Rectangle {
     HorizontalBox {
         padding: 0px;
         spacing: 6px;
+
+        ToolbarIconButton {
+            visible: root.show-leading;
+            width: root.show-leading ? LayoutMetrics.desktop-icon-button-size : 0px;
+            icon: root.leading-icon;
+            icon-color: AppTheme.secondary;
+            ghost: true;
+            hover-background: AppTheme.muted-control-bg;
+            active-background: AppTheme.accent-soft;
+            tooltip-text: root.leading-tooltip;
+            accessible-id: root.leading-accessible-id;
+            clicked => { root.leading-clicked(); }
+        }
 
         search-field := Rectangle {
             height: LayoutMetrics.control-height;
@@ -197,6 +215,8 @@ export component WorkspaceSearchToolbar inherits Rectangle {
                 }
             }
         }
+
+        @children
 
         ToolbarIconButton {
             interactive: root.refresh-enabled;

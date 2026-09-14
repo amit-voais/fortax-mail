@@ -165,23 +165,6 @@ fn record_where_clause(
     }
 }
 
-fn count_records(
-    conn: &Connection,
-    query: &str,
-    account_id: Option<i64>,
-    favorites_only: bool,
-) -> Result<usize> {
-    let mut bind: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
-    let where_sql = record_where_clause(query, account_id, favorites_only, &mut bind);
-    let sql = format!("SELECT COUNT(*) FROM contacts WHERE {where_sql}");
-    let params_ref = bind
-        .iter()
-        .map(|value| value.as_ref())
-        .collect::<Vec<&dyn rusqlite::types::ToSql>>();
-    let count = conn.query_row(&sql, params_ref.as_slice(), |row| row.get::<_, i64>(0))?;
-    Ok(count.max(0) as usize)
-}
-
 /// Contacts matching every query token (accent- and case-insensitive), ranked
 /// by interaction affinity - people you actually email float to the top. When
 /// `account_id` is Some, only contacts that account has corresponded with are
@@ -285,7 +268,7 @@ pub fn list_records(conn: &Connection, query: &str, limit: i64) -> Result<Vec<Co
 }
 
 /// Query one strict directory page and the scalar counts needed by the
-/// sidebar/status line. The keyset cursor follows the complete sort tuple, so
+/// sidebar. The keyset cursor follows the complete sort tuple, so
 /// contacts inserted before the cursor cannot shift or duplicate later pages.
 pub fn list_record_page(
     conn: &Connection,
@@ -296,7 +279,6 @@ pub fn list_record_page(
     limit: i64,
 ) -> Result<ContactRecordPage> {
     let limit = limit.clamp(1, 100);
-    let matching_count = count_records(conn, query, account_id, favorites_only)?;
 
     let mut bind: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
     let mut where_sql = record_where_clause(query, account_id, favorites_only, &mut bind);
@@ -398,7 +380,6 @@ pub fn list_record_page(
     Ok(ContactRecordPage {
         next_cursor,
         records,
-        matching_count,
         total_count: total_count.max(0) as usize,
         favorite_count: favorite_count.max(0) as usize,
         account_counts,
@@ -731,8 +712,6 @@ mod tests {
         assert!(first.next_cursor.is_some());
         assert!(second.next_cursor.is_some());
         assert!(third.next_cursor.is_none());
-        assert_eq!(first.matching_count, 61);
-
         let ids = first
             .records
             .iter()

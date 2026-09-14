@@ -23,7 +23,6 @@ pub(crate) struct ContactDirectoryState {
     pub(crate) scope: String,
     pub(crate) page: usize,
     pub(crate) next_cursor: Option<ContactRecordCursor>,
-    pub(crate) matching_count: usize,
     pub(crate) total_count: usize,
     pub(crate) favorite_count: usize,
     pub(crate) account_counts: HashMap<i64, usize>,
@@ -43,7 +42,6 @@ impl ContactDirectoryState {
             scope: "All contacts".to_owned(),
             page: 1,
             next_cursor: None,
-            matching_count: 0,
             total_count: 0,
             favorite_count: 0,
             account_counts: HashMap::new(),
@@ -57,7 +55,6 @@ impl ContactDirectoryState {
         self.selected_id = None;
         self.page = 1;
         self.next_cursor = None;
-        self.matching_count = 0;
         self.editing_new = false;
         self.using_core = true;
     }
@@ -85,7 +82,6 @@ impl ContactDirectoryState {
             );
         }
         self.next_cursor = page.next_cursor;
-        self.matching_count = page.matching_count;
         self.total_count = page.total_count;
         self.favorite_count = page.favorite_count;
         self.account_counts = page.account_counts.into_iter().collect();
@@ -230,9 +226,8 @@ pub(crate) fn apply_contact_rows(app: &AppWindow, state: &Rc<RefCell<ContactDire
         })
         .collect::<Vec<_>>();
     crate::reconcile_model_rows(&directory.rows, rows, |row| row.id);
-    let (account_rows, selected_scope_label) = contact_account_rows(app, &directory);
+    let account_rows = contact_account_rows(app, &directory);
     app.set_contact_scope(directory.scope.clone().into());
-    app.set_contact_scope_label(selected_scope_label.into());
     app.set_contact_search_query(directory.query.clone().into());
     let total_count = if directory.using_core {
         directory.total_count
@@ -248,15 +243,8 @@ pub(crate) fn apply_contact_rows(app: &AppWindow, state: &Rc<RefCell<ContactDire
             .filter(|contact| contact.is_favorite)
             .count()
     };
-    let visible_count = if directory.using_core {
-        directory.matching_count
-    } else {
-        visible.len()
-    };
     app.set_contact_total_count(total_count.min(i32::MAX as usize) as i32);
     app.set_contact_favorite_count(favorite_count.min(i32::MAX as usize) as i32);
-    app.set_contact_visible_count(visible_count.min(i32::MAX as usize) as i32);
-    app.set_contact_shown_count(shown_count as i32);
     app.set_contact_can_load_more(if directory.using_core {
         directory.next_cursor.is_some()
     } else {
@@ -376,7 +364,7 @@ pub(crate) fn apply_contact_directory(app: &AppWindow, state: &Rc<RefCell<Contac
 fn contact_account_rows(
     app: &AppWindow,
     directory: &ContactDirectoryState,
-) -> (Vec<ContactAccountRow>, String) {
+) -> Vec<ContactAccountRow> {
     // Index local counts once, rather than scanning all contacts per account.
     let mut local_counts = HashMap::<i64, usize>::new();
     let mut managed_count = 0;
@@ -392,18 +380,10 @@ fn contact_account_rows(
         }
     }
     let connected_accounts = app.get_connected_accounts();
-    let mut selected_scope_label = directory.scope.clone();
     let account_rows = (0..connected_accounts.row_count())
         .filter_map(|index| connected_accounts.row_data(index))
         .map(|account| {
             let selected = directory.scope == format!("Account:{}", account.id);
-            if selected {
-                selected_scope_label = if account.name.is_empty() {
-                    account.email.to_string()
-                } else {
-                    account.name.to_string()
-                };
-            }
             let count = if directory.using_core {
                 directory
                     .account_counts
@@ -434,12 +414,12 @@ fn contact_account_rows(
         })
         .collect::<Vec<_>>();
 
-    (account_rows, selected_scope_label)
+    account_rows
 }
 
 pub(crate) fn refresh_contact_sidebar(app: &AppWindow, state: &Rc<RefCell<ContactDirectoryState>>) {
     let directory = state.borrow();
-    let accounts = contact_account_rows(app, &directory).0;
+    let accounts = contact_account_rows(app, &directory);
     let rows = make_contact_sidebar_rows(accounts, &directory.collapsed_sections);
     let model = Rc::clone(&directory.sidebar_rows);
     drop(directory);
@@ -554,7 +534,6 @@ mod tests {
                 })
                 .collect(),
             next_cursor,
-            matching_count: 61,
             total_count: 61,
             favorite_count: 0,
             account_counts: vec![(1, 61)],

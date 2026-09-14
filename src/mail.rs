@@ -175,7 +175,6 @@ pub struct MailConversation {
 pub struct MailMetadata {
     pub account_revision: u64,
     pub scope: String,
-    pub scope_total: usize,
     pub inbox_count: usize,
     pub mailboxes: Vec<MailboxEntry>,
     pub unified_mailboxes: Vec<MailboxEntry>,
@@ -334,9 +333,9 @@ impl CoreMailSource {
         Ok((accounts, scope, page))
     }
 
-    /// Load exact sidebar badges and the selected folder's total independently
-    /// of the latency-sensitive message page. Core events can therefore update
-    /// counters live without delaying list rendering.
+    /// Load exact sidebar badges independently of the latency-sensitive message
+    /// page. Core events can therefore update counters live without delaying
+    /// list rendering.
     pub async fn load_mail_metadata(&self, scope: &str) -> Result<MailMetadata, String> {
         let revision = self.account_revision();
         let accounts = self
@@ -349,12 +348,7 @@ impl CoreMailSource {
             .list_folders(None)
             .await
             .map_err(|error| error.to_string())?;
-        let labels = self
-            .core
-            .list_labels()
-            .await
-            .map_err(|error| error.to_string())?;
-        self.load_mail_metadata_with_context(scope, &accounts, &folders, &labels)
+        self.load_mail_metadata_with_context(scope, &accounts, &folders)
             .await
             .map(|mut metadata| {
                 metadata.account_revision = revision;
@@ -367,19 +361,15 @@ impl CoreMailSource {
         scope: &str,
         accounts: &[Account],
         folders: &[FolderInfo],
-        labels: &[Label],
     ) -> Result<MailMetadata, String> {
         let badges = self
             .core
             .mailbox_badge_counts()
             .await
             .map_err(|error| error.to_string())?;
-        let resolved = resolve_scope(scope, accounts, folders, labels);
-        let scope_total = count_threads(&self.core, &resolved).await?;
         Ok(MailMetadata {
             account_revision: self.account_revision(),
             scope: scope.to_owned(),
-            scope_total,
             inbox_count: badges
                 .iter()
                 .map(|counts| counts.inbox.max(0) as usize)
@@ -409,7 +399,7 @@ impl CoreMailSource {
             .map_err(|error| error.to_string())?;
         let metadata = if include_counts {
             Some(
-                self.load_mail_metadata_with_context(scope, accounts, folders, &labels)
+                self.load_mail_metadata_with_context(scope, accounts, folders)
                     .await?,
             )
         } else {
@@ -1504,18 +1494,6 @@ fn mailbox_entries_with_counts(
         entry.count = mailbox_badge(&entry.label, counts);
     }
     entries
-}
-
-async fn count_threads(core: &Core, resolved: &ScopeResolution) -> Result<usize, String> {
-    core.count_threads_filtered(
-        resolved.view,
-        resolved.split_id,
-        resolved.account_id,
-        resolved.label_id,
-        resolved.folder_id,
-    )
-    .await
-    .map_err(|error| error.to_string())
 }
 
 fn unified_mailbox_entries(badges: &[MailboxBadgeCounts]) -> Vec<MailboxEntry> {

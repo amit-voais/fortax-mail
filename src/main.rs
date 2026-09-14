@@ -351,7 +351,6 @@ enum MailListUpdateKind {
 }
 
 struct MailMetadataUpdate {
-    scope: String,
     result: Result<mail::MailMetadata, String>,
 }
 
@@ -439,7 +438,6 @@ struct InboxState {
     scope: String,
     query: String,
     search_filter: String,
-    total_count: usize,
     inbox_count: usize,
     page: usize,
     next_cursor: Option<ThreadCursor>,
@@ -804,7 +802,6 @@ impl InboxState {
             collapsed_sidebar_sections: HashSet::from(["categories".into(), "labels".into()]),
             sidebar_rows: Rc::new(SidebarModel::default()),
             folder_filter: String::new(),
-            total_count: 0,
             inbox_count: 0,
             messages: Vec::new(),
             conversation_owner_id: None,
@@ -864,7 +861,6 @@ impl InboxState {
         self.warm_start_cache
             .save(WarmStartSnapshot::capture(WarmStartProjection {
                 scope: &self.scope,
-                total_count: self.total_count,
                 inbox_count: self.inbox_count,
                 next_cursor: self.next_cursor,
                 accounts: &self.connected_accounts,
@@ -2522,7 +2518,6 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                 state.mailboxes = metadata.mailboxes;
                 state.unified_mailboxes = metadata.unified_mailboxes;
                 state.inbox_count = metadata.inbox_count;
-                state.total_count = metadata.scope_total;
                 drop(state);
                 if let Err(error) = refresh_from_source(
                     &app,
@@ -2802,9 +2797,6 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                     state.mailboxes = metadata.mailboxes;
                     state.unified_mailboxes = metadata.unified_mailboxes;
                     state.inbox_count = metadata.inbox_count;
-                    if update.scope == state.scope && state.query.trim().is_empty() {
-                        state.total_count = metadata.scope_total;
-                    }
                     drop(state);
                     refresh_list_metadata(&app, &mail_metadata_state);
                 }
@@ -2880,7 +2872,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                 let updates = mail_metadata_tx.clone();
                 mail_update_runtime.spawn(async move {
                     let result = core.load_mail_metadata(&scope).await;
-                    let _ = updates.send(MailMetadataUpdate { scope, result }).await;
+                    let _ = updates.send(MailMetadataUpdate { result }).await;
                 });
             }
         }
@@ -3232,7 +3224,6 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                         // visible behind it.
                         state.using_core = true;
                         state.scope = snapshot.scope;
-                        state.total_count = snapshot.total_count;
                         state.inbox_count = snapshot.inbox_count;
                         state.next_cursor = snapshot.next_cursor;
                         state.connected_accounts = snapshot.accounts;
@@ -3332,7 +3323,6 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                         };
                         if let Some(page) = page.filter(|page| page.account_count > 0) {
                             state.using_core = true;
-                            state.total_count = page.messages.len();
                             if state.scope == "Unified Inbox" {
                                 state.inbox_count = page.messages.len();
                             }
@@ -3352,7 +3342,6 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                             state.labels.clear();
                             state.mailboxes.clear();
                             state.unified_mailboxes.clear();
-                            state.total_count = 0;
                             state.inbox_count = 0;
                             state.next_cursor = None;
                             state.selected_id = None;
@@ -3394,7 +3383,6 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                     app.set_startup_ready(true);
                     app.invoke_product_changed(app.get_active_view());
                     app.set_startup_failed(false);
-                    app.set_list_status(UiMessage::plain("Loading local data…"));
                     schedule_profile_avatar_fetches(
                         &app,
                         &startup_state,
@@ -3428,11 +3416,6 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                             state.mailboxes = metadata.mailboxes;
                             state.unified_mailboxes = metadata.unified_mailboxes;
                             state.inbox_count = metadata.inbox_count;
-                            if state.scope == metadata.scope
-                                && state.query.trim().is_empty()
-                            {
-                                state.total_count = metadata.scope_total;
-                            }
                         }
                         refresh_list_metadata(&app, &startup_state);
                     }
@@ -3796,9 +3779,6 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                         state.mailboxes = metadata.mailboxes.clone();
                         state.unified_mailboxes = metadata.unified_mailboxes.clone();
                         state.inbox_count = metadata.inbox_count;
-                        if metadata.scope == state.scope && state.query.trim().is_empty() {
-                            state.total_count = metadata.scope_total;
-                        }
                     }
                     let current = removal.scope == state.scope && removal.query == state.query;
                     if current && let Some(page) = removal.page.as_ref() {
@@ -3821,9 +3801,6 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                         }
                         state.labels = page.labels.clone();
                         state.next_cursor = page.next_cursor;
-                        if !state.query.trim().is_empty() {
-                            state.total_count = state.messages.len();
-                        }
                     }
                     current && removal.page.is_some()
                 };
@@ -4247,9 +4224,6 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                             state.mailboxes = metadata.mailboxes;
                             state.unified_mailboxes = metadata.unified_mailboxes;
                             state.inbox_count = metadata.inbox_count;
-                            if metadata.scope == state.scope && state.query.trim().is_empty() {
-                                state.total_count = metadata.scope_total;
-                            }
                         }
                     }
                     if let Err(error) =

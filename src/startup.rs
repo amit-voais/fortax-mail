@@ -196,7 +196,6 @@ pub(crate) struct WarmStartSnapshot {
     format_version: u32,
     pub(crate) saved_at_ms: i64,
     pub(crate) scope: String,
-    pub(crate) total_count: usize,
     pub(crate) inbox_count: usize,
     pub(crate) next_cursor: Option<ThreadCursor>,
     pub(crate) accounts: Vec<Account>,
@@ -207,7 +206,6 @@ pub(crate) struct WarmStartSnapshot {
 
 pub(crate) struct WarmStartProjection<'a> {
     pub(crate) scope: &'a str,
-    pub(crate) total_count: usize,
     pub(crate) inbox_count: usize,
     pub(crate) next_cursor: Option<ThreadCursor>,
     pub(crate) accounts: &'a [Account],
@@ -222,7 +220,6 @@ impl WarmStartSnapshot {
             format_version: WARM_START_FORMAT_VERSION,
             saved_at_ms: chrono::Utc::now().timestamp_millis(),
             scope: projection.scope.to_owned(),
-            total_count: projection.total_count,
             inbox_count: projection.inbox_count,
             next_cursor: projection.next_cursor,
             accounts: projection
@@ -741,7 +738,6 @@ mod warm_start_tests {
         let mailboxes = [mailbox()];
         let snapshot = WarmStartSnapshot::capture(WarmStartProjection {
             scope: "Person / Inbox",
-            total_count: 3,
             inbox_count: 3,
             next_cursor: Some(ThreadCursor {
                 last_message_at: 123,
@@ -794,7 +790,6 @@ mod warm_start_tests {
         let mailboxes = [mailbox()];
         let snapshot = WarmStartSnapshot::capture(WarmStartProjection {
             scope: "Unified Inbox",
-            total_count: messages.len(),
             inbox_count: messages.len(),
             next_cursor: None,
             accounts: &accounts,

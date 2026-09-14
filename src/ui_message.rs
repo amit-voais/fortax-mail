@@ -50,20 +50,6 @@ impl UiMessage {
         }
     }
 
-    pub(crate) fn three_arguments(
-        key: &'static str,
-        argument: impl ToString,
-        second_argument: impl ToString,
-        third_argument: impl ToString,
-    ) -> Self {
-        Self {
-            key,
-            argument: argument.to_string(),
-            second_argument: second_argument.to_string(),
-            third_argument: third_argument.to_string(),
-        }
-    }
-
     fn as_slint(&self) -> LocalizedMessage {
         LocalizedMessage {
             key: self.key.into(),
@@ -87,7 +73,6 @@ pub(crate) fn translated(app: &AppWindow, message: &UiMessage) -> SharedString {
 pub(crate) trait AppWindowMessages {
     fn set_startup_error(&self, message: UiMessage);
     fn set_contact_save_status(&self, message: UiMessage);
-    fn set_list_status(&self, message: UiMessage);
     fn set_render_status(&self, message: UiMessage);
     fn set_sync_status(&self, message: UiMessage);
     fn set_compose_notice(&self, message: UiMessage);
@@ -100,10 +85,6 @@ impl AppWindowMessages for AppWindow {
 
     fn set_contact_save_status(&self, message: UiMessage) {
         self.set_contact_save_message(message.as_slint());
-    }
-
-    fn set_list_status(&self, message: UiMessage) {
-        self.set_list_message(message.as_slint());
     }
 
     fn set_render_status(&self, message: UiMessage) {

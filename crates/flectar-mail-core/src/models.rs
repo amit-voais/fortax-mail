@@ -418,7 +418,6 @@ pub struct ContactRecordCursor {
 pub struct ContactRecordPage {
     pub records: Vec<ContactRecord>,
     pub next_cursor: Option<ContactRecordCursor>,
-    pub matching_count: usize,
     pub total_count: usize,
     pub favorite_count: usize,
     pub account_counts: Vec<(i64, usize)>,

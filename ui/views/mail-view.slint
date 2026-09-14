@@ -29,10 +29,8 @@ export component MailView inherits Rectangle {
     in property <string> selected_scope: "Unified Inbox";
     in property <string> selected_scope_title: "Unified Inbox";
     in property <string> unified_count: "";
-    in property <string> total_count: "";
     in property <string> search_query: "";
     in property <string> search_filter: "All mail";
-    in property <string> list_status: "";
     in property <string> selected_sender: "";
     in property <string> selected_address: "";
     in property <string> selected_subject: "";
@@ -187,10 +185,8 @@ export component MailView inherits Rectangle {
                 emails: root.emails;
                 selected_scope: root.selected_scope;
                 scope_title: root.selected_scope_title;
-                total_count: root.total_count;
                 search_query: root.search_query;
                 search_filter: root.search_filter;
-                list_status: root.list_status;
                 sync_in_progress: root.sync_in_progress;
                 can_load_more: root.can_load_more;
                 loading_more: root.loading_more;
@@ -387,10 +383,8 @@ export component MailView inherits Rectangle {
                 emails: root.emails;
                 selected_scope: root.selected_scope;
                 scope_title: root.selected_scope_title;
-                total_count: root.total_count;
                 search_query: root.search_query;
                 search_filter: root.search_filter;
-                list_status: root.list_status;
                 sync_in_progress: root.sync_in_progress;
                 can_load_more: root.can_load_more;
                 loading_more: root.loading_more;
