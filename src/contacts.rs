@@ -310,8 +310,15 @@ fn apply_contact_form(app: &AppWindow, contact: &ContactRecord) {
 
 /// Product teardown must not discard an editor with unsaved changes.
 pub(crate) fn has_unsaved_edits(app: &AppWindow, state: &ContactDirectoryState) -> bool {
-    if state.editing_new { return true; }
-    let Some(contact) = state.selected_id.and_then(|id| state.contacts.iter().find(|c| c.id == id)) else { return false; };
+    if state.editing_new {
+        return true;
+    }
+    let Some(contact) = state
+        .selected_id
+        .and_then(|id| state.contacts.iter().find(|c| c.id == id))
+    else {
+        return false;
+    };
     app.get_contact_name().as_str() != contact.name
         || app.get_contact_email().as_str() != contact.email
         || app.get_contact_phone().as_str() != contact.phone

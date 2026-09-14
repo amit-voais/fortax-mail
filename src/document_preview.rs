@@ -66,13 +66,15 @@ pub(crate) async fn preview(data: Vec<u8>, media: &str) -> Result<Preview> {
 }
 
 async fn decode_image(work: impl FnOnce() -> Result<Preview> + Send + 'static) -> Result<Preview> {
-    let permit = IMAGE_SLOT.try_acquire().map_err(|_| {
-        "Another image is still being decoded. Try again shortly.".to_string()
-    })?;
+    let permit = IMAGE_SLOT
+        .try_acquire()
+        .map_err(|_| "Another image is still being decoded. Try again shortly.".to_string())?;
     tokio::task::spawn_blocking(move || {
         let _permit = permit;
         work()
-    }).await.map_err(|e| e.to_string())?
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[cfg(test)]
@@ -80,23 +82,41 @@ mod tests {
     use super::*;
     #[test]
     fn cancelling_a_preview_does_not_admit_another_decoder_until_the_worker_exits() {
-        let runtime = tokio::runtime::Builder::new_multi_thread().worker_threads(1).enable_all().build().unwrap();
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(1)
+            .enable_all()
+            .build()
+            .unwrap();
         runtime.block_on(async {
             let (started, wait_started) = tokio::sync::oneshot::channel();
             let (release, wait_release) = std::sync::mpsc::channel();
             let job = tokio::spawn(decode_image(move || {
                 started.send(()).unwrap();
-                wait_release.recv_timeout(std::time::Duration::from_secs(5)).unwrap();
+                wait_release
+                    .recv_timeout(std::time::Duration::from_secs(5))
+                    .unwrap();
                 Ok(Preview::Text("finished".into()))
             }));
             wait_started.await.unwrap();
             job.abort();
             assert!(job.await.err().unwrap().is_cancelled());
-            assert!(decode_image(|| panic!("second decoder started")).await.is_err());
+            assert!(
+                decode_image(|| panic!("second decoder started"))
+                    .await
+                    .is_err()
+            );
             release.send(()).unwrap();
-            let permit = tokio::time::timeout(std::time::Duration::from_secs(5), IMAGE_SLOT.acquire()).await.unwrap().unwrap();
+            let permit =
+                tokio::time::timeout(std::time::Duration::from_secs(5), IMAGE_SLOT.acquire())
+                    .await
+                    .unwrap()
+                    .unwrap();
             drop(permit);
-            assert!(decode_image(|| Ok(Preview::Text("next".into()))).await.is_ok());
+            assert!(
+                decode_image(|| Ok(Preview::Text("next".into())))
+                    .await
+                    .is_ok()
+            );
         });
     }
 }

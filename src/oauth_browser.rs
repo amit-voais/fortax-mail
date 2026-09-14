@@ -91,9 +91,7 @@ mod tests {
         let app = AppWindow::new().unwrap();
         register(
             &app,
-            Arc::new(
-                flectar_mail_core::oauth::redirect::LoopbackRedirectBroker::default(),
-            ),
+            Arc::new(flectar_mail_core::oauth::redirect::LoopbackRedirectBroker::default()),
         );
         app.set_startup_ready(true);
         app.set_oauth_in_progress(true);

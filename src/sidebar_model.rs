@@ -611,7 +611,9 @@ mod interaction_tests {
         };
         draw();
         assert!(model.row_count() > 1_000);
-        click(140., 220.); // Account header below the empty unified section.
+        const UNIFIED_SECTION_CENTER_Y: f32 = 135.;
+        const ACCOUNT_HEADER_CENTER_Y: f32 = 265.;
+        click(140., ACCOUNT_HEADER_CENTER_Y);
         assert!(collapsed.borrow().contains("account:1"));
         assert!(model.row_count() < 10);
         // Hiding/showing the whole sidebar and switching desktop layouts
@@ -624,7 +626,7 @@ mod interaction_tests {
         app.set_workspace_layout("default".into());
         draw();
         assert!(collapsed.borrow().contains("account:1"));
-        click(140., 220.);
+        click(140., ACCOUNT_HEADER_CENTER_Y);
         assert!(!collapsed.borrow().contains("account:1"));
         assert!(model.row_count() > 1_000);
         // Virtualized rows are recreated after scrolling in both directions.
@@ -638,16 +640,16 @@ mod interaction_tests {
             });
             draw();
         }
-        click(140., 94.); // Unified header still has its host-owned state.
+        click(140., UNIFIED_SECTION_CENTER_Y);
         assert!(collapsed.borrow().contains("unified"));
         app.window().set_size(slint::PhysicalSize::new(390, 844));
         draw();
         click(31., 29.); // Open the compact folder drawer.
-        click(140., 94.);
+        click(140., UNIFIED_SECTION_CENTER_Y);
         assert!(!collapsed.borrow().contains("unified"));
         click(340., 200.); // Close the drawer through its backdrop.
         click(31., 29.);
-        click(140., 220.);
+        click(140., ACCOUNT_HEADER_CENTER_Y);
         assert!(collapsed.borrow().contains("account:1"));
         // Contacts uses the same retained update machinery and shared row controls.
         app.window().set_size(slint::PhysicalSize::new(1320, 800));

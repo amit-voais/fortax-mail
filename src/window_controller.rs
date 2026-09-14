@@ -79,7 +79,11 @@ pub(super) fn register_window_preference_callbacks(
         let Some(app) = app_weak.upgrade() else {
             return;
         };
-        if cfg!(any(target_os = "android", target_os = "ios", feature = "flatpak")) {
+        if cfg!(any(
+            target_os = "android",
+            target_os = "ios",
+            feature = "flatpak"
+        )) {
             app.set_close_to_tray(false);
             app.set_sync_status(UiMessage::plain(
                 "System tray behavior is unavailable in this package.",

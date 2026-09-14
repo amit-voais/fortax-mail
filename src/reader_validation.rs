@@ -533,10 +533,16 @@ fn automatic_selection_hydrates_and_reader_controls_are_responsive_and_keyboard_
         account_ids: Vec::new(),
         is_managed: false,
     };
-    let directory = Rc::new(RefCell::new(ContactDirectoryState::new(vec![contact], false)));
+    let directory = Rc::new(RefCell::new(ContactDirectoryState::new(
+        vec![contact],
+        false,
+    )));
     apply_contact_directory(&app, &directory);
     app.set_contact_name("Unsaved name".into());
-    assert!(!contacts::release_directory(&app, &mut directory.borrow_mut()));
+    assert!(!contacts::release_directory(
+        &app,
+        &mut directory.borrow_mut()
+    ));
     app.set_active_view("contacts".into());
     draw("contact-edit-before-switch", 1280, 900);
     app.set_active_view("mail".into());
@@ -546,7 +552,10 @@ fn automatic_selection_hydrates_and_reader_controls_are_responsive_and_keyboard_
     assert_eq!(app.get_contact_name(), "Unsaved name");
     assert_eq!(directory.borrow().contacts.len(), 1);
     app.set_contact_name("Original name".into());
-    assert!(contacts::release_directory(&app, &mut directory.borrow_mut()));
+    assert!(contacts::release_directory(
+        &app,
+        &mut directory.borrow_mut()
+    ));
     assert!(directory.borrow().contacts.is_empty());
     app.hide().unwrap();
 }

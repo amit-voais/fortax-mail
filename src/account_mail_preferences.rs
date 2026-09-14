@@ -53,9 +53,14 @@ impl UiWork {
     }
 }
 
-async fn preferences(core: &Core) -> Result<(Settings, Vec<flectar_mail_core::models::AccountConfig>), String> {
+async fn preferences(
+    core: &Core,
+) -> Result<(Settings, Vec<flectar_mail_core::models::AccountConfig>), String> {
     let settings = core.get_settings().await.map_err(|e| e.to_string())?;
-    let configs = core.list_account_configs().await.map_err(|e| e.to_string())?;
+    let configs = core
+        .list_account_configs()
+        .await
+        .map_err(|e| e.to_string())?;
     Ok((settings, configs))
 }
 
@@ -127,24 +132,44 @@ pub(super) fn register(
 ) {
     let ui = app.global::<AccountMailPreferences>();
     ui.set_desktop_supported(!cfg!(any(target_os = "android", target_os = "ios")));
-    let tasks = UiWork { runtime: runtime.clone(), generation: Rc::new(Cell::new(0)) };
+    let tasks = UiWork {
+        runtime: runtime.clone(),
+        generation: Rc::new(Cell::new(0)),
+    };
     let context_state = state.clone();
     let context_generation = tasks.generation.clone();
-    let context = Rc::new(RefCell::new((core(state), state.borrow().connected_accounts.iter().map(|a| a.id).collect::<Vec<_>>())));
+    let context = Rc::new(RefCell::new((
+        core(state),
+        state
+            .borrow()
+            .connected_accounts
+            .iter()
+            .map(|a| a.id)
+            .collect::<Vec<_>>(),
+    )));
     let weak = app.as_weak();
     ui.on_context_changed(move || {
         let current_core = core(&context_state);
-        let accounts = context_state.borrow().connected_accounts.iter().map(|a| a.id).collect::<Vec<_>>();
+        let accounts = context_state
+            .borrow()
+            .connected_accounts
+            .iter()
+            .map(|a| a.id)
+            .collect::<Vec<_>>();
         let mut previous = context.borrow_mut();
         let same_core = match (&previous.0, &current_core) {
             (Some(a), Some(b)) => Arc::ptr_eq(a, b),
             (None, None) => true,
             _ => false,
         };
-        if same_core && previous.1 == accounts { return; }
+        if same_core && previous.1 == accounts {
+            return;
+        }
         *previous = (current_core, accounts);
         context_generation.set(context_generation.get().wrapping_add(1));
-        let Some(app) = weak.upgrade() else { return; };
+        let Some(app) = weak.upgrade() else {
+            return;
+        };
         let ui = app.global::<AccountMailPreferences>();
         ui.set_busy(false);
         ui.set_account_id(-1);
@@ -172,34 +197,39 @@ pub(super) fn register(
         if ui.get_busy() {
             return;
         }
-        work.spawn(&app, true, async move { preferences(&core).await }, move |app, result| {
-        let ui = app.global::<AccountMailPreferences>();
-        match result {
-            Ok((settings, configs)) => {
-                if let Some(config) = configs.iter().find(|c| c.id == i64::from(id)) {
-                    ui.set_account_id(id);
-                    ui.set_account_label(config.email.clone().into());
-                    ui.set_status("".into());
-                    ui.set_key_inventory("".into());
-                    project(&app, &settings, config.id);
-                    ui.invoke_edit_signature(-1);
-                    let p = &config.settings.security;
-                    ui.set_fingerprint(p.signing_fingerprint.clone().into());
-                    ui.set_sign(p.sign_by_default);
-                    ui.set_encrypt(p.require_encryption);
-                    ui.set_recipient_keys(
-                        p.recipient_keys
-                            .iter()
-                            .map(|(e, k)| format!("{e}={k}"))
-                            .collect::<Vec<_>>()
-                            .join("\n")
-                            .into(),
-                    );
+        work.spawn(
+            &app,
+            true,
+            async move { preferences(&core).await },
+            move |app, result| {
+                let ui = app.global::<AccountMailPreferences>();
+                match result {
+                    Ok((settings, configs)) => {
+                        if let Some(config) = configs.iter().find(|c| c.id == i64::from(id)) {
+                            ui.set_account_id(id);
+                            ui.set_account_label(config.email.clone().into());
+                            ui.set_status("".into());
+                            ui.set_key_inventory("".into());
+                            project(&app, &settings, config.id);
+                            ui.invoke_edit_signature(-1);
+                            let p = &config.settings.security;
+                            ui.set_fingerprint(p.signing_fingerprint.clone().into());
+                            ui.set_sign(p.sign_by_default);
+                            ui.set_encrypt(p.require_encryption);
+                            ui.set_recipient_keys(
+                                p.recipient_keys
+                                    .iter()
+                                    .map(|(e, k)| format!("{e}={k}"))
+                                    .collect::<Vec<_>>()
+                                    .join("\n")
+                                    .into(),
+                            );
+                        }
+                    }
+                    Err(e) => ui.set_status(e.into()),
                 }
-            }
-            Err(e) => ui.set_status(e.into()),
-        }
-        });
+            },
+        );
     });
     let weak = app.as_weak();
     ui.on_edit_signature(move |index| {
@@ -227,29 +257,42 @@ pub(super) fn register(
             return;
         };
         let ui = app.global::<AccountMailPreferences>();
-        if ui.get_busy() { return; }
+        if ui.get_busy() {
+            return;
+        }
         let signature = Signature {
             id: ui.get_editing_id().to_string(),
             account_id: i64::from(ui.get_account_id()),
             name: ui.get_signature_name().to_string(),
             html: flectar_mail_core::signatures::text_html(ui.get_signature_text().as_str()),
         };
-        work.spawn(&app, true, async move {
-            let saved = core.save_signature(signature).await.map_err(|e| e.to_string())?;
-            let settings = core.get_settings().await.map_err(|e| e.to_string())?;
-            Ok((saved, settings))
-        }, |app, result| {
-            let ui = app.global::<AccountMailPreferences>();
-            match result {
-                Ok((saved, settings)) => {
-                    project(&app, &settings, saved.account_id);
-                    let index = choices(&settings, saved.account_id).iter().position(|s| s.id == saved.id).unwrap_or(0);
-                    ui.invoke_edit_signature(index as i32);
-                    ui.set_status("Signature saved.".into());
+        work.spawn(
+            &app,
+            true,
+            async move {
+                let saved = core
+                    .save_signature(signature)
+                    .await
+                    .map_err(|e| e.to_string())?;
+                let settings = core.get_settings().await.map_err(|e| e.to_string())?;
+                Ok((saved, settings))
+            },
+            |app, result| {
+                let ui = app.global::<AccountMailPreferences>();
+                match result {
+                    Ok((saved, settings)) => {
+                        project(&app, &settings, saved.account_id);
+                        let index = choices(&settings, saved.account_id)
+                            .iter()
+                            .position(|s| s.id == saved.id)
+                            .unwrap_or(0);
+                        ui.invoke_edit_signature(index as i32);
+                        ui.set_status("Signature saved.".into());
+                    }
+                    Err(e) => ui.set_status(e.into()),
                 }
-                Err(e) => ui.set_status(e.into()),
-            }
-        });
+            },
+        );
     });
     let weak = app.as_weak();
     let state_delete = state.clone();
@@ -260,22 +303,34 @@ pub(super) fn register(
             return;
         };
         let ui = app.global::<AccountMailPreferences>();
-        if ui.get_busy() { return; }
+        if ui.get_busy() {
+            return;
+        }
         let id = i64::from(ui.get_account_id());
         let signature = ui.get_editing_id().to_string();
-        work.spawn(&app, true, async move {
-            core.delete_signature(id, signature).await.map_err(|e| e.to_string())?;
-            core.get_settings().await.map_err(|e| e.to_string())
-        }, move |app, result| {
-            match result {
+        work.spawn(
+            &app,
+            true,
+            async move {
+                core.delete_signature(id, signature)
+                    .await
+                    .map_err(|e| e.to_string())?;
+                core.get_settings().await.map_err(|e| e.to_string())
+            },
+            move |app, result| match result {
                 Ok(settings) => {
                     project(&app, &settings, id);
-                    app.global::<AccountMailPreferences>().invoke_edit_signature(-1);
-                    status(&app, Ok(()), "Signature deleted; affected defaults cleared.");
+                    app.global::<AccountMailPreferences>()
+                        .invoke_edit_signature(-1);
+                    status(
+                        &app,
+                        Ok(()),
+                        "Signature deleted; affected defaults cleared.",
+                    );
                 }
                 Err(e) => status(&app, Err(e), ""),
-            }
-        });
+            },
+        );
     });
     let weak = app.as_weak();
     let state_defaults = state.clone();
@@ -286,7 +341,9 @@ pub(super) fn register(
             return;
         };
         let ui = app.global::<AccountMailPreferences>();
-        if ui.get_busy() { return; }
+        if ui.get_busy() {
+            return;
+        }
         let id = |index: i32| {
             usize::try_from(index - 1)
                 .ok()
@@ -294,10 +351,20 @@ pub(super) fn register(
                 .map(|s| s.id.to_string())
         };
         let account = i64::from(ui.get_account_id());
-        let defaults = SignatureDefaults { new_id: id(ui.get_new_index()), reply_id: id(ui.get_reply_index()) };
-        work.spawn(&app, true, async move {
-            core.set_signature_defaults(account, defaults).await.map_err(|e| e.to_string())
-        }, |app, result| status(&app, result, "Signature defaults saved."));
+        let defaults = SignatureDefaults {
+            new_id: id(ui.get_new_index()),
+            reply_id: id(ui.get_reply_index()),
+        };
+        work.spawn(
+            &app,
+            true,
+            async move {
+                core.set_signature_defaults(account, defaults)
+                    .await
+                    .map_err(|e| e.to_string())
+            },
+            |app, result| status(&app, result, "Signature defaults saved."),
+        );
     });
     let weak = app.as_weak();
     let state_security = state.clone();
@@ -336,9 +403,16 @@ pub(super) fn register(
             }
         }
         let id = i64::from(ui.get_account_id());
-        work.spawn(&app, true, async move {
-            core.set_mail_security(id, policy).await.map_err(|e| e.to_string())
-        }, |app, result| status(&app, result, "OpenPGP settings saved."));
+        work.spawn(
+            &app,
+            true,
+            async move {
+                core.set_mail_security(id, policy)
+                    .await
+                    .map_err(|e| e.to_string())
+            },
+            |app, result| status(&app, result, "OpenPGP settings saved."),
+        );
     });
     register_keys_and_reader(app, state, &tasks);
     register_composer(app, state, &tasks, document, editor);
@@ -351,11 +425,7 @@ fn show_message(app: &AppWindow, message: OpenedMessage, memory: &Arc<std::sync:
     ui.set_reader_status(message.status.into());
     ui.set_reader_open(true);
 }
-fn register_keys_and_reader(
-    app: &AppWindow,
-    state: &Rc<RefCell<InboxState>>,
-    tasks: &UiWork,
-) {
+fn register_keys_and_reader(app: &AppWindow, state: &Rc<RefCell<InboxState>>, tasks: &UiWork) {
     let memory = Arc::new(std::sync::Mutex::new(Vec::<u8>::new()));
     let reader_generation = Rc::new(Cell::new(0_u64));
     let ui = app.global::<AccountMailPreferences>();
@@ -397,11 +467,17 @@ fn register_keys_and_reader(
         let Some(core) = core(&state) else { return };
         let Some((selected_id, thread_id)) = ({
             let state = state.borrow();
-            state.selected_id.and_then(|id| state.messages.iter().find(|m| m.id == id))
+            state
+                .selected_id
+                .and_then(|id| state.messages.iter().find(|m| m.id == id))
                 .and_then(|m| m.thread_id.map(|thread| (m.id, thread)))
-        }) else { return; };
+        }) else {
+            return;
+        };
         let ui = app.global::<AccountMailPreferences>();
-        if ui.get_busy() { return; }
+        if ui.get_busy() {
+            return;
+        }
         ui.set_reader_text("".into());
         ui.set_reader_status("Opening OpenPGP message…".into());
         ui.set_reader_open(true);
@@ -410,18 +486,30 @@ fn register_keys_and_reader(
         let state = state.clone();
         let generation = generation.clone();
         let expected = generation.get();
-        work.spawn(&app, true, async move {
-            let detail = core.get_latest_thread_body(thread_id).await.map_err(|e| e.to_string())?;
-            core.open_openpgp_message(detail.id).await.map_err(|e| e.to_string())
-        }, move |app, result| {
-            if generation.get() != expected || state.borrow().selected_id != Some(selected_id) {
-                return;
-            }
-            match result {
-                Ok(message) => show_message(&app, message, &opened),
-                Err(e) => app.global::<AccountMailPreferences>().set_reader_status(e.into()),
-            }
-        });
+        work.spawn(
+            &app,
+            true,
+            async move {
+                let detail = core
+                    .get_latest_thread_body(thread_id)
+                    .await
+                    .map_err(|e| e.to_string())?;
+                core.open_openpgp_message(detail.id)
+                    .await
+                    .map_err(|e| e.to_string())
+            },
+            move |app, result| {
+                if generation.get() != expected || state.borrow().selected_id != Some(selected_id) {
+                    return;
+                }
+                match result {
+                    Ok(message) => show_message(&app, message, &opened),
+                    Err(e) => app
+                        .global::<AccountMailPreferences>()
+                        .set_reader_status(e.into()),
+                }
+            },
+        );
     });
     let memory_close = memory.clone();
     let weak = app.as_weak();
@@ -440,14 +528,21 @@ fn register_keys_and_reader(
     let work = tasks.clone();
     ui.on_export_message(move || {
         let Some(app) = weak.upgrade() else { return };
-        if app.global::<AccountMailPreferences>().get_busy() { return; }
+        if app.global::<AccountMailPreferences>().get_busy() {
+            return;
+        }
         let data = memory.lock().unwrap().clone();
-        if data.is_empty() { return; }
+        if data.is_empty() {
+            return;
+        }
         let generation = reader_generation.clone();
         let expected = generation.get();
         work.spawn(&app, true, export_message(data), move |app, result| {
-            if generation.get() == expected && let Err(e) = result {
-                app.global::<AccountMailPreferences>().set_reader_status(e.into());
+            if generation.get() == expected
+                && let Err(e) = result
+            {
+                app.global::<AccountMailPreferences>()
+                    .set_reader_status(e.into());
             }
         });
     });
@@ -626,69 +721,79 @@ fn register_composer(
         let expected = generation.get();
         let list = list.clone();
         let managed = managed.clone();
-        work.spawn(&app, false, async move { preferences(&core).await }, move |app, result| {
-        if generation.get() != expected || app.get_compose_account_id() != account_id { return; }
-        let ui = app.global::<AccountMailPreferences>();
-        match result {
-            Ok((settings, configs)) => {
-                if !configs.iter().any(|c| c.id == i64::from(account_id)) { return; }
-                ui.set_composer_preferences_ready(true);
-                let signatures = choices(&settings, i64::from(account_id));
-                let mut names = vec![SharedString::from("No signature")];
-                names.extend(signatures.iter().map(|s| SharedString::from(&s.name)));
-                ui.set_composer_signature_names(ModelRc::new(VecModel::from(names)));
-                *list.borrow_mut() = signatures.clone();
-                if let Some(config) = configs.iter().find(|c| c.id == i64::from(account_id)) {
-                    let p = &config.settings.security;
-                    ui.set_composer_security(
-                        if p.require_encryption {
-                            if p.sign_by_default {
-                                "OpenPGP: encryption required · digitally signed"
-                            } else {
-                                "OpenPGP: encryption required"
-                            }
-                        } else if p.sign_by_default {
-                            "OpenPGP: digitally signed · not encrypted"
-                        } else {
-                            "Message is not end-to-end encrypted"
-                        }
-                        .into(),
-                    );
-                }
-                if app.get_compose_mode() == "draft" {
-                    *managed.borrow_mut() = None;
-                    ui.set_composer_signature_index(0);
+        work.spawn(
+            &app,
+            false,
+            async move { preferences(&core).await },
+            move |app, result| {
+                if generation.get() != expected || app.get_compose_account_id() != account_id {
                     return;
                 }
-                // A cleared composer starts a fresh insertion lifecycle.
-                if app.get_compose_body().is_empty() {
-                    *managed.borrow_mut() = None;
+                let ui = app.global::<AccountMailPreferences>();
+                match result {
+                    Ok((settings, configs)) => {
+                        if !configs.iter().any(|c| c.id == i64::from(account_id)) {
+                            return;
+                        }
+                        ui.set_composer_preferences_ready(true);
+                        let signatures = choices(&settings, i64::from(account_id));
+                        let mut names = vec![SharedString::from("No signature")];
+                        names.extend(signatures.iter().map(|s| SharedString::from(&s.name)));
+                        ui.set_composer_signature_names(ModelRc::new(VecModel::from(names)));
+                        *list.borrow_mut() = signatures.clone();
+                        if let Some(config) = configs.iter().find(|c| c.id == i64::from(account_id))
+                        {
+                            let p = &config.settings.security;
+                            ui.set_composer_security(
+                                if p.require_encryption {
+                                    if p.sign_by_default {
+                                        "OpenPGP: encryption required · digitally signed"
+                                    } else {
+                                        "OpenPGP: encryption required"
+                                    }
+                                } else if p.sign_by_default {
+                                    "OpenPGP: digitally signed · not encrypted"
+                                } else {
+                                    "Message is not end-to-end encrypted"
+                                }
+                                .into(),
+                            );
+                        }
+                        if app.get_compose_mode() == "draft" {
+                            *managed.borrow_mut() = None;
+                            ui.set_composer_signature_index(0);
+                            return;
+                        }
+                        // A cleared composer starts a fresh insertion lifecycle.
+                        if app.get_compose_body().is_empty() {
+                            *managed.borrow_mut() = None;
+                        }
+                        let defaults = settings
+                            .signature_defaults
+                            .get(&account_id.to_string())
+                            .cloned()
+                            .unwrap_or_default();
+                        let id = if app.get_compose_mode() == "new" {
+                            defaults.new_id
+                        } else {
+                            defaults.reply_id
+                        };
+                        let index = signatures
+                            .iter()
+                            .position(|s| Some(&s.id) == id.as_ref())
+                            .map_or(0, |i| i as i32 + 1);
+                        ui.invoke_composer_signature(index);
+                    }
+                    Err(e) => {
+                        app.set_compose_notice(UiMessage::detail(
+                            "Could not load account preferences: {}",
+                            e,
+                        ));
+                        app.set_compose_notice_is_error(true);
+                    }
                 }
-                let defaults = settings
-                    .signature_defaults
-                    .get(&account_id.to_string())
-                    .cloned()
-                    .unwrap_or_default();
-                let id = if app.get_compose_mode() == "new" {
-                    defaults.new_id
-                } else {
-                    defaults.reply_id
-                };
-                let index = signatures
-                    .iter()
-                    .position(|s| Some(&s.id) == id.as_ref())
-                    .map_or(0, |i| i as i32 + 1);
-                ui.invoke_composer_signature(index);
-            }
-            Err(e) => {
-                app.set_compose_notice(UiMessage::detail(
-                    "Could not load account preferences: {}",
-                    e,
-                ));
-                app.set_compose_notice_is_error(true);
-            }
-        }
-        });
+            },
+        );
     });
     let weak = app.as_weak();
     let document = document.clone();
@@ -736,42 +841,69 @@ mod tests {
         use std::sync::mpsc;
         struct Proxy(mpsc::Sender<Box<dyn FnOnce() + Send>>);
         impl EventLoopProxy for Proxy {
-            fn quit_event_loop(&self) -> Result<(), slint::EventLoopError> { Ok(()) }
-            fn invoke_from_event_loop(&self, event: Box<dyn FnOnce() + Send>) -> Result<(), slint::EventLoopError> {
-                self.0.send(event).map_err(|_| slint::EventLoopError::EventLoopTerminated)
+            fn quit_event_loop(&self) -> Result<(), slint::EventLoopError> {
+                Ok(())
+            }
+            fn invoke_from_event_loop(
+                &self,
+                event: Box<dyn FnOnce() + Send>,
+            ) -> Result<(), slint::EventLoopError> {
+                self.0
+                    .send(event)
+                    .map_err(|_| slint::EventLoopError::EventLoopTerminated)
             }
         }
         struct Headless(mpsc::Sender<Box<dyn FnOnce() + Send>>);
         impl Platform for Headless {
             fn create_window_adapter(&self) -> Result<Rc<dyn WindowAdapter>, slint::PlatformError> {
-                Ok(slint::platform::software_renderer::MinimalSoftwareWindow::new(
-                    slint::platform::software_renderer::RepaintBufferType::ReusedBuffer))
+                Ok(
+                    slint::platform::software_renderer::MinimalSoftwareWindow::new(
+                        slint::platform::software_renderer::RepaintBufferType::ReusedBuffer,
+                    ),
+                )
             }
-            fn new_event_loop_proxy(&self) -> Option<Box<dyn EventLoopProxy>> { Some(Box::new(Proxy(self.0.clone()))) }
+            fn new_event_loop_proxy(&self) -> Option<Box<dyn EventLoopProxy>> {
+                Some(Box::new(Proxy(self.0.clone())))
+            }
         }
         struct Delivered(Arc<std::sync::atomic::AtomicBool>);
         impl Drop for Delivered {
-            fn drop(&mut self) { self.0.store(true, std::sync::atomic::Ordering::SeqCst); }
+            fn drop(&mut self) {
+                self.0.store(true, std::sync::atomic::Ordering::SeqCst);
+            }
         }
         let (events, receiver) = mpsc::channel();
         slint::platform::set_platform(Box::new(Headless(events))).unwrap();
         let app = AppWindow::new().unwrap();
         let tasks = UiWork {
-            runtime: Rc::new(tokio::runtime::Builder::new_multi_thread().worker_threads(1).enable_all().build().unwrap()),
+            runtime: Rc::new(
+                tokio::runtime::Builder::new_multi_thread()
+                    .worker_threads(1)
+                    .enable_all()
+                    .build()
+                    .unwrap(),
+            ),
             generation: Rc::new(Cell::new(0)),
         };
         let (release, waiting) = tokio::sync::oneshot::channel();
         let dropped = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let payload = Delivered(dropped.clone());
-        tasks.spawn(&app, true, async move {
-            waiting.await.unwrap();
-            Ok(payload)
-        }, |_, _| panic!("removed account received private content"));
+        tasks.spawn(
+            &app,
+            true,
+            async move {
+                waiting.await.unwrap();
+                Ok(payload)
+            },
+            |_, _| panic!("removed account received private content"),
+        );
         assert!(app.global::<AccountMailPreferences>().get_busy());
         tasks.generation.set(1);
         release.send(()).unwrap();
         while !dropped.load(std::sync::atomic::Ordering::SeqCst) {
-            receiver.recv_timeout(std::time::Duration::from_secs(5)).unwrap()();
+            receiver
+                .recv_timeout(std::time::Duration::from_secs(5))
+                .unwrap()();
         }
         // A stale result must not release a newer operation's busy indicator.
         assert!(app.global::<AccountMailPreferences>().get_busy());
@@ -783,7 +915,9 @@ mod tests {
             applied2.set(true);
         });
         while !applied.get() {
-            receiver.recv_timeout(std::time::Duration::from_secs(5)).unwrap()();
+            receiver
+                .recv_timeout(std::time::Duration::from_secs(5))
+                .unwrap()();
         }
     }
 

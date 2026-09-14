@@ -578,6 +578,8 @@ export component EmailComposer inherits Rectangle {
         delete-template(id) => root.delete-template(id);
     }
 
+    // Freeze the exact draft snapshot being submitted. If delivery fails the
+    // overlay disappears and the same fields become editable again.
     if root.sending : TouchArea {
         x: 0px;
         y: 0px;

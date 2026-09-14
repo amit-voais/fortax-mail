@@ -401,7 +401,11 @@ pub(crate) enum StartupUpdate {
     },
     Ready(Result<Box<StartupSnapshot>, String>),
     MailMetadata(Result<mail::MailMetadata, String>),
-    Calendar { generation: u64, month: chrono::NaiveDate, snapshot: StartupCalendarSnapshot },
+    Calendar {
+        generation: u64,
+        month: chrono::NaiveDate,
+        snapshot: StartupCalendarSnapshot,
+    },
     Connections {
         calendar: Vec<CalendarConnection>,
         contacts: Vec<CardDavConnection>,

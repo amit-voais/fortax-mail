@@ -81,14 +81,25 @@ pub(crate) fn register(
     let previous_accounts = Rc::new(RefCell::new(Vec::<i64>::new()));
     let window = app.as_weak();
     app.global::<FilesUi>().on_context_changed(move || {
-        let ids = account_state.borrow().connected_accounts.iter().map(|a| a.id).collect::<Vec<_>>();
-        if *previous_accounts.borrow() == ids { return; }
+        let ids = account_state
+            .borrow()
+            .connected_accounts
+            .iter()
+            .map(|a| a.id)
+            .collect::<Vec<_>>();
+        if *previous_accounts.borrow() == ids {
+            return;
+        }
         *previous_accounts.borrow_mut() = ids;
         epoch.set(epoch.get().wrapping_add(1));
         account_generation.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        if let Some(task) = account_pending.borrow_mut().take() { task.abort(); }
+        if let Some(task) = account_pending.borrow_mut().take() {
+            task.abort();
+        }
         *account_pdf.lock().unwrap() = None;
-        if let Some(app) = window.upgrade() { reset_profile(&app.global::<FilesUi>()); }
+        if let Some(app) = window.upgrade() {
+            reset_profile(&app.global::<FilesUi>());
+        }
     });
     let profile_pending = pending.clone();
     let profile_generation = generation.clone();
@@ -101,7 +112,12 @@ pub(crate) fn register(
         slint::TimerMode::Repeated,
         std::time::Duration::from_millis(500),
         move || {
-            if profile_ui.upgrade().is_none_or(|app| app.get_active_view() != "files") { return; }
+            if profile_ui
+                .upgrade()
+                .is_none_or(|app| app.get_active_view() != "files")
+            {
+                return;
+            }
             let core = worker_state.borrow().core.as_ref().map(|c| c.file_core());
             if let Some(core) = core {
                 if worker_slot
@@ -110,14 +126,14 @@ pub(crate) fn register(
                     .is_none_or(|(prior, _)| !Arc::ptr_eq(prior, &core))
                 {
                     if worker_slot.borrow().is_some() {
-                    profile_generation.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-                    if let Some(task) = profile_pending.borrow_mut().take() {
-                        task.abort();
-                    }
-                    if let Some(app) = profile_ui.upgrade() {
-                        reset_profile(&app.global::<FilesUi>());
-                        *profile_pdf.lock().unwrap() = None;
-                    }
+                        profile_generation.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                        if let Some(task) = profile_pending.borrow_mut().take() {
+                            task.abort();
+                        }
+                        if let Some(app) = profile_ui.upgrade() {
+                            reset_profile(&app.global::<FilesUi>());
+                            *profile_pdf.lock().unwrap() = None;
+                        }
                     }
                     *worker_slot.borrow_mut() = Some((
                         core.clone(),

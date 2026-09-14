@@ -2,7 +2,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: flectar-mail 0.1.0\n"
-"POT-Creation-Date: 2026-09-14 12:04+0000\n"
+"POT-Creation-Date: 2026-09-14 12:19+0000\n"
 "PO-Revision-Date: 2026-08-31 02:35+0000\n"
 "Last-Translator: Flectar contributors\n"
 "Language-Team: Spanish\n"
@@ -580,11 +580,11 @@ msgstr "Falló la actualización del correo en segundo plano: {}"
 
 #: ui/app.slint:252
 msgid "No conversations in this folder"
-msgstr ""
+msgstr "No hay conversaciones en esta carpeta"
 
 #: ui/app.slint:253
 msgid "No conversations match this search"
-msgstr ""
+msgstr "Ninguna conversación coincide con esta búsqueda"
 
 #: ui/app.slint:254
 msgid "Mail core is ready for account synchronization and message actions."
@@ -594,53 +594,60 @@ msgstr ""
 
 #: ui/app.slint:255
 msgid "Showing {} of {} conversation"
-msgstr ""
+msgstr "Mostrando {} de {} conversación"
 
 #: ui/app.slint:256
 msgid "Showing {} of {} conversation · more available"
-msgstr ""
+msgstr "Mostrando {} de {} conversación · hay más disponibles"
 
 #: ui/app.slint:257
 msgid "Showing {} of {} conversation · current results complete"
-msgstr ""
+msgstr "Mostrando {} de {} conversación · resultados actuales completos"
 
 #: ui/app.slint:258
 msgid "Showing {} of {} conversations"
-msgstr ""
+msgstr "Mostrando {} de {} conversaciones"
 
 #: ui/app.slint:259
 msgid "Showing {} of {} conversations · more available"
-msgstr ""
+msgstr "Mostrando {} de {} conversaciones · hay más disponibles"
 
 #: ui/app.slint:260
 msgid "Showing {} of {} conversations · current results complete"
-msgstr ""
+msgstr "Mostrando {} de {} conversaciones · resultados actuales completos"
 
 #: ui/app.slint:261
 msgid "Showing {} of {} conversation matching \"{}\""
-msgstr ""
+msgstr "Mostrando {} de {} conversación que coincide con «{}»"
 
 #: ui/app.slint:262
 msgid "Showing {} of {} conversation matching \"{}\" · more available"
 msgstr ""
+"Mostrando {} de {} conversación que coincide con «{}» · hay más disponibles"
 
 #: ui/app.slint:263
 msgid ""
 "Showing {} of {} conversation matching \"{}\" · current results complete"
 msgstr ""
+"Mostrando {} de {} conversación que coincide con «{}» · resultados actuales "
+"completos"
 
 #: ui/app.slint:264
 msgid "Showing {} of {} conversations matching \"{}\""
-msgstr ""
+msgstr "Mostrando {} de {} conversaciones que coinciden con «{}»"
 
 #: ui/app.slint:265
 msgid "Showing {} of {} conversations matching \"{}\" · more available"
 msgstr ""
+"Mostrando {} de {} conversaciones que coinciden con «{}» · hay más "
+"disponibles"
 
 #: ui/app.slint:266
 msgid ""
 "Showing {} of {} conversations matching \"{}\" · current results complete"
 msgstr ""
+"Mostrando {} de {} conversaciones que coinciden con «{}» · resultados "
+"actuales completos"
 
 #: ui/app.slint:267
 msgid "Rendered with software fallback after GPU error: {}"
@@ -4127,7 +4134,7 @@ msgstr "(Sin asunto)"
 
 #: ui/views/mail-list-pane.slint:280 ui/views/mail-reading-pane.slint:657
 msgid "{} messages"
-msgstr ""
+msgstr "{} mensajes"
 
 #: ui/views/mail-list-pane.slint:283
 msgid "Replied"
@@ -4135,7 +4142,7 @@ msgstr "Respondido"
 
 #: ui/views/mail-list-pane.slint:376
 msgid "{} messages in this conversation"
-msgstr ""
+msgstr "{} mensajes en esta conversación"
 
 #: ui/views/mail-list-pane.slint:562
 msgid "Deselect {}"
@@ -4179,15 +4186,15 @@ msgstr "Prueba otra carpeta o término de búsqueda."
 
 #: ui/views/mail-reading-pane.slint:270
 msgid "Close conversation"
-msgstr ""
+msgstr "Cerrar conversación"
 
 #: ui/views/mail-reading-pane.slint:280
 msgid "Previous conversation"
-msgstr ""
+msgstr "Conversación anterior"
 
 #: ui/views/mail-reading-pane.slint:290
 msgid "Next conversation"
-msgstr ""
+msgstr "Conversación siguiente"
 
 #: ui/views/mail-reading-pane.slint:303
 msgid "Archive message"
@@ -4251,19 +4258,19 @@ msgstr "Ver texto sin formato"
 
 #: ui/views/mail-reading-pane.slint:650
 msgid "Conversation"
-msgstr ""
+msgstr "Conversación"
 
 #: ui/views/mail-reading-pane.slint:668
 msgid "Conversation messages"
-msgstr ""
+msgstr "Mensajes de la conversación"
 
 #: ui/views/mail-reading-pane.slint:680
 msgid "Message from {}"
-msgstr ""
+msgstr "Mensaje de {}"
 
 #: ui/views/mail-reading-pane.slint:706
 msgid "You"
-msgstr ""
+msgstr "Tú"
 
 #: ui/views/mail-reading-pane.slint:796
 msgid "Verified brand with BIMI authority evidence"
@@ -4498,60 +4505,3 @@ msgid "Leave blank to discover /.well-known/jmap from your email domain."
 msgstr ""
 "Déjalo vacío para detectar /.well-known/jmap a partir de tu dominio de "
 "correo."
-
-#~ msgid "No messages in this folder"
-#~ msgstr "No hay mensajes en esta carpeta"
-
-#~ msgid "No messages match this search"
-#~ msgstr "Ningún mensaje coincide con esta búsqueda"
-
-#~ msgid "Showing {} of {} message"
-#~ msgstr "Mostrando {} de {} mensaje"
-
-#~ msgid "Showing {} of {} message · more available"
-#~ msgstr "Mostrando {} de {} mensaje · hay más disponibles"
-
-#~ msgid "Showing {} of {} message · current results complete"
-#~ msgstr "Mostrando {} de {} mensaje · resultados actuales completos"
-
-#~ msgid "Showing {} of {} messages"
-#~ msgstr "Mostrando {} de {} mensajes"
-
-#~ msgid "Showing {} of {} messages · more available"
-#~ msgstr "Mostrando {} de {} mensajes · hay más disponibles"
-
-#~ msgid "Showing {} of {} messages · current results complete"
-#~ msgstr "Mostrando {} de {} mensajes · resultados actuales completos"
-
-#~ msgid "Showing {} of {} message matching \"{}\""
-#~ msgstr "Mostrando {} de {} mensaje que coincide con «{}»"
-
-#~ msgid "Showing {} of {} message matching \"{}\" · more available"
-#~ msgstr ""
-#~ "Mostrando {} de {} mensaje que coincide con «{}» · hay más disponibles"
-
-#~ msgid "Showing {} of {} message matching \"{}\" · current results complete"
-#~ msgstr ""
-#~ "Mostrando {} de {} mensaje que coincide con «{}» · resultados actuales "
-#~ "completos"
-
-#~ msgid "Showing {} of {} messages matching \"{}\""
-#~ msgstr "Mostrando {} de {} mensajes que coinciden con «{}»"
-
-#~ msgid "Showing {} of {} messages matching \"{}\" · more available"
-#~ msgstr ""
-#~ "Mostrando {} de {} mensajes que coinciden con «{}» · hay más disponibles"
-
-#~ msgid "Showing {} of {} messages matching \"{}\" · current results complete"
-#~ msgstr ""
-#~ "Mostrando {} de {} mensajes que coinciden con «{}» · resultados actuales "
-#~ "completos"
-
-#~ msgid "Close message preview"
-#~ msgstr "Cerrar vista previa del mensaje"
-
-#~ msgid "Previous message"
-#~ msgstr "Mensaje anterior"
-
-#~ msgid "Next message"
-#~ msgstr "Mensaje siguiente"

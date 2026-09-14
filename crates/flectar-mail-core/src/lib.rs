@@ -2973,11 +2973,13 @@ impl Core {
         }
     }
 
-    /// Wait for an explicitly requested send to finish.
+    /// Wait for one explicitly requested send to finish.
     ///
-    /// If the first delivery attempt fails, cancel its scheduled retry before
-    /// returning the error. This guarantees that the preserved, editable draft
-    /// cannot also be delivered later without another explicit Send.
+    /// The pending-action queue remains the durable owner of delivery, but an
+    /// interactive composer needs a stronger answer than "the action was
+    /// queued". If the first delivery attempt fails, cancel its scheduled
+    /// retry before returning the error so an editable preserved draft cannot
+    /// also be delivered later behind the user's back.
     pub async fn wait_for_send(&self, action_id: i64) -> Result<()> {
         let started = tokio::time::Instant::now();
         loop {
@@ -3018,6 +3020,10 @@ impl Core {
                 "cancelled" => {
                     return Err(CoreError::Other("message delivery was cancelled".into()));
                 }
+                // A retryable failure has already been written back to the
+                // pending row. There is a backoff before another claim, so the
+                // cancellation normally wins immediately; if another worker
+                // did claim it, keep observing that definitive attempt.
                 "pending" if last_error.is_some() => {
                     if self.cancel_send(action_id).await? {
                         return Err(CoreError::Other(last_error.unwrap()));

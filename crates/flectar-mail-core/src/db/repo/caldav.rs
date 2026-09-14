@@ -214,11 +214,7 @@ pub fn upsert_calendar_with_initial_enabled(
 /// Remove collections no longer advertised during an explicit reconnect.
 /// Their events stay available as local events and can be adopted again by
 /// UID if that collection is connected later.
-pub fn retain_calendars(
-    conn: &Connection,
-    account_id: i64,
-    urls: &HashSet<String>,
-) -> Result<()> {
+pub fn retain_calendars(conn: &Connection, account_id: i64, urls: &HashSet<String>) -> Result<()> {
     let mut statement = conn.prepare("SELECT id, url FROM calendars WHERE account_id = ?1")?;
     let calendars = statement
         .query_map(params![account_id], |row| {
@@ -455,8 +451,12 @@ mod tests {
         // Default falls back to an enabled calendar.
         assert_eq!(default_calendar(&c, 1).unwrap().unwrap().id, a);
 
-        retain_calendars(&c, 1, &HashSet::from(["https://dav.example.com/cal/a/".into()]))
-            .unwrap();
+        retain_calendars(
+            &c,
+            1,
+            &HashSet::from(["https://dav.example.com/cal/a/".into()]),
+        )
+        .unwrap();
         assert_eq!(list_calendars(&c, Some(1)).unwrap().len(), 1);
         let detached: (Option<i64>, Option<String>, Option<String>, bool) = c
             .query_row(

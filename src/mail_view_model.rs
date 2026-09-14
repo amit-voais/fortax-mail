@@ -419,7 +419,9 @@ pub(super) fn render_current(
             }
             (display_email, conversation_ready)
         };
-        if using_core && (!conversation_ready || display_email.html.is_none()) {
+        if (using_core || display_email.body_pending)
+            && (!conversation_ready || display_email.html.is_none())
+        {
             app.global::<EmailReader>()
                 .invoke_ensure_body(if conversation_ready {
                     display_email.id
