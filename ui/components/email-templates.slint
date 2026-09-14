@@ -65,6 +65,13 @@ export component EmailTemplates inherits Rectangle {
             root.editing = false;
             root.delete-open = false;
             root.refresh();
+            template-focus.focus();
+        }
+    }
+
+    changed delete-open => {
+        if !root.delete-open && root.open {
+            template-focus.focus();
         }
     }
 
@@ -87,238 +94,254 @@ export component EmailTemplates inherits Rectangle {
         background: root.surface-color;
         clip: true;
 
-        header := Rectangle {
-            x: 0px;
-            y: 0px;
+        template-focus := FocusScope {
             width: parent.width;
-            height: 56px;
-            background: root.raised-color;
-            border-width: 1px;
-            border-color: root.ui-border-color;
-
-            Text {
-                x: 20px;
-                width: parent.width - 76px;
-                height: parent.height;
-                text: root.editing
-                    ? (root.edit-id < 0 ? @tr("New email template") : @tr("Edit email template"))
-                    : @tr("Email templates");
-                color: root.title-color;
-                font-size: TypeScale.heading;
-                font-weight: 700;
-                vertical-alignment: center;
-                overflow: elide;
+            height: parent.height;
+            capture-key-pressed(event) => {
+                if event.text == Key.Escape && !root.delete-open {
+                    if root.editing {
+                        root.editing = false;
+                    } else {
+                        root.close-dialog();
+                    }
+                    return accept;
+                }
+                reject
             }
 
-            IconButton {
-                x: parent.width - 48px;
-                y: 8px;
-                width: 40px;
-                height: 40px;
-                icon: @image-url("../icons/phosphor/x.svg");
-                icon-color: root.muted-color;
-                hover-background: root.hover-color;
-                tooltip-text: @tr("Close");
-                clicked => { root.close-dialog(); }
-            }
-        }
+            header := Rectangle {
+                x: 0px;
+                y: 0px;
+                width: parent.width;
+                height: 56px;
+                background: root.raised-color;
+                border-width: 1px;
+                border-color: root.ui-border-color;
 
-        if !root.editing : Rectangle {
-            x: 0px;
-            y: header.height;
-            width: parent.width;
-            height: parent.height - header.height;
+                Text {
+                    x: 20px;
+                    width: parent.width - 76px;
+                    height: parent.height;
+                    text: root.editing
+                        ? (root.edit-id < 0 ? @tr("New email template") : @tr("Edit email template"))
+                        : @tr("Email templates");
+                    color: root.title-color;
+                    font-size: TypeScale.heading;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
 
-            Button {
-                x: 16px;
-                y: 14px;
-                width: 144px;
-                height: 34px;
-                text: @tr("New template");
-                icon: @image-url("../icons/phosphor/plus.svg");
-                has-icon: true;
-                primary: true;
-                clicked => { root.new-template(); }
-            }
-
-            if root.notice != "" : Text {
-                x: 160px;
-                y: 14px;
-                width: max(0px, parent.width - 176px);
-                height: 34px;
-                text: root.notice;
-                color: root.notice-is-error ? #d04a43 : root.accent-color;
-                font-size: TypeScale.caption;
-                vertical-alignment: center;
-                overflow: elide;
-            }
-
-            if root.templates.length == 0 : Text {
-                x: 20px;
-                y: 82px;
-                width: parent.width - 40px;
-                text: @tr("No email templates yet");
-                color: root.muted-color;
-                font-size: TypeScale.body;
-                horizontal-alignment: center;
-                wrap: word-wrap;
-            }
-
-            templates-list := ListView {
-                x: 12px;
-                y: 60px;
-                width: parent.width - 24px;
-                height: parent.height - 72px;
-                viewport-width: self.visible-width;
-                horizontal-scrollbar-policy: always-off;
-                mouse-drag-pan-enabled: root.compact;
-
-                for template[index] in root.templates : Rectangle {
-                    width: max(0px, templates-list.visible-width - 12px);
-                    height: 64px;
-                    border-radius: 7px;
-                    background: template-hit.has-hover ? root.hover-color : transparent;
-
-                    Text {
-                        x: 10px;
-                        y: 9px;
-                        width: max(0px, parent.width - 162px);
-                        height: 22px;
-                        text: template.name;
-                        color: root.title-color;
-                        font-size: TypeScale.body;
-                        font-weight: 600;
-                        overflow: elide;
-                    }
-
-                    Text {
-                        x: 10px;
-                        y: 32px;
-                        width: max(0px, parent.width - 162px);
-                        height: 20px;
-                        text: template.shortcut == ""
-                            ? (template.subject == "" ? @tr("No subject") : template.subject)
-                            : "/" + template.shortcut + (template.subject == "" ? "" : " · " + template.subject);
-                        color: root.muted-color;
-                        font-size: TypeScale.caption;
-                        overflow: elide;
-                    }
-
-                    template-hit := TouchArea {
-                        x: 0px;
-                        width: max(0px, parent.width - 144px);
-                        height: parent.height;
-                        accessible-role: button;
-                        accessible-label: @tr("Insert template {}", template.name);
-                        accessible-action-default => {
-                            if root.use-template(template.id) { root.close-dialog(); }
-                        }
-                        clicked => {
-                            if root.use-template(template.id) { root.close-dialog(); }
-                        }
-                        mouse-cursor: pointer;
-                    }
-
-                    Button {
-                        x: parent.width - 136px;
-                        y: 15px;
-                        width: 68px;
-                        height: 34px;
-                        text: @tr("Insert");
-                        clicked => {
-                            if root.use-template(template.id) { root.close-dialog(); }
-                        }
-                    }
-
-                    IconButton {
-                        x: parent.width - 66px;
-                        y: 16px;
-                        icon: @image-url("../icons/phosphor/note-pencil-fill.svg");
-                        icon-color: root.muted-color;
-                        hover-background: root.hover-color;
-                        tooltip-text: @tr("Edit template");
-                        clicked => { root.edit-template(index); }
-                    }
-
-                    IconButton {
-                        x: parent.width - 32px;
-                        y: 16px;
-                        icon: @image-url("../icons/phosphor/trash.svg");
-                        icon-color: root.muted-color;
-                        hover-background: root.hover-color;
-                        tooltip-text: @tr("Delete template");
-                        clicked => {
-                            root.delete-id = template.id;
-                            root.delete-name = template.name;
-                            root.delete-open = true;
-                        }
-                    }
+                IconButton {
+                    x: parent.width - 48px;
+                    y: 8px;
+                    width: 40px;
+                    height: 40px;
+                    icon: @image-url("../icons/phosphor/x.svg");
+                    icon-color: root.muted-color;
+                    hover-background: root.hover-color;
+                    tooltip-text: @tr("Close");
+                    clicked => { root.close-dialog(); }
                 }
             }
-        }
 
-        if root.editing : VerticalBox {
-            x: 18px;
-            y: header.height + 14px;
-            width: parent.width - 36px;
-            height: parent.height - header.height - 28px;
-            padding: 0px;
-            spacing: 8px;
+            if !root.editing : Rectangle {
+                x: 0px;
+                y: header.height;
+                width: parent.width;
+                height: parent.height - header.height;
 
-            LineEdit {
-                height: 36px;
-                text <=> root.edit-name;
-                input-label: @tr("Template name");
-                placeholder-text: @tr("Template name");
-            }
-            LineEdit {
-                height: 36px;
-                text <=> root.edit-shortcut;
-                input-label: @tr("Shortcut (optional)");
-                placeholder-text: @tr("Shortcut (optional)");
-            }
-            LineEdit {
-                height: 36px;
-                text <=> root.edit-subject;
-                input-label: @tr("Subject (optional)");
-                placeholder-text: @tr("Subject (optional)");
-            }
-            TextEdit {
-                vertical-stretch: 1;
-                min-height: 70px;
-                text <=> root.edit-body;
-                placeholder-text: @tr("Template message");
-            }
-
-            if root.notice != "" : Text {
-                height: 22px;
-                text: root.notice;
-                color: root.notice-is-error ? #d04a43 : root.accent-color;
-                font-size: TypeScale.caption;
-                overflow: elide;
-            }
-
-            HorizontalLayout {
-                height: 34px;
-                spacing: 8px;
-                Rectangle { horizontal-stretch: 1; }
                 Button {
-                    text: @tr("Cancel");
-                    clicked => { root.editing = false; }
-                }
-                Button {
-                    text: @tr("Save template");
+                    x: 16px;
+                    y: 14px;
+                    width: 144px;
+                    height: 34px;
+                    text: @tr("New template");
+                    icon: @image-url("../icons/phosphor/plus.svg");
+                    has-icon: true;
                     primary: true;
-                    enabled: root.edit-name != "" && (root.edit-subject != "" || root.edit-body != "");
-                    clicked => {
-                        if root.save-template(
-                            root.edit-id,
-                            root.edit-name,
-                            root.edit-shortcut,
-                            root.edit-subject,
-                            root.edit-body,
-                        ) {
-                            root.editing = false;
+                    clicked => { root.new-template(); }
+                }
+
+                if root.notice != "" : Text {
+                    x: 160px;
+                    y: 14px;
+                    width: max(0px, parent.width - 176px);
+                    height: 34px;
+                    text: root.notice;
+                    color: root.notice-is-error ? #d04a43 : root.accent-color;
+                    font-size: TypeScale.caption;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+
+                if root.templates.length == 0 : Text {
+                    x: 20px;
+                    y: 82px;
+                    width: parent.width - 40px;
+                    text: @tr("No email templates yet");
+                    color: root.muted-color;
+                    font-size: TypeScale.body;
+                    horizontal-alignment: center;
+                    wrap: word-wrap;
+                }
+
+                templates-list := ListView {
+                    x: 12px;
+                    y: 60px;
+                    width: parent.width - 24px;
+                    height: parent.height - 72px;
+                    viewport-width: self.visible-width;
+                    horizontal-scrollbar-policy: always-off;
+                    mouse-drag-pan-enabled: root.compact;
+
+                    for template[index] in root.templates : Rectangle {
+                        width: max(0px, templates-list.visible-width - 12px);
+                        height: 64px;
+                        border-radius: 7px;
+                        background: template-hit.has-hover ? root.hover-color : transparent;
+
+                        Text {
+                            x: 10px;
+                            y: 9px;
+                            width: max(0px, parent.width - 162px);
+                            height: 22px;
+                            text: template.name;
+                            color: root.title-color;
+                            font-size: TypeScale.body;
+                            font-weight: 600;
+                            overflow: elide;
+                        }
+
+                        Text {
+                            x: 10px;
+                            y: 32px;
+                            width: max(0px, parent.width - 162px);
+                            height: 20px;
+                            text: template.shortcut == ""
+                                ? (template.subject == "" ? @tr("No subject") : template.subject)
+                                : "/" + template.shortcut + (template.subject == "" ? "" : " · " + template.subject);
+                            color: root.muted-color;
+                            font-size: TypeScale.caption;
+                            overflow: elide;
+                        }
+
+                        template-hit := TouchArea {
+                            x: 0px;
+                            width: max(0px, parent.width - 144px);
+                            height: parent.height;
+                            accessible-role: button;
+                            accessible-label: @tr("Insert template {}", template.name);
+                            accessible-action-default => {
+                                if root.use-template(template.id) { root.close-dialog(); }
+                            }
+                            clicked => {
+                                if root.use-template(template.id) { root.close-dialog(); }
+                            }
+                            mouse-cursor: pointer;
+                        }
+
+                        Button {
+                            x: parent.width - 136px;
+                            y: 15px;
+                            width: 68px;
+                            height: 34px;
+                            text: @tr("Insert");
+                            clicked => {
+                                if root.use-template(template.id) { root.close-dialog(); }
+                            }
+                        }
+
+                        IconButton {
+                            x: parent.width - 66px;
+                            y: 16px;
+                            icon: @image-url("../icons/phosphor/note-pencil-fill.svg");
+                            icon-color: root.muted-color;
+                            hover-background: root.hover-color;
+                            tooltip-text: @tr("Edit template");
+                            clicked => { root.edit-template(index); }
+                        }
+
+                        IconButton {
+                            x: parent.width - 32px;
+                            y: 16px;
+                            icon: @image-url("../icons/phosphor/trash.svg");
+                            icon-color: root.muted-color;
+                            hover-background: root.hover-color;
+                            tooltip-text: @tr("Delete template");
+                            clicked => {
+                                root.delete-id = template.id;
+                                root.delete-name = template.name;
+                                root.delete-open = true;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if root.editing : VerticalBox {
+                x: 18px;
+                y: header.height + 14px;
+                width: parent.width - 36px;
+                height: parent.height - header.height - 28px;
+                padding: 0px;
+                spacing: 8px;
+
+                LineEdit {
+                    height: 36px;
+                    text <=> root.edit-name;
+                    input-label: @tr("Template name");
+                    placeholder-text: @tr("Template name");
+                }
+                LineEdit {
+                    height: 36px;
+                    text <=> root.edit-shortcut;
+                    input-label: @tr("Shortcut (optional)");
+                    placeholder-text: @tr("Shortcut (optional)");
+                }
+                LineEdit {
+                    height: 36px;
+                    text <=> root.edit-subject;
+                    input-label: @tr("Subject (optional)");
+                    placeholder-text: @tr("Subject (optional)");
+                }
+                TextEdit {
+                    vertical-stretch: 1;
+                    min-height: 70px;
+                    text <=> root.edit-body;
+                    placeholder-text: @tr("Template message");
+                }
+
+                if root.notice != "" : Text {
+                    height: 22px;
+                    text: root.notice;
+                    color: root.notice-is-error ? #d04a43 : root.accent-color;
+                    font-size: TypeScale.caption;
+                    overflow: elide;
+                }
+
+                HorizontalLayout {
+                    height: 34px;
+                    spacing: 8px;
+                    Rectangle { horizontal-stretch: 1; }
+                    Button {
+                        text: @tr("Cancel");
+                        clicked => { root.editing = false; }
+                    }
+                    Button {
+                        text: @tr("Save template");
+                        primary: true;
+                        enabled: root.edit-name != "" && (root.edit-subject != "" || root.edit-body != "");
+                        clicked => {
+                            if root.save-template(
+                                root.edit-id,
+                                root.edit-name,
+                                root.edit-shortcut,
+                                root.edit-subject,
+                                root.edit-body,
+                            ) {
+                                root.editing = false;
+                            }
                         }
                     }
                 }
