@@ -7,6 +7,53 @@ fn renderer(html: &str) -> GpuEmailRenderer {
 }
 const BODY: &str = "<body style='margin:0'><p style='margin:0;font-size:20px'>Cafe\u{301} hello <a href='https://example.com'>linked world</a></p></body>";
 
+#[test]
+fn issue_16_segoe_ui_digits_paint_as_visible_content() {
+    let mut prepared = prepare_email_html(
+        r#"<body style="margin:0;background:#fff"><div style="font-family:Segoe UI;font-size:20px;color:#000">0123456789</div></body>"#,
+    )
+    .unwrap();
+    let frame = render_prepared_cpu(&mut prepared, 240, 60, 1.0).unwrap();
+    let pixels = frame.tiles[0].image.to_rgba8().unwrap();
+    let dark_pixels = pixels
+        .as_slice()
+        .iter()
+        .filter(|pixel| pixel.a > 0 && pixel.r < 100 && pixel.g < 100 && pixel.b < 100)
+        .count();
+    assert!(dark_pixels > 100, "Segoe UI digits produced no visible outlines");
+}
+
+#[test]
+fn issue_16_reader_mode_keeps_text_around_nested_blocks() {
+    let html = r#"<div style="font-family:Segoe UI; font-size:14px;">
+This is a DMARC aggregate report from Microsoft Corporation. For Emails received between 2026-09-09 00:00:00 UTC to 2026-09-10 00:00:00 UTC.<br>
+<br>
+You're receiving this email because you have included your email address in the 'rua' tag of your DMARC record in DNS for example.eu. Please remove your email address from the 'rua' tag if you don't want to receive this email.<br>
+<br>
+<div style="font-family:Segoe UI; font-size:12px; color:#666666;">
+Please do not respond to this e-mail. This mailbox is not monitored and you will not receive a response. For any feedback/suggestions, kindly mail to dmarcreportfeedback@microsoft.com.<br>
+<br>
+Microsoft respects your privacy. Review our Online Services
+<a href="https://privacy.microsoft.com/en-us/privacystatement">Privacy Statement</a>.<br>
+One Microsoft Way, Redmond, WA, USA 98052.
+</div>
+</div>"#;
+    let r = renderer(html);
+    let items = r.reader_items();
+    let reader_text = items
+        .iter()
+        .filter(|item| item.url.is_empty())
+        .map(|item| item.name.as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(reader_text.contains("2026-09-09 00:00:00 UTC"));
+    assert!(reader_text.contains("Please do not respond to this e-mail"));
+    assert!(items.iter().any(|item| {
+        item.url == "https://privacy.microsoft.com/en-us/privacystatement"
+            && item.name == "Privacy Statement"
+    }));
+}
+
 /// Run alone; reports application tile latency, not compositor frame time.
 #[test]
 #[ignore = "isolated scroll latency probe"]

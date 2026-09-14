@@ -183,11 +183,31 @@ impl GpuEmailRenderer {
                 y: node.absolute_position(0.0, 0.0).y * self.zoom,
             });
         });
-        if items.is_empty() && !email.plain_text.is_empty() {
-            items.push(crate::ReaderItem {
-                name: email.plain_text.clone().into(),
-                ..Default::default()
-            });
+        if !email.plain_text.is_empty() {
+            // Mixed inline/block containers can leave visible text in an
+            // anonymous layout box with no semantic element of its own. A
+            // reader projection built only from retained element layouts
+            // would silently omit that text. Verify that the non-action rows
+            // partition the complete document text; if they do not, use the
+            // authoritative plain-text projection and retain link actions.
+            let projected = items
+                .iter()
+                .filter(|item| item.url.is_empty())
+                .map(|item| item.name.as_str())
+                .collect::<Vec<_>>()
+                .join(" ");
+            let normalized = |text: &str| text.split_whitespace().collect::<Vec<_>>().join(" ");
+            if normalized(&projected) != normalized(&email.plain_text) {
+                items.retain(|item| !item.url.is_empty());
+                items.insert(
+                    0,
+                    crate::ReaderItem {
+                        name: email.plain_text.clone().into(),
+                        kind: "text".into(),
+                        ..Default::default()
+                    },
+                );
+            }
         }
         items
     }

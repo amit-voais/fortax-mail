@@ -2007,7 +2007,7 @@ fn relative_time_at(timestamp_ms: i64, now: DateTime<Local>) -> String {
 
 fn text_to_html(text: &str) -> String {
     format!(
-        "<html><body style=\"font-family:Arial,sans-serif;padding:32px;line-height:1.6;color:#303348\"><p>{}</p></body></html>",
+        "<html><body style=\"font-family:Arial,sans-serif;padding:32px;line-height:1.6;color:#303348\"><pre style=\"margin:0;font:inherit;white-space:pre-wrap;overflow-wrap:anywhere\">{}</pre></body></html>",
         escape_html(text)
     )
 }
@@ -2389,6 +2389,17 @@ mod tests {
         );
 
         assert_eq!(html, "<main><strong>Rich message</strong></main>");
+    }
+
+    #[test]
+    fn plain_text_body_preserves_reply_lines_and_quote_depth() {
+        let text = "Hi Tomas,\n\n> Earlier reply\n>> Older reply";
+        let html = readable_message_html(None, Some(text), "preview");
+        let prepared = crate::renderer::prepare_email_html(&html).unwrap();
+
+        assert!(html.contains("white-space:pre-wrap"));
+        assert!(html.contains("&gt; Earlier reply\n&gt;&gt; Older reply"));
+        assert_eq!(prepared.plain_text, text);
     }
 
     #[test]

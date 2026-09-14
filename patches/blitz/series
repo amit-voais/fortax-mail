@@ -6,3 +6,4 @@
 0006-float-disabled-line-breaking.patch
 0007-inline-float-layout.patch
 0008-email-rendering-and-image-performance.patch
+0009-disable-email-font-hinting.patch

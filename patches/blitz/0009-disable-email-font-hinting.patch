@@ -1,0 +1,16 @@
+diff --git a/crates/blitz-paint/src/text.rs b/crates/blitz-paint/src/text.rs
+--- a/crates/blitz-paint/src/text.rs
++++ b/crates/blitz-paint/src/text.rs
+@@ -778,7 +778,11 @@ pub(crate) fn stroke_text<'a>(
+                     scene.draw_glyphs(
+                         font,
+                         font_size,
+-                        !FONT_EMBOLDEN_ENABLED, // hint
++                        // Email content is continuously scalable. Drawing the
++                        // source outlines avoids font-program-specific hinting
++                        // failures that can turn otherwise valid glyphs into
++                        // empty paths (notably Segoe UI digits on Windows).
++                        false, // hint
+                         run.normalized_coords(),
+                         embolden,
+                         Fill::NonZero,
