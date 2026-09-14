@@ -1719,12 +1719,22 @@ fn summary_to_message(
     folder: &str,
 ) -> Option<MailMessage> {
     let id = i32::try_from(thread.id).ok()?;
-    let participant = thread.participants.first();
+    // A conversation can be visible in Inbox and Sent at the same time. Keep
+    // the row identified by the people on the other side of the exchange so a
+    // newly sent reply does not make an Inbox row look like mail from oneself.
+    let mut display_participants = thread
+        .participants
+        .iter()
+        .filter(|person| !person.email.eq_ignore_ascii_case(&thread.account_email))
+        .collect::<Vec<_>>();
+    if display_participants.is_empty() {
+        display_participants.extend(thread.participants.iter());
+    }
+    let participant = display_participants.first().copied();
     let address = participant
         .map(|person| person.email.clone())
         .unwrap_or_default();
-    let participant_names = thread
-        .participants
+    let participant_names = display_participants
         .iter()
         .map(|person| {
             person
@@ -1757,7 +1767,7 @@ fn summary_to_message(
         address,
         domain,
         initials: initials(&sender),
-        subject: thread.subject,
+        subject: display_thread_subject(&thread.subject),
         preview: thread.snippet,
         time: relative_time(thread.last_message_at),
         to: String::new(),
@@ -1779,6 +1789,47 @@ fn summary_to_message(
         body_pending: true,
         sender_verification: String::new(),
     })
+}
+
+/// Keep the newest message's display casing and local prefixes while removing
+/// transport reply prefixes that belong to individual messages, not the
+/// conversation title.
+fn display_thread_subject(subject: &str) -> String {
+    let mut remaining = subject.trim();
+    let mut leading_tags = String::new();
+    while let Some(tag_end) = remaining
+        .strip_prefix('[')
+        .and_then(|rest| rest.find(']').map(|index| index + 1))
+    {
+        let (tag, rest) = remaining.split_at(tag_end + 1);
+        if !leading_tags.is_empty() {
+            leading_tags.push(' ');
+        }
+        leading_tags.push_str(tag.trim());
+        remaining = rest.trim_start();
+    }
+    loop {
+        let Some(colon) = remaining.find(':') else {
+            break;
+        };
+        let prefix = remaining[..colon].trim();
+        let token = prefix
+            .split_once('[')
+            .map_or(prefix, |(token, _)| token)
+            .trim();
+        if !matches!(
+            token.to_ascii_lowercase().as_str(),
+            "re" | "fw" | "fwd" | "aw" | "sv"
+        ) {
+            break;
+        }
+        remaining = remaining[colon + 1..].trim_start();
+    }
+    match (leading_tags.is_empty(), remaining.is_empty()) {
+        (true, _) => remaining.to_owned(),
+        (false, true) => leading_tags,
+        (false, false) => format!("{leading_tags} {remaining}"),
+    }
 }
 
 fn detail_to_message(row: &MailMessage, message: &MessageDetail) -> MailMessage {
@@ -2301,9 +2352,9 @@ pub fn fixtures() -> Vec<EmailFixture> {
 #[cfg(test)]
 mod tests {
     use super::{
-        ComposeMessage, compose_args, mailbox_entries, markdown_to_html, markdown_to_plain_text,
-        readable_message_html, relative_time_at, resolve_scope, summary_to_message,
-        validated_startup_scope,
+        ComposeMessage, compose_args, display_thread_subject, mailbox_entries, markdown_to_html,
+        markdown_to_plain_text, readable_message_html, relative_time_at, resolve_scope,
+        summary_to_message, validated_startup_scope,
     };
     use chrono::{Local, TimeZone};
     use flectar_mail_core::models::{
@@ -2374,9 +2425,13 @@ mod tests {
                 id: 22,
                 account_id: 1,
                 account_email: "person@example.com".into(),
-                subject: "Launch review".into(),
+                subject: "Re: Launch review".into(),
                 snippet: "Tuesday works for everyone.".into(),
                 participants: vec![
+                    Address {
+                        name: Some("Me".into()),
+                        email: "person@example.com".into(),
+                    },
                     Address {
                         name: Some("Maya".into()),
                         email: "maya@example.com".into(),
@@ -2405,8 +2460,17 @@ mod tests {
         .unwrap();
 
         assert_eq!(row.sender, "Maya, Alex +1");
+        assert_eq!(row.address, "maya@example.com");
+        assert_eq!(row.subject, "Launch review");
         assert_eq!(row.message_count, 4);
         assert_eq!(row.id, 22);
+    }
+
+    #[test]
+    fn conversation_subject_drops_reply_prefixes_and_keeps_local_tags() {
+        assert_eq!(display_thread_subject("Re: Re[2]: Launch"), "Launch");
+        assert_eq!(display_thread_subject("[INVOICE] Re: Payment"), "[INVOICE] Payment");
+        assert_eq!(display_thread_subject("Re: [team] Standup"), "[team] Standup");
     }
 
     #[test]

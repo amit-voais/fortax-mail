@@ -377,7 +377,7 @@ pub(super) fn render_current(
     schedule_favicon_fetches(app, state, runtime, visible);
 
     if let Some(email) = selected_email {
-        let (display_email, conversation_ready) = {
+        let (mut display_email, conversation_ready, conversation_selected_index) = {
             let state = state.borrow();
             let conversation_ready = state.conversation_owner_id == Some(email.id)
                 && !state.conversation_messages.is_empty();
@@ -396,13 +396,26 @@ pub(super) fn render_current(
                     make_thread_rows(
                         &state.conversation_messages,
                         state.conversation_selected_index,
+                        &favicon_icons,
                     ),
                     |row| row.index,
                     PartialEq::eq,
                 );
             }
-            (display_email, conversation_ready)
+            (
+                display_email,
+                conversation_ready,
+                state.conversation_selected_index,
+            )
         };
+        if conversation_ready {
+            display_email.subject.clone_from(&email.subject);
+        }
+        app.set_selected_thread_index(if conversation_ready {
+            i32::try_from(conversation_selected_index).unwrap_or(i32::MAX)
+        } else {
+            0
+        });
         if (using_core || display_email.body_pending)
             && (!conversation_ready || display_email.html.is_none())
         {
@@ -455,6 +468,7 @@ pub(super) fn render_current(
         app.set_has_selection(false);
         app.set_remote_images_blocked(false);
         state.borrow().conversation_rows.set_vec(Vec::new());
+        app.set_selected_thread_index(0);
         app.set_render_status(UiMessage::plain(
             "Mail core is ready for account synchronization and message actions.",
         ));
@@ -483,22 +497,35 @@ pub(super) fn select_thread_message(
     render_current(app, state, runtime)
 }
 
-fn make_thread_rows(messages: &[MailMessage], selected_index: usize) -> Vec<ThreadMessageRow> {
+fn make_thread_rows(
+    messages: &[MailMessage],
+    selected_index: usize,
+    favicon_icons: &HashMap<String, FaviconImages>,
+) -> Vec<ThreadMessageRow> {
     messages
         .iter()
         .enumerate()
-        .map(|(index, message)| ThreadMessageRow {
-            index: i32::try_from(index).unwrap_or(i32::MAX),
-            sender: message.sender.clone().into(),
-            address: message.address.clone().into(),
-            initials: message.initials.clone().into(),
-            preview: display_preview(&message.preview).into(),
-            time: message.time.clone().into(),
-            to: message.to.clone().into(),
-            unread: message.unread,
-            outgoing: message.is_outgoing,
-            body_pending: message.body_pending,
-            selected: index == selected_index,
+        .map(|(index, message)| {
+            let favicons = favicon_icons.get(&message.domain);
+            let favicon = favicons.map(|icons| slint_image(&icons.regular));
+            ThreadMessageRow {
+                index: i32::try_from(index).unwrap_or(i32::MAX),
+                sender: message.sender.clone().into(),
+                address: message.address.clone().into(),
+                initials: message.initials.clone().into(),
+                favicon: favicon.clone().unwrap_or_default(),
+                favicon_small: favicons
+                    .map(|icons| slint_image(&icons.small))
+                    .unwrap_or_default(),
+                has_favicon: favicon.is_some(),
+                preview: display_preview(&message.preview).into(),
+                time: message.time.clone().into(),
+                to: message.to.clone().into(),
+                unread: message.unread,
+                outgoing: message.is_outgoing,
+                body_pending: message.body_pending,
+                selected: index == selected_index,
+            }
         })
         .collect()
 }
@@ -874,6 +901,25 @@ pub(super) fn refresh_rows_only(
         .as_deref()
         .and_then(|domain| favicon_icons.get(domain));
     apply_selected_favicon(app, selected_icon);
+    let conversation_projection = {
+        let state = state.borrow();
+        (state.conversation_owner_id == selected_id && !state.conversation_messages.is_empty())
+            .then(|| {
+                (
+                    state.conversation_messages.clone(),
+                    state.conversation_selected_index,
+                    Rc::clone(&state.conversation_rows),
+                )
+            })
+    };
+    if let Some((messages, selected_index, rows)) = conversation_projection {
+        reconcile_model_rows_by(
+            &rows,
+            make_thread_rows(&messages, selected_index, &favicon_icons),
+            |row| row.index,
+            PartialEq::eq,
+        );
+    }
     schedule_favicon_fetches(app, state, runtime, visible);
 }
 
@@ -977,6 +1023,12 @@ pub(super) fn schedule_favicon_fetches(
         return;
     }
 
+    let conversation_domains = state
+        .borrow()
+        .conversation_messages
+        .iter()
+        .map(|message| message.domain.clone())
+        .collect::<Vec<_>>();
     let mut to_fetch = Vec::new();
     {
         let mut state = state.borrow_mut();
@@ -984,6 +1036,7 @@ pub(super) fn schedule_favicon_fetches(
         for domain in visible
             .iter()
             .map(|email| email.domain.as_str())
+            .chain(conversation_domains.iter().map(String::as_str))
             .filter(|domain| !domain.is_empty())
         {
             if to_fetch.len() >= slots || !domains.insert(domain.to_owned()) {
@@ -1279,7 +1332,7 @@ mod tests {
         sent.preview = "Tuesday works for me.".into();
         sent.is_outgoing = true;
 
-        let rows = make_thread_rows(&[received, sent], 1);
+        let rows = make_thread_rows(&[received, sent], 1, &HashMap::new());
 
         assert_eq!(rows.len(), 2);
         assert_eq!(rows[0].sender, "Maya");

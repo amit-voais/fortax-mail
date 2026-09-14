@@ -283,10 +283,12 @@ export component MailListPane inherits Rectangle {
                                         vertical-alignment: center;
                                     }
                                     sender-indicators := HorizontalBox {
-                                        x: sender-time.x - self.width - 8px;
+                                        x: row.message_count > 1
+                                            ? thread-count.x - self.width - (self.width > 0px ? 8px : 0px)
+                                            : sender-time.x - self.width - 8px;
                                         y: 0px;
-                                        width: row.has_attachments && row.has_replied ? 32px
-                                            : row.has_attachments || row.has_replied ? 14px : 0px;
+                                        width: row.has_attachments && row.has_replied && row.message_count <= 1 ? 32px
+                                            : row.has_attachments || (row.has_replied && row.message_count <= 1) ? 14px : 0px;
                                         height: root.dense ? 44px : 22px;
                                         spacing: 4px;
                                         cross-axis-alignment: center;
@@ -299,7 +301,7 @@ export component MailListPane inherits Rectangle {
                                             image-fit: contain;
                                             accessible-role: none;
                                         }
-                                        if row.has_replied : Image {
+                                        if row.has_replied && row.message_count <= 1 : Image {
                                             width: 14px;
                                             height: 14px;
                                             source: @image-url("../icons/phosphor/arrow-bend-up-left.svg");
@@ -310,7 +312,7 @@ export component MailListPane inherits Rectangle {
                                     }
                                     thread-count := Rectangle {
                                         visible: row.message_count > 1;
-                                        x: sender-indicators.x - self.width - 8px;
+                                        x: sender-time.x - self.width - 8px;
                                         y: root.dense ? 10px : 2px;
                                         width: row.message_count >= 100 ? 48px : row.message_count >= 10 ? 42px : 36px;
                                         height: 22px;
@@ -327,7 +329,7 @@ export component MailListPane inherits Rectangle {
                                             Image {
                                                 width: 11px;
                                                 height: 11px;
-                                                source: @image-url("../icons/phosphor/stack-fill.svg");
+                                                source: @image-url("../icons/phosphor/arrow-bend-up-left.svg");
                                                 colorize: root.accent;
                                                 image-fit: contain;
                                                 accessible-role: none;
@@ -345,7 +347,7 @@ export component MailListPane inherits Rectangle {
                                         x: 0px;
                                         y: 0px;
                                         width: row.message_count > 1
-                                            ? max(0px, thread-count.x - 8px)
+                                            ? max(0px, (sender-indicators.width > 0px ? sender-indicators.x : thread-count.x) - 8px)
                                             : root.dense ? min(170px, max(0px, parent.width - 190px))
                                             : row.has_attachments || row.has_replied
                                                 ? max(0px, sender-indicators.x - 8px)
@@ -399,6 +401,7 @@ export component MailListPane inherits Rectangle {
                                         y: root.dense ? 0px : 54px;
                                         width: root.dense ? max(0px, sender-time.x - self.x - 12px) : max(0px, parent.width - 98px);
                                         height: root.dense ? 44px : 20px;
+                                        padding: 0px;
                                         spacing: 4px;
                                         cross-axis-alignment: center;
 

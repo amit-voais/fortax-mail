@@ -564,6 +564,7 @@ export component AppWindow inherits Window {
     in property <[EmailRow]> emails: [];
     in property <[EmailTemplateRow]> compose_templates: [];
     in property <[ThreadMessageRow]> thread_messages: [];
+    in property <int> selected_thread_index: 0;
     in property <[SidebarRow]> sidebar_rows: [];
     in-out property <string> folder_filter_query: "";
     in property <[MailLabelRow]> mail_labels: [];
@@ -995,6 +996,7 @@ export component AppWindow inherits Window {
             show-avatars: root.show_avatars;
             emails: root.emails;
             thread_messages: root.thread_messages;
+            selected_thread_index: root.selected_thread_index;
             sidebar_rows: root.sidebar_rows;
             folder_filter_query <=> root.folder_filter_query;
             mail_labels: root.mail_labels;

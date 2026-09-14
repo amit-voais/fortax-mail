@@ -17,6 +17,7 @@ export component MailView inherits Rectangle {
     in property <bool> loading: false;
     in property <[EmailRow]> emails: [];
     in property <[ThreadMessageRow]> thread_messages: [];
+    in property <int> selected_thread_index: 0;
     in property <[SidebarRow]> sidebar_rows: [];
     in-out property <string> folder_filter_query: "";
     private property <length> sidebar-scroll-y: 0px;
@@ -239,6 +240,7 @@ export component MailView inherits Rectangle {
                 email_tiles: root.email_tiles;
                 email_links: root.email_links;
                 thread-messages: root.thread_messages;
+                selected-thread-index: root.selected_thread_index;
                 selected_sender: root.selected_sender;
                 selected_address: root.selected_address;
                 selected_subject: root.selected_subject;
@@ -439,6 +441,7 @@ export component MailView inherits Rectangle {
                 email_tiles: root.email_tiles;
                 email_links: root.email_links;
                 thread-messages: root.thread_messages;
+                selected-thread-index: root.selected_thread_index;
                 selected_sender: root.selected_sender;
                 selected_address: root.selected_address;
                 selected_subject: root.selected_subject;

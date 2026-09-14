@@ -100,6 +100,139 @@ component LabelColorSwatch inherits Rectangle {
     }
 }
 
+// One conversation message header. The selected row becomes the open
+// accordion section; every other row remains a compact, directly selectable
+// summary in chronological order.
+component ThreadMessageHeader inherits Rectangle {
+    in property <string> sender;
+    in property <string> address;
+    in property <string> initials: "?";
+    in property <image> favicon;
+    in property <bool> has-favicon: false;
+    in property <string> preview;
+    in property <string> time;
+    in property <string> to;
+    in property <bool> outgoing: false;
+    in property <bool> unread: false;
+    in property <bool> body-pending: false;
+    in property <bool> selected: false;
+    in property <string> sender-verification: "";
+    in property <bool> show-avatar: true;
+    in property <color> accent;
+    in property <color> accent-soft;
+    in property <color> border;
+    in property <color> control-bg;
+    in property <color> heading;
+    in property <color> secondary-text;
+    callback open;
+
+    height: 64px;
+    border-radius: 8px;
+    border-width: root.selected ? 0px : 1px;
+    border-color: root.border;
+    background: header-hit.has-hover
+        ? root.control-bg
+        : root.selected ? transparent : root.control-bg.transparentize(0.35);
+    animate background { duration: 140ms; }
+    accessible-role: button;
+    accessible-label: @tr("Message from {}", root.outgoing ? @tr("You") : root.sender)
+        + ", " + (root.body-pending ? @tr("Loading message…") : root.preview);
+    accessible-action-default => { root.open(); }
+
+    Avatar {
+        visible: root.show-avatar;
+        x: 8px;
+        y: 13px;
+        size: 38px;
+        source: root.favicon;
+        has-source: root.has-favicon;
+        fallback: root.initials;
+        image-fit: contain;
+        background-color: root.has-favicon ? #ffffff : root.outgoing ? root.accent : root.control-bg;
+        foreground-color: root.outgoing ? #ffffff : root.secondary-text;
+        avatar-border-width: root.has-favicon ? 1px : 0px;
+        avatar-border-color: root.border;
+    }
+
+    private property <length> content-x: root.show-avatar ? 56px : 10px;
+    sender-label := Text {
+        x: root.content-x;
+        y: 7px;
+        width: max(0px, parent.width - self.x - (root.sender-verification != "" ? 132px : 112px));
+        height: 23px;
+        text: root.outgoing ? @tr("You") : root.sender;
+        color: root.heading;
+        font-size: TypeScale.body;
+        font-weight: root.selected || root.unread ? 700 : 600;
+        overflow: elide;
+        vertical-alignment: center;
+    }
+    if root.sender-verification != "" : Image {
+        x: min(sender-label.x + sender-label.preferred-width + 6px, parent.width - 122px);
+        y: 10px;
+        width: 17px;
+        height: 17px;
+        source: @image-url("../icons/phosphor/check-circle-fill.svg");
+        colorize: root.accent;
+        image-fit: contain;
+        accessible-label: root.sender-verification == "brand"
+            ? @tr("Verified brand with BIMI authority evidence")
+            : root.sender-verification == "bimi"
+                ? @tr("BIMI-authenticated sender")
+                : root.sender-verification == "microsoft"
+                    ? @tr("Sender authenticated by Microsoft")
+                    : @tr("Sender domain authenticated with DMARC and DKIM");
+    }
+    Text {
+        x: parent.width - 102px;
+        y: 7px;
+        width: 70px;
+        height: 23px;
+        text: root.time;
+        color: root.secondary-text;
+        font-size: TypeScale.caption;
+        overflow: elide;
+        horizontal-alignment: right;
+        vertical-alignment: center;
+    }
+    Text {
+        x: root.content-x;
+        y: 31px;
+        width: max(0px, parent.width - self.x - 42px);
+        height: 24px;
+        text: root.selected
+            ? root.address + (root.to == "" ? "" : " · " + @tr("to {}", root.to))
+            : root.body-pending ? @tr("Loading message…") : root.preview;
+        color: root.body-pending ? root.accent : root.secondary-text;
+        font-size: TypeScale.secondary;
+        overflow: elide;
+        vertical-alignment: center;
+    }
+    Image {
+        x: parent.width - 25px;
+        y: 24px;
+        width: 14px;
+        height: 14px;
+        source: root.selected
+            ? @image-url("../icons/phosphor/caret-up.svg")
+            : @image-url("../icons/phosphor/caret-down.svg");
+        colorize: root.secondary-text;
+        image-fit: contain;
+        accessible-role: none;
+    }
+    if root.selected : Rectangle {
+        x: 10px;
+        y: parent.height - 1px;
+        width: max(0px, parent.width - 20px);
+        height: 1px;
+        background: root.border.transparentize(0.35);
+    }
+    header-hit := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.open(); }
+    }
+}
+
 export component MailReadingPane inherits Rectangle {
     in property <bool> compact: false;
     in property <bool> full-width: false;
@@ -113,6 +246,7 @@ export component MailReadingPane inherits Rectangle {
     in property <[MailLabelRow]> mail_labels: [];
     in property <[MailLabelRow]> mail-label-results: [];
     in property <[ThreadMessageRow]> thread-messages: [];
+    in property <int> selected-thread-index: 0;
     in property <int> selected-label-count: 0;
     in property <string> selected_sender: "";
     in property <string> selected_address: "";
@@ -143,13 +277,31 @@ export component MailReadingPane inherits Rectangle {
     in-out property <bool> rendering_info_open: false;
     in-out property <float> email-content-aspect: 900 / 520;
     in-out property <length> email-scroll-y: 0px;
-    out property <length> email-viewport-width: email-scroll.visible-width;
+    private property <length> accordion-scroll-y: 0px;
+    private property <bool> syncing-accordion-scroll: false;
+    private property <length> message-card-inset: 6px;
+    private property <length> message-card-border-width: 1px;
+    private property <length> thread-item-gap: 6px;
+    out property <length> email-viewport-width: max(
+        0px,
+        email-scroll.visible-width - 2 * (root.message-card-inset + root.message-card-border-width)
+    );
     out property <length> email-viewport-height: email-surface.height;
     private property <length> rendered-email-height: root.email-viewport-width * EmailReader.width-ratio * root.email-content-aspect + (root.remote-images-blocked ? 60px : 0px);
     private property <length> attachment-section-height: MailAttachments.rows.length > 0 ? 34px + MailAttachments.rows.length * 48px : 0px;
     // Plain text, source, and reader mode own their own scrolling surface. In
     // the normal renderer, place attachments immediately after the document.
     private property <length> attachment-flow-y: root.text_mode || root.source_mode || EmailReader.reader-mode ? max(email-surface.height, root.rendered-email-height) : root.rendered-email-height;
+    private property <length> thread-header-height: 64px;
+    private property <length> thread-item-stride: root.thread-header-height + root.thread-item-gap;
+    private property <int> accordion-message-count: max(1, root.thread-messages.length);
+    private property <int> accordion-selected-index: min(max(0, root.selected-thread-index), root.accordion-message-count - 1);
+    private property <length> selected-header-y: root.accordion-selected-index * root.thread-item-stride;
+    private property <length> message-body-y: root.selected-header-y + root.thread-header-height;
+    private property <length> message-document-height: max(
+        root.email-viewport-height - root.thread-header-height,
+        root.attachment-flow-y + root.attachment-section-height + (MailAttachments.rows.length > 0 ? 12px : 0px)
+    );
     in property <color> accent;
     in property <color> accent-soft;
     in property <color> border;
@@ -181,6 +333,19 @@ export component MailReadingPane inherits Rectangle {
     callback load-remote-images-for-message();
 
     private property <bool> viewport-pending: false;
+    changed selected-thread-index => {
+        root.syncing-accordion-scroll = true;
+        root.email-scroll-y = 0px;
+        root.accordion-scroll-y = -root.selected-header-y;
+        root.syncing-accordion-scroll = false;
+    }
+    changed email-scroll-y => {
+        if (!root.syncing-accordion-scroll) {
+            root.accordion-scroll-y = root.email-scroll-y == 0px
+                ? -root.selected-header-y
+                : root.email-scroll-y - root.message-body-y;
+        }
+    }
     changed email-viewport-width => { root.viewport-pending = true; }
     changed email-viewport-height => { root.viewport-pending = true; }
     Timer { interval: 50ms; running: root.viewport-pending; triggered => {
@@ -206,15 +371,18 @@ export component MailReadingPane inherits Rectangle {
         interval: 40ms;
         running: root.selecting;
         triggered => {
-            let screen-y = root.drag-y * 1px + root.email-scroll-y;
-            if screen-y < 28px || screen-y > email-surface.height - 28px {
-                let step = screen-y < 28px ? 16px : -16px;
-                let old = root.email-scroll-y;
-                root.email-scroll-y = max(-max(0px,email-scroll.viewport-height - email-scroll.visible-height), min(0px,old + step));
-                root.drag-y += (old - root.email-scroll-y) / 1px;
-                root.email-pointer-event(root.drag-x,root.drag-y,root.drag-kind,false,false,false,false);
-                root.email-scroll(-root.email-scroll-y / 1px,email-scroll.visible-height / 1px);
-            }
+                let screen-y = root.drag-y * 1px + root.message-body-y + root.accordion-scroll-y;
+                if screen-y < 28px || screen-y > email-surface.height - 28px {
+                    let step = screen-y < 28px ? 16px : -16px;
+                    let old = root.accordion-scroll-y;
+                    root.accordion-scroll-y = max(-max(0px,email-scroll.viewport-height - email-scroll.visible-height), min(0px,old + step));
+                    root.drag-y += (old - root.accordion-scroll-y) / 1px;
+                    root.syncing-accordion-scroll = true;
+                    root.email-scroll-y = min(0px, root.accordion-scroll-y + root.message-body-y);
+                    root.syncing-accordion-scroll = false;
+                    root.email-pointer-event(root.drag-x,root.drag-y,root.drag-kind,false,false,false,false);
+                    root.email-scroll(-root.email-scroll-y / 1px,email-scroll.visible-height / 1px);
+                }
         }
     }
     private property <string> display-subject: root.selected_subject == "" ? @tr("(No subject)") : root.selected_subject;
@@ -633,209 +801,6 @@ export component MailReadingPane inherits Rectangle {
 
                         if root.selected-label-count > 0 : Rectangle { height: 8px; }
 
-                        if root.thread-messages.length > 1 : VerticalBox {
-                            height: 34px + min(root.compact ? 156px : 198px, root.thread-messages.length * 66px);
-                            padding: 0px;
-                            spacing: 6px;
-
-                            HorizontalBox {
-                                height: 28px;
-                                padding: 0px;
-                                spacing: 8px;
-                                cross-axis-alignment: center;
-                                Image {
-                                    width: 16px;
-                                    height: 16px;
-                                    source: @image-url("../icons/phosphor/stack-fill.svg");
-                                    colorize: root.accent;
-                                    image-fit: contain;
-                                    accessible-role: none;
-                                }
-                                Text {
-                                    text: @tr("Conversation");
-                                    color: root.heading;
-                                    font-size: TypeScale.body;
-                                    font-weight: 700;
-                                    vertical-alignment: center;
-                                }
-                                Text {
-                                    text: @tr("{} messages", root.thread-messages.length);
-                                    color: root.secondary-text;
-                                    font-size: TypeScale.secondary;
-                                    vertical-alignment: center;
-                                }
-                                Rectangle { horizontal-stretch: 1; }
-                            }
-
-                            thread-list := ListView {
-                                horizontal-scrollbar-policy: always-off;
-                                mouse-drag-pan-enabled: root.compact;
-                                accessible-label: @tr("Conversation messages");
-                                accessible-item-count: root.thread-messages.length;
-
-                                for row in root.thread-messages : thread-row := Rectangle {
-                                    width: thread-list.visible-width;
-                                    height: 66px;
-                                    border-radius: 8px;
-                                    border-width: row.selected ? 1px : 0px;
-                                    border-color: root.accent;
-                                    background: row.selected ? root.accent-soft : thread-hit.has-hover ? root.control-bg : transparent;
-                                    animate background { duration: 140ms; }
-                                    accessible-role: list-item;
-                                    accessible-label: @tr("Message from {}", row.sender) + ", " + row.preview;
-                                    accessible-item-index: row.index;
-                                    accessible-item-selectable: true;
-                                    accessible-item-selected: row.selected;
-                                    accessible-action-default => { root.select_thread_message(row.index); }
-
-                                    Rectangle {
-                                        x: 17px;
-                                        y: row.index == 0 ? 32px : 0px;
-                                        width: 2px;
-                                        height: row.index == root.thread-messages.length - 1 ? 0px : (row.index == 0 ? 34px : 66px);
-                                        background: root.border;
-                                    }
-                                    Avatar {
-                                        x: 2px;
-                                        y: 14px;
-                                        size: 32px;
-                                        fallback: row.initials;
-                                        background-color: row.outgoing ? root.accent : root.control-bg;
-                                        foreground-color: row.outgoing ? #ffffff : root.secondary-text;
-                                    }
-                                    Text {
-                                        x: 44px;
-                                        y: 8px;
-                                        width: max(0px, parent.width - self.x - 100px);
-                                        height: 22px;
-                                        text: row.outgoing ? @tr("You") : row.sender;
-                                        color: root.heading;
-                                        font-size: TypeScale.body;
-                                        font-weight: row.selected || row.unread ? 700 : 600;
-                                        overflow: elide;
-                                        vertical-alignment: center;
-                                    }
-                                    Text {
-                                        x: parent.width - 88px;
-                                        y: 8px;
-                                        width: 76px;
-                                        height: 22px;
-                                        text: row.time;
-                                        color: root.secondary-text;
-                                        font-size: TypeScale.caption;
-                                        overflow: elide;
-                                        horizontal-alignment: right;
-                                        vertical-alignment: center;
-                                    }
-                                    Text {
-                                        x: 44px;
-                                        y: 31px;
-                                        width: max(0px, parent.width - self.x - 20px);
-                                        height: 25px;
-                                        text: row.body_pending ? @tr("Loading message…") : row.preview;
-                                        color: row.body_pending ? root.accent : root.secondary-text;
-                                        font-size: TypeScale.secondary;
-                                        overflow: elide;
-                                        vertical-alignment: center;
-                                    }
-                                    thread-hit := TouchArea {
-                                        mouse-cursor: pointer;
-                                        clicked => { root.select_thread_message(row.index); }
-                                    }
-                                }
-                            }
-                        }
-
-                        if root.thread-messages.length > 1 : Rectangle { height: 12px; }
-
-                        HorizontalBox {
-                            min-height: 44px;
-                            preferred-height: 44px;
-                            max-height: 44px;
-                            padding: 0px;
-                            spacing: 11px;
-                            cross-axis-alignment: center;
-                            Avatar {
-                                visible: root.show-avatars;
-                                size: 38px;
-                                source: root.selected_favicon;
-                                has-source: root.selected_has_favicon;
-                                fallback: root.selected_initials;
-                                image-fit: contain;
-                                background-color: root.selected_has_favicon ? #ffffff : root.accent-soft;
-                                foreground-color: root.accent;
-                                avatar-border-width: root.selected_has_favicon ? 1px : 0px;
-                                avatar-border-color: root.border;
-                            }
-                            VerticalBox {
-                                min-height: 44px;
-                                preferred-height: 44px;
-                                max-height: 44px;
-                                padding: 0px;
-                                spacing: 0px;
-                                Rectangle {
-                                    min-height: 24px;
-                                    preferred-height: 24px;
-                                    max-height: 24px;
-                                    sender-name := Text {
-                                        x: 0px;
-                                        y: 2px;
-                                        width: max(0px, parent.width - (root.selected_sender_verification != "" ? 26px : 0px));
-                                        height: parent.height - self.y;
-                                        text: root.selected_sender;
-                                        color: root.heading;
-                                        font-size: TypeScale.body-large;
-                                        font-weight: 600;
-                                        overflow: elide;
-                                        vertical-alignment: center;
-                                    }
-                                    if root.selected_sender_verification != "" : Image {
-                                        x: min(sender-name.preferred-width + 8px, parent.width - 18px);
-                                        y: 5px;
-                                        width: 18px;
-                                        height: 18px;
-                                        source: @image-url("../icons/phosphor/check-circle-fill.svg");
-                                        colorize: root.accent;
-                                        image-fit: contain;
-                                        accessible-label: root.selected_sender_verification == "brand"
-                                            ? @tr("Verified brand with BIMI authority evidence")
-                                            : root.selected_sender_verification == "bimi"
-                                                ? @tr("BIMI-authenticated sender")
-                                                : root.selected_sender_verification == "microsoft"
-                                                    ? @tr("Sender authenticated by Microsoft")
-                                                    : @tr("Sender domain authenticated with DMARC and DKIM");
-                                    }
-                                }
-                                HorizontalBox {
-                                    min-height: 20px;
-                                    preferred-height: 20px;
-                                    max-height: 20px;
-                                    padding: 0px;
-                                    spacing: 12px;
-                                    Text {
-                                        min-width: 0px;
-                                        horizontal-stretch: 1;
-                                        text: root.selected_address + " · " + @tr("to {}", root.selected_to);
-                                        color: root.secondary-text;
-                                        font-size: TypeScale.secondary;
-                                        overflow: elide;
-                                        vertical-alignment: center;
-                                    }
-                                    Text {
-                                        text: root.selected_time;
-                                        color: root.secondary-text;
-                                        font-size: TypeScale.secondary;
-                                        horizontal-alignment: right;
-                                        vertical-alignment: center;
-                                    }
-                                }
-                            }
-                        }
-
-                        Rectangle { min-height: 16px; preferred-height: 16px; max-height: 16px; }
-                        Rectangle { height: 1px; background: root.border-subtle; }
-                        Rectangle { height: 12px; }
-
                         HorizontalBox {
                             height: root.compact ? LayoutMetrics.touch-target : LayoutMetrics.control-height; padding: 0px; spacing: 4px; cross-axis-alignment: center;
                             ZoomControls { compact: root.compact; available: EmailReader.available; zoom: EmailReader.zoom; revision: EmailReader.zoom-revision; fitting: EmailReader.auto-fit; command(action) => { EmailReader.command(action); } }
@@ -894,21 +859,97 @@ export component MailReadingPane inherits Rectangle {
                                 email-scroll := ScrollView {
                                     width: parent.width;
                                     height: parent.height;
-                                    viewport-width: root.email-viewport-width * EmailReader.width-ratio;
-                                    viewport-height: max(parent.height, root.attachment-flow-y + root.attachment-section-height + (MailAttachments.rows.length > 0 ? 12px : 0px));
-                                    viewport-y <=> root.email-scroll-y;
+                                    viewport-width: 2 * (root.message-card-inset + root.message-card-border-width)
+                                        + root.email-viewport-width * EmailReader.width-ratio;
+                                    viewport-height: max(
+                                        parent.height,
+                                        root.accordion-message-count * root.thread-header-height
+                                            + max(0, root.accordion-message-count - 1) * root.thread-item-gap
+                                            + root.message-document-height
+                                    );
+                                    viewport-y <=> root.accordion-scroll-y;
                                     horizontal-scrollbar-policy: EmailReader.width-ratio > 1.01 ? as-needed : always-off;
                                     mouse-drag-pan-enabled: root.compact && !root.selecting;
                                     scrolled => {
-                                        root.email-scroll(-self.viewport-y / 1px, self.visible-height / 1px);
+                                        root.syncing-accordion-scroll = true;
+                                        root.email-scroll-y = min(0px, self.viewport-y + root.message-body-y);
+                                        root.syncing-accordion-scroll = false;
+                                        root.email-scroll(-root.email-scroll-y / 1px, self.visible-height / 1px);
                                     }
+
+                                // The expanded header and document share one card
+                                // boundary. Its fixed horizontal position keeps the
+                                // chrome aligned while a zoomed document scrolls.
+                                Rectangle {
+                                    x: -email-scroll.viewport-x + root.message-card-inset;
+                                    y: root.selected-header-y;
+                                    width: max(0px, email-scroll.visible-width - 2 * root.message-card-inset);
+                                    height: root.thread-header-height + root.message-document-height;
+                                    background: root.surface;
+                                    border-radius: 8px;
+                                    border-width: 1px;
+                                    border-color: root.border-subtle;
+                                }
+
+                                if root.thread-messages.length == 0 : ThreadMessageHeader {
+                                    x: -email-scroll.viewport-x + root.message-card-inset;
+                                    y: 0px;
+                                    width: max(0px, email-scroll.visible-width - 2 * root.message-card-inset);
+                                    sender: root.selected_sender;
+                                    address: root.selected_address;
+                                    initials: root.selected_initials;
+                                    favicon: root.selected_favicon;
+                                    has-favicon: root.selected_has_favicon;
+                                    preview: root.selected_plain_text;
+                                    time: root.selected_time;
+                                    to: root.selected_to;
+                                    selected: true;
+                                    sender-verification: root.selected_sender_verification;
+                                    show-avatar: root.show-avatars;
+                                    accent: root.accent;
+                                    accent-soft: root.accent-soft;
+                                    border: root.border;
+                                    control-bg: root.control-bg;
+                                    heading: root.heading;
+                                    secondary-text: root.secondary-text;
+                                }
+
+                                for row in root.thread-messages : ThreadMessageHeader {
+                                    x: -email-scroll.viewport-x + root.message-card-inset;
+                                    y: row.index * root.thread-item-stride
+                                        + (row.index > root.accordion-selected-index ? root.message-document-height : 0px);
+                                    width: max(0px, email-scroll.visible-width - 2 * root.message-card-inset);
+                                    sender: row.sender;
+                                    address: row.address;
+                                    initials: row.initials;
+                                    favicon: root.compact ? row.favicon_small : row.favicon;
+                                    has-favicon: row.has_favicon;
+                                    preview: row.preview;
+                                    time: row.time;
+                                    to: row.to;
+                                    outgoing: row.outgoing;
+                                    unread: row.unread;
+                                    body-pending: row.body_pending;
+                                    selected: row.selected;
+                                    sender-verification: row.selected ? root.selected_sender_verification : "";
+                                    show-avatar: root.show-avatars;
+                                    accent: root.accent;
+                                    accent-soft: root.accent-soft;
+                                    border: root.border;
+                                    control-bg: root.control-bg;
+                                    heading: root.heading;
+                                    secondary-text: root.secondary-text;
+                                    open => { root.select_thread_message(row.index); }
+                                }
 
                                 // This area supplies the normal right-click
                                 // menu for the rendered mail. Link hit areas
                                 // below add the link-specific native actions.
                                 email-context := ContextMenuArea {
+                                    x: root.message-card-inset + root.message-card-border-width;
+                                    y: root.message-body-y;
                                     width: root.email-viewport-width * EmailReader.width-ratio;
-                                    height: max(email-surface.height, root.rendered-email-height);
+                                    height: root.message-document-height;
                                     // Keep the parent enabled in plain-text
                                     // mode as well; otherwise Slint propagates
                                     // the disabled state into the read-only
@@ -1274,7 +1315,9 @@ export component MailReadingPane inherits Rectangle {
 
                             }
                             if EmailReader.reader-mode : Rectangle {
-                                width: parent.width; height: parent.height;
+                                x: -email-scroll.viewport-x + root.message-card-inset + root.message-card-border-width;
+                                y: root.message-body-y;
+                                width: root.email-viewport-width; height: root.message-document-height;
                                 background: EmailReader.dark-reader ? #171a21 : root.surface;
                                 reader-list := ListView {
                                     width: parent.width; height: parent.height;
