@@ -1058,10 +1058,12 @@ export component MailReadingPane inherits Rectangle {
                                             mouse-cursor: EmailReader.destination != "" ? pointer : text;
 
                                             changed has-hover => { if !self.has-hover { EmailReader.destination = ""; } }
-                                            moved => {
-                                                EmailReader.destination = EmailReader.link-at(self.mouse-x / 1px, self.mouse-y / 1px);
-                                            }
                                             pointer-event(event) => {
+                                                // `moved` only fires while pressed; plain hover
+                                                // must also update the link cursor and destination.
+                                                if event.kind == PointerEventKind.move {
+                                                    EmailReader.destination = EmailReader.link-at(self.mouse-x / 1px, self.mouse-y / 1px);
+                                                }
                                                 root.drag-x = email-input.mouse-x / 1px; root.drag-y = email-input.mouse-y / 1px;
                                                 if event.kind == PointerEventKind.down && event.button == PointerEventButton.left {
                                                     root.drag-kind = "move";

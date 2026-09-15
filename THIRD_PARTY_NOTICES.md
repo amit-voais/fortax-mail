@@ -73,6 +73,10 @@ The bundled Noto Emoji font is distributed under the SIL Open Font License
 1.1. Its license, provenance, and checksum are retained in
 [`resources/fonts/noto-emoji`](resources/fonts/noto-emoji).
 
+Renderer regression tests also use a subset of Noto Color Emoji under SIL OFL
+1.1. Its license and reproduction instructions are retained in
+[`resources/test-fonts`](resources/test-fonts).
+
 ## Screenshot examples
 
 The fictional screenshot fixture uses real public sender domains so the same
