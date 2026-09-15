@@ -493,6 +493,7 @@ export component AppWindow inherits Window {
     callback save_email_template(int, string, string, string, string) -> bool;
     callback delete_email_template(int) -> bool;
     callback add_password_account(string, string, string, string, string, string, string, string, string);
+    callback suggest_account_settings(string);
     callback start_oauth(string);
     callback reauth_account(int);
     callback cancel_oauth();
@@ -1424,6 +1425,7 @@ export component AppWindow inherits Window {
             add_password_account(protocol, email, username, password, jmap-url, imap-host, imap-port, smtp-host, smtp-port) => {
                 root.add_password_account(protocol, email, username, password, jmap-url, imap-host, imap-port, smtp-host, smtp-port);
             }
+            suggest_account_settings(email) => { root.suggest_account_settings(email); }
             start_oauth(provider) => { root.start_oauth(provider); }
             reauth_account(account-id) => { root.reauth_account(account-id); }
             cancel_oauth => { root.cancel_oauth(); }
@@ -1641,6 +1643,7 @@ export component AppWindow inherits Window {
         add-password-account(protocol, email, username, password, jmap-url, imap-host, imap-port, smtp-host, smtp-port) => {
             root.add_password_account(protocol, email, username, password, jmap-url, imap-host, imap-port, smtp-host, smtp-port);
         }
+        suggest-account-settings(email) => { root.suggest_account_settings(email); }
         start-oauth(provider) => {
             root.connect_calendar_on_add = false;
             root.start_oauth(provider);

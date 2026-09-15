@@ -8,6 +8,7 @@ import { Avatar } from "../components/avatar.slint";
 import { Button } from "../components/button.slint";
 import { ConfirmationDialog } from "../components/confirmation-dialog.slint";
 import { IconButton, LineEdit, RadioButton, Switch } from "../components/controls.slint";
+import { CopyableDiagnostic } from "../components/copyable-diagnostic.slint";
 import { ProviderButton } from "../components/provider-button.slint";
 import { FormField, SettingsCard, SettingsLinkRow, SettingsNavItem, SettingsSelectRow, SettingsSwitchRow, ShortcutRow } from "../components/settings-components.slint";
 import { ThemeEditor } from "../components/theme-editor.slint";
@@ -146,6 +147,7 @@ export component SettingsDialog inherits Rectangle {
     callback sync_account(int);
     callback delete_account(int);
     callback add_password_account(string, string, string, string, string, string, string, string, string);
+    callback suggest_account_settings(string);
     callback start_oauth(string);
     callback reauth_account(int);
     callback cancel_oauth();
@@ -692,11 +694,10 @@ export component SettingsDialog inherits Rectangle {
                             spacing: 14px;
                             Text { text: @tr("Accounts"); color: root.title-color; font-size: TypeScale.display; font-weight: 700; }
                             Text { height: root.compact ? 34px : 17px; text: @tr("Manage connected mailboxes and add providers. Drag an account to change its order everywhere."); color: root.secondary-text; font-size: TypeScale.secondary; wrap: word-wrap; }
-                            if root.sync_status != "" : Text {
+                            if root.sync_status != "" : CopyableDiagnostic {
                                 text: root.sync_status;
-                                color: root.secondary-text;
+                                text-color: root.secondary-text;
                                 font-size: TypeScale.secondary;
-                                wrap: word-wrap;
                             }
                             Rectangle {
                                 height: root.compact ? (root.oauth_in_progress ? 260px : 208px) : (root.oauth_in_progress ? 152px : 92px);
@@ -769,7 +770,7 @@ export component SettingsDialog inherits Rectangle {
                             for account in root.connected_accounts : drop-target := DropArea {
                                 private property <bool> stacked-actions: self.width < 430px;
                                 private property <bool> separate-actions: root.compact || self.width < 780px;
-                                private property <length> actions-y: root.compact ? 84px : account.sync_error != "" ? 112px : 88px;
+                                private property <length> actions-y: root.compact ? (account.sync_error != "" ? 116px : 84px) : account.sync_error != "" ? 112px : 88px;
                                 private property <length> divider-y: self.separate-actions ? self.actions-y + (self.stacked-actions ? 112px : 32px) + 12px : self.actions-y;
                                 height: self.divider-y + (root.compact ? (account.provider == "imap" ? 208px : 154px) : 71px);
                                 can-drop(event) => root.read_account_transfer(event.data) != "" ? DragAction.move : DragAction.none;
@@ -790,7 +791,7 @@ export component SettingsDialog inherits Rectangle {
                                         x: 0px;
                                         y: 0px;
                                         width: parent.width;
-                                        height: root.compact ? 92px : account.sync_error != "" ? 112px : 88px;
+                                        height: account.sync_error != "" ? 78px : root.compact ? 92px : 88px;
                                         padding-left: 14px;
                                         padding-right: 16px;
                                         spacing: 12px;
@@ -831,14 +832,6 @@ export component SettingsDialog inherits Rectangle {
                                             Text { text: account.name; color: root.heading; font-size: TypeScale.body-large; font-weight: 700; overflow: elide; }
                                             Text { text: account.email; color: root.secondary-text; font-size: TypeScale.caption; overflow: elide; }
                                             Text { text: account.status == "offline" ? @tr("Offline · retrying automatically") : account.status == "needs_reauth" ? @tr("Sign-in required") : account.status == "syncing" ? @tr("Syncing…") : account.status == "idle" ? (account.mail_protocol == "jmap" ? @tr("Connected · JMAP") : @tr("Connected · IMAP + SMTP")) : @tr("Account status: {}", account.status); color: account.status == "needs_reauth" ? #c0392b : root.faint-text; font-size: TypeScale.caption; overflow: elide; }
-                                            Text {
-                                                visible: !root.compact && account.sync_error != "";
-                                                height: !root.compact && account.sync_error != "" ? 28px : 0px;
-                                                text: @tr("Mail synchronization error: {}", account.sync_error);
-                                                color: #c0392b;
-                                                font-size: TypeScale.caption;
-                                                wrap: word-wrap;
-                                            }
                                         }
                                         if !drop-target.separate-actions : AccountActions {
                                             edit-label: account.provider == "imap" ? @tr("Edit") : @tr("Reconnect");
@@ -894,6 +887,15 @@ export component SettingsDialog inherits Rectangle {
                                                 root.carddav_manage_existing = account.carddav_connected;
                                             }
                                         }
+                                    }
+                                    if account.sync_error != "" : CopyableDiagnostic {
+                                        x: root.compact ? 24px : 32px;
+                                        y: 80px;
+                                        width: parent.width - (root.compact ? 48px : 64px);
+                                        height: 28px;
+                                        text: @tr("Mail synchronization error: {}", account.sync_error);
+                                        text-color: AppTheme.destructive;
+                                        font-size: TypeScale.caption;
                                     }
                                     if drop-target.separate-actions : AccountActions {
                                             edit-label: account.provider == "imap" ? @tr("Edit") : @tr("Reconnect");
@@ -1475,14 +1477,14 @@ export component SettingsDialog inherits Rectangle {
                                     padding: 0px;
                                     height: 57px;
                                     spacing: 10px;
-                                    FormField { enabled: !root.account_setup_in_progress; horizontal-stretch: 1; label: @tr("Email address"); value: root.account_email; placeholder: @tr("name@example.com"); label-color: root.secondary-text; edited(value) => { root.account_email = value; } }
+                                    FormField { enabled: !root.account_setup_in_progress; horizontal-stretch: 1; label: @tr("Email address"); value: root.account_email; placeholder: @tr("name@example.com"); label-color: root.secondary-text; edited(value) => { root.account_email = value; root.suggest_account_settings(value); } }
                                     FormField { enabled: !root.account_setup_in_progress; horizontal-stretch: 1; label: @tr("Username"); value: root.account_username; placeholder: @tr("Usually your email address"); label-color: root.secondary-text; edited(value) => { root.account_username = value; } }
                                 }
                                 if root.compact : VerticalBox {
                                     padding: 0px;
                                     height: 124px;
                                     spacing: 10px;
-                                    FormField { enabled: !root.account_setup_in_progress; height: 57px; label: @tr("Email address"); value: root.account_email; placeholder: @tr("name@example.com"); label-color: root.secondary-text; edited(value) => { root.account_email = value; } }
+                                    FormField { enabled: !root.account_setup_in_progress; height: 57px; label: @tr("Email address"); value: root.account_email; placeholder: @tr("name@example.com"); label-color: root.secondary-text; edited(value) => { root.account_email = value; root.suggest_account_settings(value); } }
                                     FormField { enabled: !root.account_setup_in_progress; height: 57px; label: @tr("Username"); value: root.account_username; placeholder: @tr("Usually your email address"); label-color: root.secondary-text; edited(value) => { root.account_username = value; } }
                                 }
                                 FormField { enabled: !root.account_setup_in_progress; height: 57px; label: @tr("Password or app password"); value: root.account_password; placeholder: @tr("Stored securely in your system keyring"); input-type: password; label-color: root.secondary-text; edited(value) => { root.account_password = value; } }
@@ -1536,15 +1538,13 @@ export component SettingsDialog inherits Rectangle {
                             border-width: 1px;
                             border-color: root.account_setup_in_progress ? root.accent.transparentize(0.55) : AppTheme.destructive.transparentize(0.45);
 
-                            account-status := Text {
+                            account-status := CopyableDiagnostic {
                                 x: 10px;
                                 y: 8px;
                                 width: parent.width - 20px;
                                 text: root.sync_status;
-                                color: root.account_setup_in_progress ? root.body-text : AppTheme.destructive;
+                                text-color: root.account_setup_in_progress ? root.body-text : AppTheme.destructive;
                                 font-size: TypeScale.caption;
-                                wrap: word-wrap;
-                                height: self.preferred-height;
                             }
                         }
 

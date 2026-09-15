@@ -2,6 +2,48 @@
 
 use super::*;
 
+fn mail_domain(address: &str) -> Option<&str> {
+    let address = address.trim();
+    if address.is_empty() || address.chars().any(char::is_whitespace) {
+        return None;
+    }
+    let (local, domain) = address.rsplit_once('@')?;
+    (!local.is_empty()
+        && !local.contains('@')
+        && !domain.is_empty()
+        && !domain.contains('@')
+        && !domain.starts_with('.')
+        && !domain.ends_with('.'))
+    .then_some(domain)
+}
+
+fn same_mail_transport(left: &AccountConfig, right: &AccountConfig) -> bool {
+    left.imap_host.eq_ignore_ascii_case(&right.imap_host)
+        && left.imap_port == right.imap_port
+        && left.smtp_host.eq_ignore_ascii_case(&right.smtp_host)
+        && left.smtp_port == right.smtp_port
+        && left.settings.connection == right.settings.connection
+}
+
+/// Reuse transport details only when every manual IMAP account for the domain
+/// agrees. Ambiguous configurations deliberately leave the new form untouched.
+pub(super) fn reusable_mail_transport<'a>(
+    configs: &'a [AccountConfig],
+    address: &str,
+) -> Option<&'a AccountConfig> {
+    let domain = mail_domain(address)?;
+    let mut matches = configs.iter().filter(|config| {
+        config.provider == Provider::Imap
+            && config.mail_protocol == MailProtocol::Imap
+            && mail_domain(&config.email)
+                .is_some_and(|candidate| candidate.eq_ignore_ascii_case(domain))
+    });
+    let first = matches.next()?;
+    matches
+        .all(|candidate| same_mail_transport(first, candidate))
+        .then_some(first)
+}
+
 pub(super) struct AccountRemovalUpdate {
     pub account_id: i64,
     pub removed: bool,
@@ -428,5 +470,53 @@ pub(super) fn normalize_appimage_environment() {
         // or any application worker thread exists, so no concurrent environment
         // access can race this process-wide mutation.
         unsafe { std::env::remove_var("XDG_DATA_DIRS") };
+    }
+}
+
+#[cfg(test)]
+mod mail_transport_suggestion_tests {
+    use super::*;
+
+    fn config(id: i64, email: &str, imap_host: &str, smtp_host: &str) -> AccountConfig {
+        AccountConfig {
+            id,
+            email: email.into(),
+            display_name: None,
+            avatar_url: None,
+            provider: Provider::Imap,
+            auth_kind: flectar_mail_core::models::AuthKind::Password,
+            mail_protocol: MailProtocol::Imap,
+            username: email.into(),
+            jmap_url: String::new(),
+            jmap_account_id: None,
+            imap_host: imap_host.into(),
+            imap_port: 993,
+            smtp_host: smtp_host.into(),
+            smtp_port: 465,
+            settings: Default::default(),
+        }
+    }
+
+    #[test]
+    fn reuses_the_unique_transport_for_a_matching_domain() {
+        let configs = vec![config(
+            1,
+            "first@Example.com",
+            "imap.example.com",
+            "smtp.example.com",
+        )];
+        let suggestion = reusable_mail_transport(&configs, "second@example.COM").unwrap();
+        assert_eq!(suggestion.imap_host, "imap.example.com");
+        assert_eq!(suggestion.smtp_host, "smtp.example.com");
+    }
+
+    #[test]
+    fn leaves_ambiguous_or_incomplete_addresses_untouched() {
+        let configs = vec![
+            config(1, "first@example.com", "imap-a.example.com", "smtp.example.com"),
+            config(2, "other@example.com", "imap-b.example.com", "smtp.example.com"),
+        ];
+        assert!(reusable_mail_transport(&configs, "new@example.com").is_none());
+        assert!(reusable_mail_transport(&configs, "new@").is_none());
     }
 }

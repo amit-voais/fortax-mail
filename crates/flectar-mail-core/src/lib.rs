@@ -864,10 +864,12 @@ impl Core {
             user: args.username.clone(),
             password: args.password.clone(),
         };
-        let session =
+        let mut session =
             imap::connect_with_settings(&args.imap_host, args.imap_port, creds, &args.connection)
                 .await?;
+        let mailbox_result = imap::select(&mut session, "INBOX").await.map(|_| ());
         imap::logout(session).await;
+        mailbox_result?;
         let config = AccountConfig {
             id: 0,
             email: args.email.clone(),

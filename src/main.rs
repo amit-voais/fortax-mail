@@ -5597,6 +5597,69 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     let ui_task_tx_for_account = ui_task_tx.clone();
     oauth_browser::register(&app, platform.oauth_redirects.clone());
     mail_setup::register(&app, &runtime);
+
+    let suggestion_app = app.as_weak();
+    let suggestion_state = Rc::clone(&state);
+    let last_suggested_transport = Rc::new(RefCell::new(None::<AccountConfig>));
+    app.on_suggest_account_settings(move |email| {
+        let Some(app) = suggestion_app.upgrade() else {
+            return;
+        };
+        let transport_matches_last_suggestion = last_suggested_transport
+            .borrow()
+            .as_ref()
+            .is_some_and(|config| {
+                app.get_imap_host().as_str() == config.imap_host
+                    && app.get_imap_port().as_str() == config.imap_port.to_string()
+                    && app.get_smtp_host().as_str() == config.smtp_host
+                    && app.get_smtp_port().as_str() == config.smtp_port.to_string()
+                    && app.get_imap_security().as_str()
+                        == config.settings.connection.imap_security.as_str()
+                    && app.get_smtp_security().as_str()
+                        == config.settings.connection.smtp_security.as_str()
+                    && app.get_trusted_certificate_pem().as_str()
+                        == config.settings.connection.trusted_certificate_pem
+            });
+        let transport_is_pristine = app.get_imap_host().trim().is_empty()
+            && app.get_smtp_host().trim().is_empty()
+            && app.get_imap_port().as_str() == "993"
+            && app.get_smtp_port().as_str() == "465"
+            && app.get_imap_security().as_str() == "auto"
+            && app.get_smtp_security().as_str() == "auto"
+            && app.get_trusted_certificate_pem().trim().is_empty();
+        if !transport_is_pristine && !transport_matches_last_suggestion {
+            last_suggested_transport.borrow_mut().take();
+            return;
+        }
+        let suggestion = {
+            let state = suggestion_state.borrow();
+            reusable_mail_transport(&state.account_configs, email.as_str()).cloned()
+        };
+        let Some(config) = suggestion else {
+            if transport_matches_last_suggestion {
+                app.set_imap_host("".into());
+                app.set_imap_port("993".into());
+                app.set_smtp_host("".into());
+                app.set_smtp_port("465".into());
+                app.set_imap_security("auto".into());
+                app.set_smtp_security("auto".into());
+                app.set_trusted_certificate_pem("".into());
+            }
+            last_suggested_transport.borrow_mut().take();
+            return;
+        };
+        app.set_imap_host(config.imap_host.clone().into());
+        app.set_imap_port(config.imap_port.to_string().into());
+        app.set_smtp_host(config.smtp_host.clone().into());
+        app.set_smtp_port(config.smtp_port.to_string().into());
+        app.set_imap_security(config.settings.connection.imap_security.as_str().into());
+        app.set_smtp_security(config.settings.connection.smtp_security.as_str().into());
+        app.set_trusted_certificate_pem(
+            config.settings.connection.trusted_certificate_pem.clone().into(),
+        );
+        *last_suggested_transport.borrow_mut() = Some(config);
+    });
+
     app.on_add_password_account(
         move |protocol,
               email,
