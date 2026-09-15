@@ -5656,8 +5656,6 @@ dependencies = [
 [[package]]
 name = "parley"
 version = "0.11.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "22d2ff88bd3f7d68d1d9b09c7e6209f9a8e8c05088295140a2bcf2e9b17038c5"
 dependencies = [
  "fontique 0.11.1",
  "harfrust 0.12.0",
@@ -5668,6 +5666,7 @@ dependencies = [
  "linebender_resource_handle",
  "parlance",
  "parley_data 0.11.1",
+ "parley_emoji",
  "skrifa 0.44.0",
 ]
 
@@ -5688,6 +5687,10 @@ checksum = "1567535334d6ba2d3cde19221ba9a7bd0fabb3cbd99046ddfb10ae061cfcc889"
 dependencies = [
  "icu_properties",
 ]
+
+[[package]]
+name = "parley_emoji"
+version = "0.11.1"
 
 [[package]]
 name = "paste"

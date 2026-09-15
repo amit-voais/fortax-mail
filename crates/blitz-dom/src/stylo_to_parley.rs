@@ -323,7 +323,7 @@ pub(crate) fn style(
     let font_features = self::font_features(font_styles);
 
     // Convert font family
-    let mut families: Vec<_> = font_styles
+    let families: Vec<_> = font_styles
         .font_family
         .families
         .list
@@ -355,20 +355,6 @@ pub(crate) fn style(
             }
         })
         .collect();
-
-    // Email often names only a platform font (e.g. Segoe UI on Linux).
-    // Parley treats ASCII digits, '#' and '*' as emoji-capable clusters and
-    // tries its emoji family BEFORE script fallback. Supply a text family in
-    // the requested stack so those characters don't select bitmap emoji when
-    // every authored family is unavailable. Existing families still win, and
-    // actual emoji/keycap clusters can continue to the emoji fallback.
-    if !families.contains(&parley::FontFamilyName::Generic(
-        parley::GenericFamily::SansSerif,
-    )) {
-        families.push(parley::FontFamilyName::Generic(
-            parley::GenericFamily::SansSerif,
-        ));
-    }
 
     // Wrapping and breaking
     let word_break = match itext_styles.word_break {

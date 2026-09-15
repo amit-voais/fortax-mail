@@ -3,6 +3,7 @@
 [patch.crates-io]
 blitz-dom = { path = "../../crates/blitz-dom" }
 blitz-paint = { path = "../../crates/blitz-paint" }
+parley = { path = "../../crates/parley" }
 
 [profile.release]
 opt-level = 3

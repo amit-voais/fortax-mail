@@ -79,6 +79,10 @@ jobs:
           PY
       - name: Verify the Blitz patch queue
         run: bash scripts/blitz-patches.sh verify
+      - name: Verify and test the Parley backport
+        run: |
+          python3 scripts/verify-parley.py
+          cargo test --manifest-path crates/parley/Cargo.toml --lib --locked --target-dir target/parley-tests
       - name: Test release validation and publication
         run: |
           python3 scripts/test-release.py

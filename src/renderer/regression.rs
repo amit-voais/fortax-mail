@@ -82,8 +82,8 @@ fn issue_23_report_matches_explicit_text_font_at_multiple_scales() {
 fn issue_23_text_fallback_preserves_real_emoji_and_authored_families() {
     let (ctx, emoji) = font_ctx_with_color_emoji();
     let html = r#"<body style="font-family:'Segoe UI'">
-        <div id="text">0123456789 # *</div>
-        <div id="emoji">😀 1️⃣</div>
+        <div id="text">0123456789 # * © ® 1︎ ©︎ ®︎</div>
+        <div id="emoji">😀 1️⃣ ©️ ®️</div>
         <div id="authored" style="font-family:'Noto Color Emoji'">0123</div>
         </body>"#;
     let prepared = prepare_email_html_with_font_ctx(html, ctx).unwrap();

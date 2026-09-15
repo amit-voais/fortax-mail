@@ -12,13 +12,14 @@ Reproduce with FontTools (`pyftsubset`):
 
 ```sh
 pyftsubset NotoColorEmoji.ttf \
-  --unicodes=U+0023,U+002A,U+0030-0039,U+20E3,U+FE0F,U+1F600 \
+  --unicodes=U+0023,U+002A,U+0030-0039,U+00A9,U+00AE,U+20E3,U+FE0E,U+FE0F,U+1F600 \
   --output-file=NotoColorEmoji-digits.ttf
 ```
 
-This retains the bitmap digits, hash, asterisk, keycap sequences, and grinning
-face. It reproduces issues #16/#23 without depending on fonts installed on the
-machine: when an email names an unavailable platform font, Parley can select
+This retains the bitmap digits, hash, asterisk, copyright/registered symbols,
+keycap sequences, and grinning face. It reproduces issues #16/#23 without
+depending on fonts installed on the machine: when an email names an unavailable
+platform font, Parley can select
 this emoji font for plain digits before reaching its Latin/Common fallback.
 Vello CPU's current build lacks PNG glyph support, so these bitmap digits
 vanish; Vello GPU paints them with emoji metrics and excessive spacing.

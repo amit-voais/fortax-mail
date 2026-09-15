@@ -21,6 +21,17 @@ checksums, and patch order are recorded in
 [`upstream.toml`](patches/blitz/upstream.toml) and
 [`series`](patches/blitz/series).
 
+## Parley emoji presentation
+
+The locally patched Parley 0.11.1 text layout crate is used under its
+Apache-2.0 option. The emoji sequence detector is copied from
+[Parley PR #811](https://github.com/linebender/parley/pull/811), based on
+[Christian Hansen's c-emoji](https://github.com/chansen/c-emoji), and is
+licensed under MIT. Its copyright and license are included in
+[`LICENSES/Parley-Emoji-MIT.txt`](LICENSES/Parley-Emoji-MIT.txt).
+Pinned sources and backport details are recorded in
+[`patches/parley/README.md`](patches/parley/README.md).
+
 ## Reader integration dependencies
 
 The reader integration uses these Rust packages under their Apache-2.0
