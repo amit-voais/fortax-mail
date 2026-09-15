@@ -692,7 +692,9 @@ async fn smtp_failure_prevents_saving_account() {
             email: "user@example.com".into(),
             display_name: None,
             username: "bridge-user".into(),
-            password: "bridge-password".into(),
+            // Password managers and browser copy actions can include a line
+            // ending even though the password field itself is single-line.
+            password: "\r\nbridge-password\r\n".into(),
             mail_protocol: MailProtocol::Imap,
             jmap_url: String::new(),
             imap_host: "127.0.0.1".into(),

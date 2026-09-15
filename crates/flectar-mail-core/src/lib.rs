@@ -102,9 +102,19 @@ fn normalize_account_email(value: &str) -> Option<String> {
     Some(format!("{local}@{}", domain.to_lowercase()))
 }
 
+fn normalize_account_password(value: String) -> String {
+    // Password controls are one-line inputs. Apply that invariant at the core
+    // boundary too so clipboard line endings cannot reach protocol encoders.
+    // Preserve spaces and every other character because they may be valid.
+    value
+        .chars()
+        .filter(|character| !matches!(character, '\r' | '\n'))
+        .collect()
+}
+
 #[cfg(test)]
-mod account_email_tests {
-    use super::normalize_account_email;
+mod account_input_tests {
+    use super::{normalize_account_email, normalize_account_password};
 
     #[test]
     fn account_email_preserves_local_part_and_normalizes_domain() {
@@ -115,6 +125,14 @@ mod account_email_tests {
         assert!(normalize_account_email("missing-domain@").is_none());
         assert!(normalize_account_email("two@@example.test").is_none());
         assert!(normalize_account_email("space @example.test").is_none());
+    }
+
+    #[test]
+    fn pasted_password_line_breaks_are_removed_without_trimming_spaces() {
+        assert_eq!(
+            normalize_account_password("\r\n secret\nvalue \r\n".into()),
+            " secretvalue "
+        );
     }
 }
 
@@ -827,6 +845,8 @@ impl Core {
     }
 
     pub async fn test_connection(&self, args: &AddPasswordAccountArgs) -> ConnectionTestResult {
+        let mut args = args.clone();
+        args.password = normalize_account_password(args.password);
         if args.mail_protocol == MailProtocol::Jmap {
             return match crate::jmap::client::connect_with(
                 &args.email,
@@ -847,7 +867,7 @@ impl Core {
                 },
             };
         }
-        match self.check_imap_smtp(args).await {
+        match self.check_imap_smtp(&args).await {
             Ok(()) => ConnectionTestResult {
                 ok: true,
                 error: None,
@@ -904,7 +924,7 @@ impl Core {
                 .map(|value| value.trim().to_owned())
                 .filter(|value| !value.is_empty()),
             username: args.username.trim().to_owned(),
-            password: args.password,
+            password: normalize_account_password(args.password),
             mail_protocol: args.mail_protocol,
             jmap_url: args.jmap_url.trim().to_owned(),
             imap_host: args.imap_host.trim().to_owned(),
