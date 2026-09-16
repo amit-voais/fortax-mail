@@ -15,10 +15,11 @@ find "$repo_root/src" -type f -name '*.rs' -print0 \
       }
     ' >"$raw_keys"
 
+# grep, not rg: ripgrep is not on a stock macOS, and this repo builds there.
 constructor_count=$(
-  rg --no-filename -o \
-    'UiMessage::(?:plain|detail|arguments|three_arguments)\(' \
-    "$repo_root/src" --glob '*.rs' \
+  grep -rhoE \
+    'UiMessage::(plain|detail|arguments|three_arguments)\(' \
+    "$repo_root/src" --include='*.rs' \
     | wc -l
 )
 literal_count=$(wc -l <"$raw_keys")
