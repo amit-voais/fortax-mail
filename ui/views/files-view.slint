@@ -261,6 +261,9 @@ export component FilesView inherits Rectangle {
                 padding: 0px; spacing: 0px;
                 Rectangle {
                     height: root.compact ? LayoutMetrics.compact-header-height : LayoutMetrics.desktop-mail-toolbar-height;
+                    // Tooltips extend below the toolbar; keep them above the
+                    // list body, which is declared later in this layout.
+                    z: 1;
                     WorkspaceSearchToolbar {
                         x: root.compact ? LayoutMetrics.compact-inset : LayoutMetrics.content-inset;
                         y: (parent.height - self.height) / 2;
@@ -334,7 +337,7 @@ export component FilesView inherits Rectangle {
                     horizontal-scrollbar-policy: always-off;
                     viewport-width: self.visible-width;
                     for row[index] in FilesUi.rows : Rectangle {
-                        x: 12px; width: max(0px, parent.visible-width - 16px); height: 82px; border-radius: 6px; background: FilesUi.selected == index ? AppTheme.accent-soft : hit.has-hover ? AppTheme.sidebar-bg : transparent;
+                        x: LayoutMetrics.list-row-inset; width: max(0px, parent.visible-width - 2 * LayoutMetrics.list-row-inset); height: 82px; border-radius: 6px; background: FilesUi.selected == index ? AppTheme.accent-soft : hit.has-hover ? AppTheme.sidebar-bg : transparent;
                         HorizontalBox {
                             padding: 12px; spacing: 12px;
                             Image { width: 24px; height: 24px; source: row.directory ? @image-url("../icons/phosphor/folder-simple.svg") : row.attachment ? @image-url("../icons/phosphor/paperclip.svg") : @image-url("../icons/phosphor/file.svg"); colorize: row.directory ? AppTheme.accent : AppTheme.secondary; }

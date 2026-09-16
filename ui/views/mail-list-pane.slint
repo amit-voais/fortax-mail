@@ -130,6 +130,9 @@ export component MailListPane inherits Rectangle {
                     Rectangle {
                         height: root.compact ? LayoutMetrics.compact-header-height : LayoutMetrics.desktop-mail-toolbar-height;
                         background: root.surface;
+                        // Tooltips extend below the toolbar; keep them above the
+                        // list body, which is declared later in this layout.
+                        z: 1;
                         WorkspaceSearchToolbar {
                             x: root.compact ? LayoutMetrics.compact-inset : LayoutMetrics.content-inset;
                             y: (parent.height - self.height) / 2;
@@ -197,9 +200,9 @@ export component MailListPane inherits Rectangle {
                         background: root.surface;
 
                         mail-list-scroll := ListView {
-                            x: 12px;
+                            x: LayoutMetrics.list-row-inset;
                             y: 0px;
-                            width: parent.width - 16px;
+                            width: max(0px, parent.width - 2 * LayoutMetrics.list-row-inset);
                             height: parent.height;
                             horizontal-scrollbar-policy: always-off;
                             mouse-drag-pan-enabled: root.compact;
@@ -526,9 +529,9 @@ export component MailListPane inherits Rectangle {
                         }
 
                         if root.emails.length == 0 : Rectangle {
-                            x: 12px;
+                            x: LayoutMetrics.list-row-inset;
                             y: 0px;
-                            width: parent.width - 16px;
+                            width: max(0px, parent.width - 2 * LayoutMetrics.list-row-inset);
                             height: min(parent.height, 120px);
                             background: root.surface;
                             VerticalBox {
