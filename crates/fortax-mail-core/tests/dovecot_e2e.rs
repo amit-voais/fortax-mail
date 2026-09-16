@@ -421,9 +421,7 @@ async fn full_sync_triage_and_search() {
         let mut s = fortax_mail_core::imap::connect("127.0.0.1", 10993, creds)
             .await
             .ok()?;
-        let sel = fortax_mail_core::imap::select(&mut s, "INBOX")
-            .await
-            .ok()?;
+        let sel = fortax_mail_core::imap::select(&mut s, "INBOX").await.ok()?;
         let n = sel.exists;
         fortax_mail_core::imap::logout(s).await;
         (n == 7).then_some(())

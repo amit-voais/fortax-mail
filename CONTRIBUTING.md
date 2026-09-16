@@ -1,7 +1,13 @@
-# Contributing to Flectar Mail
+# Contributing to Fortax Mail
 
-Thank you for helping improve Flectar Mail. Keep changes focused, reviewable,
-and safe for a mail client that handles private user data.
+Thank you for helping improve Fortax Mail. Keep changes focused, reviewable, and
+safe for a mail client that handles private user data.
+
+Fortax Mail is a fork of [Flectar Mail](https://github.com/flectar/mail). A fix
+that is not specific to this fork is usually worth offering upstream as well —
+everyone downstream of Flectar benefits, and this fork keeps tracking upstream.
+Anything about the hiSAI bridge, the Fortax branding or the CA-firm workflow
+belongs here.
 
 ## Before starting
 
@@ -11,19 +17,17 @@ and safe for a mail client that handles private user data.
 - Never submit real mailbox contents, credentials, OAuth tokens, signing
   material, or personal fixture data. Use reserved `.example` domains.
 
-## Contributor License Agreement
+## Licensing of contributions
 
-Every contributor must accept the
-[`Flectar Contributor License Agreement`](CLA.md) before a pull request can be
-merged. Contributors retain copyright. The CLA permits Flectar to maintain the
-AGPL project and provides an explicit patent grant; it does not make accepted
-client contributions proprietary. This purpose is also described in
-[`LICENSING.md`](LICENSING.md).
+There is no contributor licence agreement. Inbound is outbound: what you send is
+published as part of Fortax Mail under `AGPL-3.0-only`, unless a file is
+explicitly identified as third-party material under another compatible licence.
+You keep your copyright.
 
-If an employer or another organization owns your work, an authorized
-representative must approve the contribution. A personal checkbox cannot grant
-rights owned by your employer. Maintainers may request a separate corporate
-agreement before review is completed.
+Sign off each commit with `git commit -s` to certify the
+[Developer Certificate of Origin](https://developercertificate.org/) — that you
+wrote the change, or have the right to submit it under this licence. If an
+employer owns your work, make sure they allow you to contribute it.
 
 ## Pull requests
 
@@ -48,16 +52,12 @@ cargo test --workspace --locked
 slint-viewer --check ui/app.slint
 ```
 
+Bridge changes must also pass the hiSAI-side tests in the hiSAI repository
+(`tests/mail/run.sh`), which drive this bridge over loopback.
+
 UI changes must be rendered and inspected in light and dark themes. Responsive
 changes must also be checked at the documented phone and tablet preview sizes.
 Use fictional data in screenshots.
 
 Icon sources, generation and sizing are documented in
 [Lucide icons](ui/icons/lucide/README.md).
-
-## Licensing of accepted contributions
-
-Accepted contributions are published as part of Flectar Mail under
-`AGPL-3.0-only`, unless a file is explicitly identified as third-party material
-under another compatible license. The CLA does not remove the AGPL rights that
-recipients receive for published releases.

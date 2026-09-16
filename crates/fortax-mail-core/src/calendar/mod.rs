@@ -555,11 +555,7 @@ pub struct InviteSpec<'a> {
 fn calendar_shell(method: &str, body: impl FnOnce(&mut String)) -> String {
     let mut out = String::new();
     push_prop(&mut out, "BEGIN", "VCALENDAR");
-    push_prop(
-        &mut out,
-        "PRODID",
-        "-//FortaxMail//FortaxMail Calendar//EN",
-    );
+    push_prop(&mut out, "PRODID", "-//FortaxMail//FortaxMail Calendar//EN");
     push_prop(&mut out, "VERSION", "2.0");
     push_prop(&mut out, "METHOD", method);
     push_prop(&mut out, "BEGIN", "VEVENT");

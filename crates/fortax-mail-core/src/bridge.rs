@@ -18,12 +18,12 @@ use std::path::{Path, PathBuf};
 
 use rand::RngCore;
 use rusqlite::Connection;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
-use crate::db::repo::{accounts, calendar as cal_repo, contacts, search as search_repo};
 use crate::db::Db;
+use crate::db::repo::{accounts, calendar as cal_repo, contacts, search as search_repo};
 use crate::error::Result;
 use crate::search;
 
@@ -37,7 +37,10 @@ pub struct BridgeHandle {
 
 /// True when the user (or a developer run) asked for the bridge.
 pub fn enabled(conn: &Connection) -> bool {
-    if matches!(std::env::var("FORTAX_MAIL_BRIDGE").as_deref(), Ok("1") | Ok("true")) {
+    if matches!(
+        std::env::var("FORTAX_MAIL_BRIDGE").as_deref(),
+        Ok("1") | Ok("true")
+    ) {
         return true;
     }
     conn.query_row(
@@ -51,8 +54,9 @@ pub fn enabled(conn: &Connection) -> bool {
 
 /// Switch the bridge on or off in the app's own settings. The listener itself starts with the app.
 pub fn set_enabled(db_path: &Path, on: bool) -> Result<()> {
-    let conn = Connection::open(db_path)
-        .map_err(|e| crate::error::CoreError::Other(format!("opening {}: {e}", db_path.display())))?;
+    let conn = Connection::open(db_path).map_err(|e| {
+        crate::error::CoreError::Other(format!("opening {}: {e}", db_path.display()))
+    })?;
     conn.execute(
         "INSERT INTO app_settings (key, value) VALUES ('bridge_enabled', ?1)
          ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -64,8 +68,9 @@ pub fn set_enabled(db_path: &Path, on: bool) -> Result<()> {
 
 /// Whether the bridge is switched on, read straight from the settings table.
 pub fn is_enabled(db_path: &Path) -> Result<bool> {
-    let conn = Connection::open(db_path)
-        .map_err(|e| crate::error::CoreError::Other(format!("opening {}: {e}", db_path.display())))?;
+    let conn = Connection::open(db_path).map_err(|e| {
+        crate::error::CoreError::Other(format!("opening {}: {e}", db_path.display()))
+    })?;
     Ok(enabled(&conn))
 }
 
@@ -80,7 +85,10 @@ fn same_token(a: &str, b: &str) -> bool {
     if a.len() != b.len() {
         return false;
     }
-    a.bytes().zip(b.bytes()).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
+    a.bytes()
+        .zip(b.bytes())
+        .fold(0u8, |acc, (x, y)| acc | (x ^ y))
+        == 0
 }
 
 fn write_state(path: &Path, port: u16, token: &str) -> std::io::Result<()> {
@@ -101,7 +109,11 @@ fn write_state(path: &Path, port: u16, token: &str) -> std::io::Result<()> {
         use std::os::unix::fs::PermissionsExt;
         f.set_permissions(std::fs::Permissions::from_mode(0o600))?;
     }
-    f.write_all(serde_json::to_string_pretty(&body).unwrap_or_default().as_bytes())?;
+    f.write_all(
+        serde_json::to_string_pretty(&body)
+            .unwrap_or_default()
+            .as_bytes(),
+    )?;
     Ok(())
 }
 
@@ -118,17 +130,25 @@ pub fn clear_state(data_dir: &Path) {
 pub async fn start(db: Db, calendar_db: Option<Db>, data_dir: PathBuf) -> Result<BridgeHandle> {
     let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
         .await
-        .map_err(|e| crate::error::CoreError::Other(format!("the hiSAI bridge could not listen: {e}")))?;
+        .map_err(|e| {
+            crate::error::CoreError::Other(format!("the hiSAI bridge could not listen: {e}"))
+        })?;
     let port = listener
         .local_addr()
-        .map_err(|e| crate::error::CoreError::Other(format!("the hiSAI bridge has no address: {e}")))?
+        .map_err(|e| {
+            crate::error::CoreError::Other(format!("the hiSAI bridge has no address: {e}"))
+        })?
         .port();
     let token = token();
     let file = state_path(&data_dir);
     if let Err(e) = write_state(&file, port, &token) {
         tracing::warn!("hiSAI bridge: could not write {}: {e}", file.display());
     }
-    let handle = BridgeHandle { port, token: token.clone(), state_file: file };
+    let handle = BridgeHandle {
+        port,
+        token: token.clone(),
+        state_file: file,
+    };
     tokio::spawn(async move {
         loop {
             match listener.accept().await {
@@ -153,7 +173,12 @@ pub async fn start(db: Db, calendar_db: Option<Db>, data_dir: PathBuf) -> Result
     Ok(handle)
 }
 
-async fn serve(mut stream: TcpStream, db: Db, calendar_db: Option<Db>, token: String) -> std::io::Result<()> {
+async fn serve(
+    mut stream: TcpStream,
+    db: Db,
+    calendar_db: Option<Db>,
+    token: String,
+) -> std::io::Result<()> {
     let mut buf = Vec::with_capacity(2048);
     let mut chunk = [0u8; 2048];
     let head_end = loop {
@@ -166,7 +191,12 @@ async fn serve(mut stream: TcpStream, db: Db, calendar_db: Option<Db>, token: St
             break i + 4;
         }
         if buf.len() > 64 * 1024 {
-            return reply(&mut stream, 431, &json!({"error": "request header too large"})).await;
+            return reply(
+                &mut stream,
+                431,
+                &json!({"error": "request header too large"}),
+            )
+            .await;
         }
     };
     let head = String::from_utf8_lossy(&buf[..head_end]).to_string();
@@ -178,7 +208,10 @@ async fn serve(mut stream: TcpStream, db: Db, calendar_db: Option<Db>, token: St
 
     let mut auth = String::new();
     for line in lines {
-        if let Some(v) = line.strip_prefix("Authorization:").or_else(|| line.strip_prefix("authorization:")) {
+        if let Some(v) = line
+            .strip_prefix("Authorization:")
+            .or_else(|| line.strip_prefix("authorization:"))
+        {
             auth = v.trim().to_string();
         }
     }
@@ -187,7 +220,12 @@ async fn serve(mut stream: TcpStream, db: Db, calendar_db: Option<Db>, token: St
         return reply(&mut stream, 401, &json!({"error": "bad or missing token"})).await;
     }
     if method != "GET" {
-        return reply(&mut stream, 405, &json!({"error": "this bridge answers GET only"})).await;
+        return reply(
+            &mut stream,
+            405,
+            &json!({"error": "this bridge answers GET only"}),
+        )
+        .await;
     }
 
     let (path, query) = match target.split_once('?') {
@@ -220,7 +258,14 @@ async fn reply(stream: &mut TcpStream, code: u16, body: &Value) -> std::io::Resu
     let text = serde_json::to_string(body).unwrap_or_else(|_| "{}".into());
     let head = format!(
         "HTTP/1.1 {code} {}\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: {}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n",
-        match code { 200 => "OK", 401 => "Unauthorized", 404 => "Not Found", 405 => "Method Not Allowed", 431 => "Request Header Fields Too Large", _ => "Internal Server Error" },
+        match code {
+            200 => "OK",
+            401 => "Unauthorized",
+            404 => "Not Found",
+            405 => "Method Not Allowed",
+            431 => "Request Header Fields Too Large",
+            _ => "Internal Server Error",
+        },
         text.as_bytes().len()
     );
     stream.write_all(head.as_bytes()).await?;
@@ -241,10 +286,16 @@ impl Query {
         Self(out)
     }
     fn get(&self, key: &str) -> Option<&str> {
-        self.0.iter().find(|(k, _)| k == key).map(|(_, v)| v.as_str())
+        self.0
+            .iter()
+            .find(|(k, _)| k == key)
+            .map(|(_, v)| v.as_str())
     }
     fn num(&self, key: &str, default: i64, max: i64) -> i64 {
-        self.get(key).and_then(|v| v.parse::<i64>().ok()).unwrap_or(default).clamp(1, max)
+        self.get(key)
+            .and_then(|v| v.parse::<i64>().ok())
+            .unwrap_or(default)
+            .clamp(1, max)
     }
 }
 
@@ -370,7 +421,9 @@ async fn message(db: &Db, q: &Query) -> Result<Value> {
 async fn contact_list(db: &Db, q: &Query) -> Result<Value> {
     let text = q.get("q").unwrap_or_default().to_string();
     let limit = q.num("limit", 25, 200);
-    let rows = db.read(move |conn| contacts::list_records(conn, &text, limit)).await?;
+    let rows = db
+        .read(move |conn| contacts::list_records(conn, &text, limit))
+        .await?;
     Ok(json!({
         "contacts": rows.iter().map(|c| json!({
             "id": c.id, "name": c.name, "email": c.email, "phone": c.phone,
@@ -381,12 +434,17 @@ async fn contact_list(db: &Db, q: &Query) -> Result<Value> {
 
 async fn events(db: &Db, q: &Query) -> Result<Value> {
     let now = chrono::Utc::now().timestamp_millis();
-    let from = q.get("from").and_then(|v| v.parse::<i64>().ok()).unwrap_or(now);
+    let from = q
+        .get("from")
+        .and_then(|v| v.parse::<i64>().ok())
+        .unwrap_or(now);
     let to = q
         .get("to")
         .and_then(|v| v.parse::<i64>().ok())
         .unwrap_or(now + 14 * 24 * 60 * 60 * 1000);
-    let rows = db.read(move |conn| cal_repo::list_range(conn, from, to)).await?;
+    let rows = db
+        .read(move |conn| cal_repo::list_range(conn, from, to))
+        .await?;
     Ok(json!({
         "from": from, "to": to,
         "events": rows.iter().map(|e| json!({

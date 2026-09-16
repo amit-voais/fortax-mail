@@ -5297,9 +5297,7 @@ impl Core {
         let prompt = prompt.trim();
         if prompt.is_empty() {
             return Ok(AiAutomationPlan {
-                issues: vec![
-                    "Describe the emails to match and what Fortax Mail should do.".into(),
-                ],
+                issues: vec!["Describe the emails to match and what Fortax Mail should do.".into()],
                 ..AiAutomationPlan::default()
             });
         }

@@ -802,10 +802,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             key,
-            Some(format!(
-                "label:{}",
-                label_id(&c, "FortaxMailAutoMarketing")
-            ))
+            Some(format!("label:{}", label_id(&c, "FortaxMailAutoMarketing")))
         );
     }
 
