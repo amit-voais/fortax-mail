@@ -22,6 +22,7 @@ import { CompactProductNav, ProductRail } from "components/product-rail.slint";
 import { WorkspaceFrame } from "components/workspace-layout.slint";
 import { CalendarEventDialog } from "dialogs/calendar-event-dialog.slint";
 import { ComposeDialog } from "dialogs/compose-dialog.slint";
+import { AssistantDialog } from "dialogs/assistant-dialog.slint";
 import { FolderDialog } from "dialogs/folder-dialog.slint";
 import { SettingsDialog } from "dialogs/settings-dialog.slint";
 import { MailView } from "views/mail-view.slint";
@@ -142,6 +143,8 @@ export global I18n {
         if (key == "Notification preferences are active for this session.") { return @tr("Notification preferences are active for this session."); }
         if (key == "Notification preferences saved.") { return @tr("Notification preferences saved."); }
         if (key == "Assistant settings saved.") { return @tr("Assistant settings saved."); }
+        if (key == "Rule saved: {}") { return @tr("Rule saved: {}", argument); }
+        if (key == "Could not save the rule: {}") { return @tr("Could not save the rule: {}", argument); }
         if (key == "Assistant key saved to the keychain.") { return @tr("Assistant key saved to the keychain."); }
         if (key == "The assistant needs the mailbox open first.") { return @tr("The assistant needs the mailbox open first."); }
         if (key == "Could not save the assistant settings: {}") { return @tr("Could not save the assistant settings: {}", argument); }
@@ -535,6 +538,11 @@ export component AppWindow inherits Window {
     callback check-ai-connection();
     callback set-agent-level(string);
     callback set-agent-scope(string);
+    callback assistant-ask(string);
+    callback assistant-summarise();
+    callback assistant-draft(string);
+    callback assistant-plan(string);
+    callback assistant-save-plan();
     callback load-remote-images-for-message();
     callback calendar-navigate(string, int);
     callback calendar-select-date(string);
@@ -729,6 +737,13 @@ export component AppWindow inherits Window {
     in-out property <string> ai-status-line: "";
     in-out property <string> ai-agent-level: "read";
     in-out property <string> ai-agent-scope: "selection";
+    in-out property <bool> assistant-open: false;
+    in-out property <bool> assistant-busy: false;
+    in-out property <string> assistant-request: "";
+    in-out property <string> assistant-answer: "";
+    in-out property <string> assistant-plan-name: "";
+    in-out property <string> assistant-plan-summary: "";
+    in-out property <bool> assistant-plan-supported: false;
     in property <bool> remote-images-blocked: false;
     in-out property <bool> compose_open: false;
     in property <string> compose_mode: "new";
@@ -1116,6 +1131,7 @@ export component AppWindow inherits Window {
             print_message => { root.print_message(); }
             open_message_in_browser => { root.open_message_in_browser(); }
             open_compose => { root.open_compose(); }
+            open_assistant => { root.assistant-open = true; }
             open_email_link(url) => { root.open_email_link(url); }
             copy_email_status(status) => { root.copy_email_status(status); }
             email-pointer-event(x, y, kind, control, shift, alt, meta) => {
@@ -1586,6 +1602,37 @@ export component AppWindow inherits Window {
                 vertical-alignment: center;
             }
         }
+    }
+
+    if root.assistant-open : AssistantDialog {
+        x: root.safe-area-insets.left;
+        y: root.safe-area-insets.top;
+        width: root.width - root.safe-area-insets.left - root.safe-area-insets.right;
+        height: root.height - root.safe-area-insets.top - root.safe-area-insets.bottom;
+        z: 15000;
+        thread-subject: root.selected_subject;
+        has-thread: root.selected_subject != "";
+        busy: root.assistant-busy;
+        configured: root.ai-configured;
+        agent-level: root.ai-agent-level;
+        request <=> root.assistant-request;
+        answer: root.assistant-answer;
+        plan-name: root.assistant-plan-name;
+        plan-summary: root.assistant-plan-summary;
+        plan-supported: root.assistant-plan-supported;
+        surface-color: root.surface;
+        raised-color: root.control-bg;
+        ui-border-color: root.border;
+        accent-color: root.accent;
+        title-color: root.title-color;
+        body-color: root.body-text;
+        muted-color: root.muted-text;
+        close => { root.assistant-open = false; }
+        ask(q) => { root.assistant-ask(q); }
+        summarise => { root.assistant-summarise(); }
+        draft(instruction) => { root.assistant-draft(instruction); }
+        plan(prompt) => { root.assistant-plan(prompt); }
+        save-plan => { root.assistant-save-plan(); }
     }
 
     if root.folder-dialog-open : FolderDialog {

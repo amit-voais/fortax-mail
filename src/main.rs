@@ -35,6 +35,7 @@ mod renderer_input_controller;
 mod renderer_preferences;
 mod retained_model;
 mod rich_compose;
+mod assistant_controller;
 mod settings_controller;
 mod sidebar_model;
 mod startup;
@@ -4637,6 +4638,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     });
 
     register_settings_preference_callbacks(&app, &state, &runtime);
+    assistant_controller::register_assistant_callbacks(&app, &state, &runtime);
 
     let compose_files = Rc::new(RefCell::new(Vec::<ComposeFile>::new()));
     let compose_document = Rc::new(RefCell::new(RichComposeDocument::default()));

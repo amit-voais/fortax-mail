@@ -29,6 +29,7 @@ export component MailSidebar inherits CollapsibleWorkspaceSidebar {
     in property <color> muted-color;
     callback select-scope(string);
     callback compose;
+    callback open-assistant;
     callback manage-accounts;
     callback toggle-folder(int, bool);
     callback toggle-section(string, bool);
@@ -58,6 +59,15 @@ export component MailSidebar inherits CollapsibleWorkspaceSidebar {
             has-icon: true;
             primary: true;
             clicked => { root.compose(); }
+        }
+
+        Button {
+            height: LayoutMetrics.sidebar-action-height;
+            horizontal-stretch: 1;
+            text: @tr("Assistant");
+            icon: @image-url("../icons/lucide/filled/assistant.svg");
+            has-icon: true;
+            clicked => { root.open-assistant(); }
         }
 
 

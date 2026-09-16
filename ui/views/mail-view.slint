@@ -120,6 +120,7 @@ export component MailView inherits Rectangle {
     callback print_message();
     callback open_message_in_browser();
     callback open_compose();
+    callback open_assistant();
     callback open_email_link(string);
     callback copy_email_status(string);
     callback email-pointer-event(float, float, string, bool, bool, bool, bool);
@@ -174,6 +175,7 @@ export component MailView inherits Rectangle {
                 request-rename-label(id, name, color) => { root.request_label_rename(id, name, color); }
                 request-delete-label(id, name) => { root.request_label_delete(id, name); }
                 compose => { root.open_compose(); }
+                open-assistant => { root.open_assistant(); }
                 manage-accounts => {
                     root.settings_tab = "Accounts";
                     root.settings_open = true;
@@ -356,6 +358,7 @@ export component MailView inherits Rectangle {
                 request-rename-label(id, name, color) => { root.request_label_rename(id, name, color); }
                 request-delete-label(id, name) => { root.request_label_delete(id, name); }
                 compose => { root.open_compose(); }
+                open-assistant => { root.open_assistant(); }
                 manage-accounts => {
                     root.settings_tab = "Accounts";
                     root.settings_open = true;

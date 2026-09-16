@@ -1,0 +1,185 @@
+import { ScrollView, VerticalBox, HorizontalBox } from "std-widgets.slint";
+import { Button } from "../components/button.slint";
+import { LineEdit } from "../components/controls.slint";
+import { TypeScale } from "../typography.slint";
+
+// Ask the assistant for something in the person's own words, and show what came back.
+//
+// Four things can happen to one sentence, and the dialog never guesses between them: the buttons say
+// which. Answering and summarising read; drafting writes into the composer and a person still presses
+// Send; a rule is *proposed* here and saved only when they say so, and only when Settings allows the
+// assistant to sort the mailbox at all. Nothing in this dialog changes the mailbox by itself.
+export component AssistantDialog inherits Rectangle {
+    in property <string> thread-subject: "";
+    in property <bool> has-thread: false;
+    in property <bool> busy: false;
+    in property <bool> configured: false;
+    in property <string> agent-level: "read";
+    in-out property <string> request: "";
+    in property <string> answer: "";
+    in property <string> plan-name: "";
+    in property <string> plan-summary: "";
+    in property <bool> plan-supported: false;
+    in property <color> surface-color;
+    in property <color> raised-color;
+    in property <color> ui-border-color;
+    in property <color> accent-color;
+    in property <color> title-color;
+    in property <color> body-color;
+    in property <color> muted-color;
+    callback close();
+    callback ask(string);
+    callback summarise();
+    callback draft(string);
+    callback plan(string);
+    callback save-plan();
+
+    background: #00000066;
+    forward-focus: request-input;
+    accessible-role: groupbox;
+    accessible-label: @tr("Assistant");
+
+    TouchArea { }
+
+    dialog-card := Rectangle {
+        width: min(620px, parent.width - 32px);
+        height: min(560px, parent.height - 48px);
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        border-radius: 12px;
+        border-width: 1px;
+        border-color: root.ui-border-color;
+        background: root.surface-color;
+
+        VerticalBox {
+            padding: 22px;
+            spacing: 12px;
+
+            HorizontalBox {
+                padding: 0px;
+                spacing: 8px;
+                Text {
+                    text: @tr("Assistant");
+                    color: root.title-color;
+                    font-size: TypeScale.title;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                }
+                Rectangle { horizontal-stretch: 1; }
+                Button { text: @tr("Close"); clicked => { root.close(); } }
+            }
+
+            Text {
+                text: root.has-thread ? @tr("About: {}", root.thread-subject) : @tr("No conversation is open, so questions search the whole mailbox.");
+                color: root.muted-color;
+                font-size: TypeScale.caption;
+                wrap: word-wrap;
+                height: 32px;
+            }
+
+            if !root.configured : Text {
+                text: @tr("No assistant is connected yet. Settings → General → Assistant.");
+                color: root.muted-color;
+                font-size: TypeScale.secondary;
+                wrap: word-wrap;
+            }
+
+            request-input := LineEdit {
+                enabled: root.configured && !root.busy;
+                text: root.request;
+                placeholder-text: @tr("What should it do? e.g. what did Travelzl say about the GST notice");
+                edited(value) => { root.request = value; }
+                accepted(value) => { root.ask(value); }
+            }
+
+            HorizontalBox {
+                padding: 0px;
+                spacing: 8px;
+                Button {
+                    enabled: root.configured && !root.busy && root.request != "";
+                    text: @tr("Answer");
+                    clicked => { root.ask(root.request); }
+                }
+                Button {
+                    enabled: root.configured && !root.busy && root.has-thread;
+                    text: @tr("Summarise this");
+                    clicked => { root.summarise(); }
+                }
+                Button {
+                    enabled: root.configured && !root.busy && root.has-thread;
+                    text: @tr("Draft a reply");
+                    clicked => { root.draft(root.request); }
+                }
+                Button {
+                    enabled: root.configured && !root.busy && root.request != "";
+                    text: @tr("Make it a rule");
+                    clicked => { root.plan(root.request); }
+                }
+                Rectangle { horizontal-stretch: 1; }
+            }
+
+            if root.busy : Text {
+                text: @tr("Working…");
+                color: root.muted-color;
+                font-size: TypeScale.secondary;
+            }
+
+            Rectangle {
+                vertical-stretch: 1;
+                background: root.raised-color;
+                border-radius: 8px;
+                border-width: 1px;
+                border-color: root.ui-border-color;
+                ScrollView {
+                    VerticalBox {
+                        padding: 14px;
+                        spacing: 8px;
+                        Text {
+                            text: root.answer != "" ? root.answer : @tr("Whatever it finds or writes appears here. Read it before you act on it — it can be wrong, and a figure still needs its source.");
+                            color: root.answer != "" ? root.body-color : root.muted-color;
+                            font-size: TypeScale.secondary;
+                            wrap: word-wrap;
+                        }
+                    }
+                }
+            }
+
+            if root.plan-name != "" : Rectangle {
+                height: 96px;
+                background: root.raised-color;
+                border-radius: 8px;
+                border-width: 1px;
+                border-color: root.ui-border-color;
+                VerticalBox {
+                    padding: 12px;
+                    spacing: 6px;
+                    Text {
+                        text: @tr("Proposed rule: {}", root.plan-name);
+                        color: root.title-color;
+                        font-size: TypeScale.secondary;
+                        font-weight: 700;
+                        wrap: word-wrap;
+                    }
+                    Text {
+                        text: root.plan-summary;
+                        color: root.muted-color;
+                        font-size: TypeScale.caption;
+                        wrap: word-wrap;
+                    }
+                    HorizontalBox {
+                        padding: 0px;
+                        spacing: 8px;
+                        Rectangle { horizontal-stretch: 1; }
+                        // A rule that sorts the mailbox is only offered when Settings lets the
+                        // assistant sort at all; otherwise the plan is shown and goes no further.
+                        Button {
+                            enabled: root.plan-supported && root.agent-level != "read";
+                            text: root.agent-level == "read" ? @tr("Turn on sorting in Settings to keep this") : @tr("Save this rule");
+                            clicked => { root.save-plan(); }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

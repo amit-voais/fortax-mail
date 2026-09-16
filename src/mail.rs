@@ -761,6 +761,114 @@ impl CoreMailSource {
         self.core.ai_list_models().await.map_err(|e| e.to_string())
     }
 
+    /// A question answered against the mailbox, flattened to the text the dialog shows.
+    pub async fn ai_ask(&self, question: String, request_id: String) -> Result<String, String> {
+        let result = self
+            .core
+            .ai_ask(question, request_id)
+            .await
+            .map_err(|e| e.to_string())?;
+        Ok(result.answer)
+    }
+
+    /// A thread summary as plain lines. The structure is for a richer panel later; what a person
+    /// needs first is the story, the points, and the one thing they owe.
+    pub async fn ai_summarize(&self, thread_id: i64) -> Result<String, String> {
+        let summary = self
+            .core
+            .ai_summarize(thread_id)
+            .await
+            .map_err(|e| e.to_string())?;
+        let mut out = String::new();
+        for entry in &summary.timeline {
+            out.push_str(&format!("{} — {}\n", entry.actor, entry.event));
+        }
+        if !summary.key_points.is_empty() {
+            if !out.is_empty() {
+                out.push('\n');
+            }
+            for point in &summary.key_points {
+                out.push_str(&format!("• {point}\n"));
+            }
+        }
+        if let Some(next) = summary.next_action.as_deref().filter(|n| !n.trim().is_empty()) {
+            out.push_str(&format!("\nNext: {next}\n"));
+        }
+        if out.trim().is_empty() {
+            out.push_str("Nothing worth summarising in this conversation.");
+        }
+        Ok(out)
+    }
+
+    /// A reply drafted for the open thread. It comes back as text for the person to read; this
+    /// deliberately does not put anything in an outbox.
+    pub async fn ai_draft(&self, thread_id: i64, instruction: &str) -> Result<String, String> {
+        let settings = self.load_settings().await?;
+        let accounts = self.core.list_accounts().await.map_err(|e| e.to_string())?;
+        let sender_name = accounts
+            .first()
+            .map(|account| account.email.clone())
+            .unwrap_or_default();
+        self.core
+            .ai_draft(
+                Some(thread_id),
+                None,
+                instruction.to_owned(),
+                sender_name,
+                Some(settings.voice_drafting),
+                false,
+            )
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    pub async fn ai_plan_automation(
+        &self,
+        prompt: String,
+    ) -> Result<fortax_mail_core::models::AiAutomationPlan, String> {
+        self.core
+            .ai_plan_automation(prompt)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Plan the request again and keep it. Re-planning rather than trusting what the dialog is
+    /// holding means the rule that gets saved is one the core has just validated against this
+    /// mailbox's real labels and folders.
+    pub async fn save_automation_rule(&self, prompt: String) -> Result<String, String> {
+        let plan = self.ai_plan_automation(prompt.clone()).await?;
+        if !plan.supported {
+            return Err(if plan.issues.is_empty() {
+                "That is not something a rule can do.".to_owned()
+            } else {
+                plan.issues.join(" ")
+            });
+        }
+        let mut settings = self.load_settings().await?;
+        if settings.ai_agent_level == "read" {
+            return Err(
+                "Sorting is off. Turn it on under Settings → General → Assistant to keep rules."
+                    .to_owned(),
+            );
+        }
+        let id = format!("rule-{}", settings.ai_automation_rules.len() + 1);
+        settings
+            .ai_automation_rules
+            .push(fortax_mail_core::models::AiAutomationRule {
+                id,
+                name: plan.name.clone(),
+                source_prompt: prompt,
+                instruction: plan.instruction,
+                enabled: true,
+                actions: plan.actions,
+            });
+        self.core
+            .set_settings(settings)
+            .await
+            .map_err(|e| e.to_string())?;
+        Ok(plan.name)
+    }
+
     /// How far the assistant may go on its own. Anything unrecognised falls back to the
     /// narrowest setting rather than the widest.
     pub async fn set_agent_level(&self, level: &str) -> Result<(), String> {
