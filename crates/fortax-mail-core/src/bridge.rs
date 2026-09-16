@@ -266,7 +266,7 @@ async fn reply(stream: &mut TcpStream, code: u16, body: &Value) -> std::io::Resu
             431 => "Request Header Fields Too Large",
             _ => "Internal Server Error",
         },
-        text.as_bytes().len()
+        text.len()
     );
     stream.write_all(head.as_bytes()).await?;
     stream.write_all(text.as_bytes()).await?;
@@ -305,12 +305,15 @@ fn decode(s: &str) -> String {
     let mut out = Vec::with_capacity(bytes.len());
     let mut i = 0;
     while i < bytes.len() {
-        if bytes[i] == b'%' && i + 2 < bytes.len() {
-            if let Ok(v) = u8::from_str_radix(&b[i + 1..i + 3], 16) {
-                out.push(v);
-                i += 3;
-                continue;
-            }
+        // `get` over a range, not a slice: it returns None instead of panicking when
+        // the two bytes after a `%` fall inside a multi-byte character.
+        if bytes[i] == b'%'
+            && let Some(hex) = b.get(i + 1..i + 3)
+            && let Ok(v) = u8::from_str_radix(hex, 16)
+        {
+            out.push(v);
+            i += 3;
+            continue;
         }
         out.push(bytes[i]);
         i += 1;
@@ -454,4 +457,34 @@ async fn events(db: &Db, q: &Query) -> Result<Value> {
             "attendees": e.attendees.len(),
         })).collect::<Vec<_>>()
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn decodes_percent_escapes_and_plus() {
+        assert_eq!(decode("GSTR-2B+mismatch"), "GSTR-2B mismatch");
+        assert_eq!(decode("notice%20u%2Fs%20143%281%29"), "notice u/s 143(1)");
+    }
+
+    #[test]
+    fn survives_a_percent_before_a_multi_byte_character() {
+        // The two bytes after `%` sit inside the euro sign; slicing there used to panic.
+        assert_eq!(decode("%€"), "%€");
+        assert_eq!(decode("fee%"), "fee%");
+        assert_eq!(decode("%zz"), "%zz");
+    }
+
+    #[test]
+    fn reads_a_query_string() {
+        let q = Query::parse("q=bank+statement&limit=25&empty=");
+        assert_eq!(q.get("q"), Some("bank statement"));
+        assert_eq!(q.get("empty"), Some(""));
+        assert_eq!(q.get("missing"), None);
+        assert_eq!(q.num("limit", 50, 200), 25);
+        assert_eq!(q.num("missing", 50, 200), 50);
+        assert_eq!(q.num("limit", 50, 10), 10); // clamped to the ceiling
+    }
 }
