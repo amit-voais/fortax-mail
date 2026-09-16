@@ -25,7 +25,11 @@ command -v jq >/dev/null 2>&1 || {
 slint-viewer --check "$ui"
 
 favicon_dir="$temporary_dir/favicons"
-mapfile -t sender_addresses < <(
+# Not mapfile: macOS still ships bash 3.2, and contributors build this on macOS.
+sender_addresses=()
+while IFS= read -r sender_address; do
+  sender_addresses+=("$sender_address")
+done < <(
   jq -r '[.selected_address, (.emails[].address), (.thread_messages[]? | select(.outgoing | not) | .address)] | unique[]' "$fixture"
 )
 cargo run --quiet --example generate-screenshot-favicons -- \

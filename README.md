@@ -13,6 +13,12 @@
   </p>
 </div>
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-light.png">
+  <img src="resources/screenshots/desktop-light.png" alt="Fortax Mail: unified inbox and message view">
+</picture>
+
 > **Derived from Flectar Mail.** Fortax Mail is a modified build of
 > [Flectar Mail](https://github.com/flectar/mail) by Flectar. It is **not produced, sponsored, endorsed or
 > supported by Flectar** — please do not take Flectar's issue tracker, security contacts or support channels
@@ -38,6 +44,19 @@ Fortax Mail closes that gap:
   the calendar. Writing is not one of its powers: a reply arrives as a draft for you to send.
 - **Native and light.** Rust, Slint and Blitz — no browser engine, no WebView for email HTML, remote images
   blocked until you allow them.
+
+### A look at it
+
+| Calendar | Contacts | Files (WebDAV/JMAP) |
+| --- | --- | --- |
+| ![Calendar](resources/screenshots/desktop-calendar-light.png) | ![Contacts](resources/screenshots/desktop-contacts-light.png) | ![Files](resources/screenshots/desktop-files-light.png) |
+
+| Minimal workspace | Conversation | On a phone |
+| --- | --- | --- |
+| ![Minimal workspace](resources/screenshots/desktop-minimal-dark.png) | ![Conversation thread](resources/screenshots/desktop-thread-light.png) | ![Compact layout](resources/screenshots/mobile-light.png) |
+
+Screenshots are rendered from a fixture (`scripts/generate-screenshots.sh`); the accounts and messages in them
+are invented.
 
 ## What it can do
 
