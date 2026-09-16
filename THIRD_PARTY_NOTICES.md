@@ -65,13 +65,6 @@ The Rust interface is [pdfium-render](https://github.com/ajrcarey/pdfium-render)
 [seccompiler](https://github.com/rust-vmm/seccompiler), under their Apache-2.0
 options. Rust package versions and source checksums are recorded in `Cargo.lock`.
 
-## Phosphor Icons
-
-The bundled SVG icons in `ui/icons/phosphor` are sourced from
-[Phosphor Icons](https://github.com/phosphor-icons/core) at revision
-`2b75f3ad12b420c9504ef05df8d2564a28f8500e` and are licensed under the MIT
-License. Copyright © 2023 Phosphor Icons.
-
 ## Lucide Icons
 
 The original SVG inputs in `ui/icons/lucide/sources` are sourced from
