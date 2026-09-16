@@ -194,7 +194,7 @@ export component OnboardingView inherits Rectangle {
                 oauth-settings := Button {
                     height: 40px;
                     text: @tr("Sign-in settings");
-                    icon: @image-url("../icons/solar-icons/settings-outline.svg");
+                    icon: @image-url("../icons/lucide/outline/gear.svg");
                     has-icon: true;
                     enabled: !root.account-setup-in-progress && !root.oauth-in-progress && !root.oauth-settings-saving;
                     clicked => { root.oauth-setup-open = true; }
