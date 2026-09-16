@@ -1,6 +1,6 @@
 use base64::Engine;
-use flectar_mail::flectar_mail_core::accounts::credentials::{CredentialStore, Slot};
-use flectar_mail::flectar_mail_core::error::{CoreError, Result};
+use fortax_mail::fortax_mail_core::accounts::credentials::{CredentialStore, Slot};
+use fortax_mail::fortax_mail_core::error::{CoreError, Result};
 use jni::{
     JNIEnv, JavaVM,
     objects::{JByteArray, JObject, JValue},
@@ -13,7 +13,7 @@ use std::{
     sync::Mutex,
 };
 
-const KEY_ALIAS: &str = "com.flectar.mail.credentials.v1";
+const KEY_ALIAS: &str = "in.fortax.mail.credentials.v1";
 const FORMAT_PREFIX: &str = "v1";
 const MAX_CREDENTIAL_FILE_BYTES: u64 = 1024 * 1024;
 

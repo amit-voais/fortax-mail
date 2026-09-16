@@ -8,21 +8,21 @@
 
 [Setup]
 AppId={{B3F4C53F-77C7-4639-9938-C01A21F4A0B9}
-AppName=Flectar Mail
+AppName=Fortax Mail
 AppVersion={#AppVersion}
 VersionInfoVersion={#NativeVersion}
-AppPublisher=Flectar
-AppPublisherURL=https://flectar.com
-DefaultDirName={localappdata}\Programs\Flectar Mail
+AppPublisher=Fortax
+AppPublisherURL=https://fortax.in
+DefaultDirName={localappdata}\Programs\Fortax Mail
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0
 DisableProgramGroupPage=yes
-UninstallDisplayIcon={app}\flectar-mail.exe
-SetupIconFile=..\..\resources\app-icon\flectar-mail.ico
+UninstallDisplayIcon={app}\fortax-mail.exe
+SetupIconFile=..\..\resources\app-icon\fortax-mail.ico
 OutputDir=..\..\target
-OutputBaseFilename=flectar-mail-windows-x64-setup
+OutputBaseFilename=fortax-mail-windows-x64-setup
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
@@ -32,7 +32,7 @@ CloseApplications=yes
 Source: "..\..\target\package\windows\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{userprograms}\Flectar Mail"; Filename: "{app}\flectar-mail.exe"
+Name: "{userprograms}\Fortax Mail"; Filename: "{app}\fortax-mail.exe"
 
 [Run]
-Filename: "{app}\flectar-mail.exe"; Description: "Open Flectar Mail"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\fortax-mail.exe"; Description: "Open Fortax Mail"; Flags: nowait postinstall skipifsilent

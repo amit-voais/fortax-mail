@@ -4,7 +4,7 @@ fn main() {
             .file("platform/ios/Documents.m")
             .file("platform/ios/PdfPreview.m")
             .flag("-fobjc-arc")
-            .compile("flectar_documents");
+            .compile("fortax_documents");
         println!("cargo:rustc-link-lib=framework=UIKit");
         println!("cargo:rustc-link-lib=framework=Foundation");
         println!("cargo:rerun-if-changed=platform/ios/Documents.m");
@@ -12,10 +12,10 @@ fn main() {
     }
     if std::env::var_os("CARGO_CFG_TARGET_OS").as_deref() == Some(std::ffi::OsStr::new("windows")) {
         winresource::WindowsResource::new()
-            .set_icon("resources/app-icon/flectar-mail.ico")
+            .set_icon("resources/app-icon/fortax-mail.ico")
             .compile()
             .expect("failed to embed the Windows application icon");
-        println!("cargo:rerun-if-changed=resources/app-icon/flectar-mail.ico");
+        println!("cargo:rerun-if-changed=resources/app-icon/fortax-mail.ico");
     }
 
     // Application controls are painted from primitives in app.slint. Fluent is

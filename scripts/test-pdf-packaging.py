@@ -90,8 +90,8 @@ class PackagingTests(unittest.TestCase):
         checksum = hashlib.sha256(data).hexdigest()
         with tempfile.TemporaryDirectory() as directory:
             root = pathlib.Path(directory)
-            frameworks = root / "Flectar Mail.app/Contents/Frameworks"
-            licenses = root / "Flectar Mail.app/Contents/Resources/Licenses/PDFium"
+            frameworks = root / "Fortax Mail.app/Contents/Frameworks"
+            licenses = root / "Fortax Mail.app/Contents/Resources/Licenses/PDFium"
             with patch.dict(
                 stage.ASSETS,
                 {"fixture": (checksum, "lib/libpdfium.dylib")},
@@ -121,11 +121,11 @@ class PackagingTests(unittest.TestCase):
                 shutil.copyfile(SCRIPTS.parent / name, output)
             shutil.copytree(SCRIPTS.parent / "LICENSES", root / "LICENSES")
             (root / "resources/app-icon").mkdir(parents=True)
-            (root / "resources/app-icon/flectar-mail-masked.png").write_bytes(b"png")
+            (root / "resources/app-icon/fortax-mail-masked.png").write_bytes(b"png")
             (root / "Cargo.toml").write_text('[package]\nversion = "0.1.0-alpha.5"\n')
             (root / "target/release").mkdir(parents=True)
-            shutil.copyfile("/bin/true", root / "target/release/flectar-mail")
-            (root / "target/release/flectar-mail").chmod(0o755)
+            shutil.copyfile("/bin/true", root / "target/release/fortax-mail")
+            (root / "target/release/fortax-mail").chmod(0o755)
 
             (root / "scripts/stage-pdfium.py").write_text(
                 "import os, pathlib, sys\n"
@@ -177,7 +177,7 @@ class PackagingTests(unittest.TestCase):
                         [
                             "bash",
                             str(root / "scripts/package-macos.sh"),
-                            str(root / "target/release/flectar-mail"),
+                            str(root / "target/release/fortax-mail"),
                             str(output_dir),
                             architecture,
                         ],
@@ -192,22 +192,22 @@ class PackagingTests(unittest.TestCase):
                         text=True,
                     )
                     self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-                    app = output_dir / "Flectar Mail.app/Contents"
+                    app = output_dir / "Fortax Mail.app/Contents"
                     self.assertTrue((app / "Frameworks/libpdfium.dylib").is_file())
                     self.assertTrue((app / "Resources/Licenses/PDFium/build.json").is_file())
                     self.assertFalse((app / "MacOS/libpdfium.dylib").exists())
-                    self.assertTrue((output_dir / f"flectar-mail-macos-{architecture}.zip").is_file())
-                    self.assertTrue((output_dir / f"flectar-mail-macos-{architecture}.dmg").is_file())
+                    self.assertTrue((output_dir / f"fortax-mail-macos-{architecture}.zip").is_file())
+                    self.assertTrue((output_dir / f"fortax-mail-macos-{architecture}.dmg").is_file())
                     signatures = codesign_log.read_text().splitlines()
                     self.assertIn("Contents/Frameworks/libpdfium.dylib", signatures[0])
-                    self.assertTrue(signatures[1].endswith("Flectar Mail.app"))
+                    self.assertTrue(signatures[1].endswith("Fortax Mail.app"))
                     self.assertIn("--verify --deep --strict", signatures[2])
 
     def test_apk_requires_pdfium_notices_and_aligned_native_libraries(self):
         with tempfile.TemporaryDirectory() as directory:
             apk = pathlib.Path(directory) / "fixture.apk"
             files = {
-                "lib/arm64-v8a/libflectar_mail_android.so": elf(),
+                "lib/arm64-v8a/libfortax_mail_android.so": elf(),
                 "lib/arm64-v8a/libpdfium.so": elf(),
                 "assets/licenses/PDFium/arm64-v8a/pdfium-licenses/build.json": b"{}",
                 "assets/licenses/PDFium/arm64-v8a/pdfium-licenses/LICENSE": b"license",

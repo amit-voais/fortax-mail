@@ -1,4 +1,4 @@
-use flectar_mail::favicon::{FaviconLoader, domain_from_address};
+use fortax_mail::favicon::{FaviconLoader, domain_from_address};
 use image::{ColorType, ImageFormat};
 use std::{env, fs, path::PathBuf};
 

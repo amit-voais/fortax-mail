@@ -582,7 +582,7 @@ mod interaction_tests {
                 let mut pixels =
                     vec![slint::Rgb8Pixel::default(); (size.width * size.height) as usize];
                 renderer.render(&mut pixels, size.width as usize);
-                if let Some(directory) = std::env::var_os("FLECTAR_SIDEBAR_TEST_SCREENSHOTS") {
+                if let Some(directory) = std::env::var_os("FORTAX_SIDEBAR_TEST_SCREENSHOTS") {
                     let directory = PathBuf::from(directory);
                     std::fs::create_dir_all(&directory).unwrap();
                     let bytes: Vec<u8> = pixels.iter().flat_map(|p| [p.r, p.g, p.b]).collect();

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Sample a launched Linux process without adding a sampler to Flectar's RAM."""
+"""Sample a launched Linux process without adding a sampler to Fortax's RAM."""
 import argparse
 import csv
 import os
@@ -34,11 +34,11 @@ def main():
     if not command or not sys.platform.startswith("linux") or not 0.05 <= args.interval <= 10:
         parser.error("Linux, a command after --, and an interval of 0.05–10 seconds are required")
     env = os.environ.copy()
-    env["FLECTAR_RENDERER"] = args.renderer
-    env["FLECTAR_RENDER_TIMINGS"] = "1"
-    env.pop("FLECTAR_GPU_FALLBACK", None)
+    env["FORTAX_RENDERER"] = args.renderer
+    env["FORTAX_RENDER_TIMINGS"] = "1"
+    env.pop("FORTAX_GPU_FALLBACK", None)
     if args.disable_sync:
-        env["FLECTAR_BENCHMARK_DISABLE_SYNC"] = "1"
+        env["FORTAX_BENCHMARK_DISABLE_SYNC"] = "1"
     args.output.parent.mkdir(parents=True, exist_ok=True)
     ticks_per_second = os.sysconf("SC_CLK_TCK")
     started = time.monotonic()
@@ -48,7 +48,7 @@ def main():
         writer = csv.writer(output)
         writer.writerow(["elapsed_seconds", "requested_renderer", "rss_kib", "process_peak_rss_kib", "cpu_percent"])
         process = subprocess.Popen(command, env=env)
-        print(f"Sampling PID {process.pid}; check FLECTAR_RENDERER logs for the actual active mode.", file=sys.stderr)
+        print(f"Sampling PID {process.pid}; check FORTAX_RENDERER logs for the actual active mode.", file=sys.stderr)
         try:
             while process.poll() is None:
                 now = time.monotonic()

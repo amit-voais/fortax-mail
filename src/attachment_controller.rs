@@ -37,7 +37,7 @@ pub(crate) fn project(app: &AppWindow, email: &MailMessage, same: bool) {
         .set_rows(ModelRc::new(VecModel::from(rows)));
 }
 fn attachment_rows(
-    attachments: &[flectar_mail_core::models::AttachmentMeta],
+    attachments: &[fortax_mail_core::models::AttachmentMeta],
 ) -> Vec<MailAttachment> {
     attachments
         .iter()
@@ -79,7 +79,7 @@ fn attachment_rows(
 struct Session {
     task: Option<tokio::task::AbortHandle>,
     document: Option<Arc<Vec<u8>>>,
-    selected: Option<flectar_mail_core::models::AttachmentMeta>,
+    selected: Option<fortax_mail_core::models::AttachmentMeta>,
 }
 impl Session {
     fn stop(&mut self) {
@@ -133,7 +133,7 @@ pub(crate) fn register(
     }
     // Profile IDs are not globally unique: compare Core identity as well as
     // message identity before allowing an old session to remain actionable.
-    let context = Rc::new(RefCell::new(None::<(Arc<flectar_mail_core::Core>, i32)>));
+    let context = Rc::new(RefCell::new(None::<(Arc<fortax_mail_core::Core>, i32)>));
     let timer = slint::Timer::default();
     let state = inbox.clone();
     let observed = context.clone();
@@ -166,7 +166,7 @@ pub(crate) fn register(
     let (sender, mut receiver) = tokio::sync::mpsc::channel::<(
         u64,
         i32,
-        Arc<flectar_mail_core::Core>,
+        Arc<fortax_mail_core::Core>,
         Result<Option<Preview>, String>,
     )>(2);
     let state = inbox.clone();
@@ -376,7 +376,7 @@ mod tests {
     use super::*;
     #[test]
     fn attachment_rows_preserve_large_ids_and_offer_safe_previews() {
-        use flectar_mail_core::models::AttachmentMeta;
+        use fortax_mail_core::models::AttachmentMeta;
         let files = vec![
             AttachmentMeta {
                 id: i64::MAX,

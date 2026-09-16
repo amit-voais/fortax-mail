@@ -2,11 +2,11 @@
 set -euo pipefail
 
 project_dir="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
-manifest="$project_dir/packaging/flatpak/com.flectar.mail.yml"
+manifest="$project_dir/packaging/flatpak/in.fortax.mail.yml"
 build_root="$project_dir/target/flatpak"
 build_dir="$build_root/build"
 repo_dir="$build_root/repo"
-output="$build_root/flectar-mail.flatpak"
+output="$build_root/fortax-mail.flatpak"
 
 for command in flatpak flatpak-builder; do
   command -v "$command" >/dev/null || {
@@ -31,6 +31,6 @@ fi
 flatpak-builder "${builder_args[@]}" "$build_dir" "$manifest"
 flatpak build-bundle \
   --runtime-repo=https://flathub.org/repo/flathub.flatpakrepo \
-  "$repo_dir" "$output" com.flectar.mail
+  "$repo_dir" "$output" in.fortax.mail
 test -s "$output"
 printf 'Built %s\n' "$output"

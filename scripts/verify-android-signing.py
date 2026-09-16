@@ -41,7 +41,7 @@ def verify(signing: str, mode: str, expected_sha256: str | None = None) -> None:
         # Subject formatting differs between SDK/JDK versions. Check the CN
         # without depending on ordering or spaces between the subject fields.
         subject = certificate_field(signing, "DN")
-        if re.search(r"(?:^|,)\s*CN\s*=\s*(?:Flectar Mail Test|Android Debug)\s*(?:,|$)", subject):
+        if re.search(r"(?:^|,)\s*CN\s*=\s*(?:Fortax Mail Test|Android Debug)\s*(?:,|$)", subject):
             raise ValueError("a test/debug signing identity was used for production")
     else:
         raise ValueError(f"unknown signing mode: {mode}")

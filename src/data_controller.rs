@@ -7,7 +7,7 @@
 
 use super::*;
 use chrono::Utc;
-use flectar_mail_core::models::{PortableAccountConfig, Settings};
+use fortax_mail_core::models::{PortableAccountConfig, Settings};
 
 const MAX_ACCOUNT_BACKUP_BYTES: u64 = 1024 * 1024;
 
@@ -30,7 +30,7 @@ fn pick_backup_export_path(title: String, filter: String) -> Option<PathBuf> {
     rfd::FileDialog::new()
         .set_title(title)
         .set_file_name(format!(
-            "flectar-mail-backup-{}.json",
+            "fortax-mail-backup-{}.json",
             Local::now().format("%Y-%m-%d")
         ))
         .add_filter(filter, &["json"])
@@ -62,7 +62,7 @@ fn pick_database_snapshot_path(title: String) -> Option<PathBuf> {
         .pick_folder()
         .map(|directory| {
             directory.join(format!(
-                "flectar-mail-snapshot-{}",
+                "fortax-mail-snapshot-{}",
                 Local::now().format("%Y-%m-%d-%H%M%S")
             ))
         })
@@ -105,10 +105,10 @@ pub(super) fn register_data_management_callbacks(
         let Some(path) = pick_backup_export_path(
             translated(
                 &app,
-                &UiMessage::plain("Export Flectar Mail account backup"),
+                &UiMessage::plain("Export Fortax Mail account backup"),
             )
             .to_string(),
-            translated(&app, &UiMessage::plain("Flectar Mail backup")).to_string(),
+            translated(&app, &UiMessage::plain("Fortax Mail backup")).to_string(),
         ) else {
             #[cfg(any(target_os = "android", target_os = "ios"))]
             app.set_sync_status(UiMessage::plain(
@@ -158,7 +158,7 @@ pub(super) fn register_data_management_callbacks(
             })
             .collect::<Vec<_>>();
         let backup = serde_json::json!({
-            "format": "flectar-mail-account-backup",
+            "format": "fortax-mail-account-backup",
             "version": 1,
             "createdAt": Utc::now().to_rfc3339(),
             "includesCredentials": false,
@@ -247,10 +247,10 @@ pub(super) fn register_data_management_callbacks(
         let Some(path) = pick_backup_import_path(
             translated(
                 &app,
-                &UiMessage::plain("Import Flectar Mail account backup"),
+                &UiMessage::plain("Import Fortax Mail account backup"),
             )
             .to_string(),
-            translated(&app, &UiMessage::plain("Flectar Mail backup")).to_string(),
+            translated(&app, &UiMessage::plain("Fortax Mail backup")).to_string(),
         ) else {
             #[cfg(any(target_os = "android", target_os = "ios"))]
             app.set_sync_status(UiMessage::plain(
@@ -264,9 +264,9 @@ pub(super) fn register_data_management_callbacks(
             let backup: serde_json::Value =
                 serde_json::from_slice(&bytes).map_err(|error| format!("invalid JSON: {error}"))?;
             if backup.get("format").and_then(|value| value.as_str())
-                != Some("flectar-mail-account-backup")
+                != Some("fortax-mail-account-backup")
             {
-                return Err("this is not a Flectar Mail account backup".into());
+                return Err("this is not a Fortax Mail account backup".into());
             }
             if backup.get("version").and_then(|value| value.as_u64()) != Some(1) {
                 return Err("this backup version is not supported".into());
@@ -517,7 +517,7 @@ pub(super) fn register_data_management_callbacks(
                     app.set_remote_images_enabled(false);
                     app.set_close_to_tray(false);
                     app.set_sync_status(UiMessage::plain(
-                        "All local Flectar Mail data was deleted.",
+                        "All local Fortax Mail data was deleted.",
                     ));
                 }
                 Err(error) => app.set_sync_status(UiMessage::detail(

@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "FlectarMailAndroid"
+rootProject.name = "FortaxMailAndroid"
 include(":app")

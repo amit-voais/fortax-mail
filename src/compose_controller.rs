@@ -109,14 +109,14 @@ pub(super) fn prepare_message_compose(
     })
 }
 
-pub(super) fn compose_addresses(addresses: &[flectar_mail_core::models::Address]) -> String {
+pub(super) fn compose_addresses(addresses: &[fortax_mail_core::models::Address]) -> String {
     join_addresses(addresses)
 }
 
 fn deduplicated_addresses(
-    addresses: impl IntoIterator<Item = flectar_mail_core::models::Address>,
+    addresses: impl IntoIterator<Item = fortax_mail_core::models::Address>,
     own_email: &str,
-) -> Vec<flectar_mail_core::models::Address> {
+) -> Vec<fortax_mail_core::models::Address> {
     let mut seen = HashSet::new();
     addresses
         .into_iter()
@@ -127,7 +127,7 @@ fn deduplicated_addresses(
         .collect()
 }
 
-fn join_addresses(addresses: &[flectar_mail_core::models::Address]) -> String {
+fn join_addresses(addresses: &[fortax_mail_core::models::Address]) -> String {
     addresses
         .iter()
         .map(format_address)
@@ -135,7 +135,7 @@ fn join_addresses(addresses: &[flectar_mail_core::models::Address]) -> String {
         .join(", ")
 }
 
-fn format_address(address: &flectar_mail_core::models::Address) -> String {
+fn format_address(address: &fortax_mail_core::models::Address) -> String {
     match address
         .name
         .as_deref()
@@ -346,7 +346,7 @@ pub(super) fn apply_rich_compose_state(
 
 pub(super) fn apply_compose_contacts(
     app: &AppWindow,
-    contacts: &[flectar_mail_core::models::Address],
+    contacts: &[fortax_mail_core::models::Address],
 ) {
     let rows = contacts
         .iter()
@@ -361,7 +361,7 @@ pub(super) fn apply_compose_contacts(
 
 pub(super) fn apply_email_templates(
     app: &AppWindow,
-    templates: &[flectar_mail_core::models::Snippet],
+    templates: &[fortax_mail_core::models::Snippet],
 ) {
     let rows = templates
         .iter()
@@ -378,7 +378,7 @@ pub(super) fn apply_email_templates(
     app.set_compose_templates(ModelRc::new(VecModel::from(rows)));
 }
 
-pub(super) fn contact_initials(contact: &flectar_mail_core::models::Address) -> String {
+pub(super) fn contact_initials(contact: &fortax_mail_core::models::Address) -> String {
     let source = contact
         .name
         .as_deref()
@@ -402,7 +402,7 @@ pub(super) fn compose_recipient_query(recipients: &str) -> String {
 
 pub(super) fn complete_compose_recipient(
     recipients: &str,
-    contact: &flectar_mail_core::models::Address,
+    contact: &fortax_mail_core::models::Address,
 ) -> String {
     if recipients
         .to_lowercase()
@@ -437,7 +437,7 @@ pub(super) fn clear_compose(
     files: &Rc<RefCell<Vec<ComposeFile>>>,
     document: &Rc<RefCell<RichComposeDocument>>,
     editor: &Rc<RefCell<CosmicComposeEditor>>,
-    contacts: &Rc<RefCell<Vec<flectar_mail_core::models::Address>>>,
+    contacts: &Rc<RefCell<Vec<fortax_mail_core::models::Address>>>,
 ) {
     files.borrow_mut().clear();
     app.global::<AccountMailPreferences>()
@@ -468,7 +468,7 @@ pub(super) fn clear_compose(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use flectar_mail_core::models::Address;
+    use fortax_mail_core::models::Address;
 
     fn address(name: &str, email: &str) -> Address {
         Address {

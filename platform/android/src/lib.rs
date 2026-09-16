@@ -46,7 +46,7 @@ mod observability {
     }
 
     fn write_log(priority: std::ffi::c_int, message: &str) {
-        static TAG: &[u8] = b"flectar-mail\0";
+        static TAG: &[u8] = b"fortax-mail\0";
         let Ok(message) = CString::new(message) else {
             return;
         };
@@ -98,7 +98,7 @@ fn android_main(app: slint::android::AndroidApp) {
     pdf::configure(&app).expect("failed to configure bundled PDF preview");
     let documents =
         documents::AndroidDocuments::new(&app).expect("failed to initialize document access");
-    let mut platform = flectar_mail::PlatformContext::app_private(
+    let mut platform = fortax_mail::PlatformContext::app_private(
         internal.clone(),
         internal,
         std::sync::Arc::new(credential_store),
@@ -106,7 +106,7 @@ fn android_main(app: slint::android::AndroidApp) {
     );
     platform.documents = documents;
     slint::android::init(app).expect("failed to initialize Slint's Android backend");
-    flectar_mail::run(platform).expect("Flectar Mail terminated with an error");
+    fortax_mail::run(platform).expect("Fortax Mail terminated with an error");
 }
 #[cfg(target_os = "android")]
 mod credentials;

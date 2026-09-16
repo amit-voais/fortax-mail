@@ -24,3 +24,6 @@
 # Temporary UI previews and local review captures
 /ui/.*.slint
 /settings-accounts-*.png
+
+# local build output
+/target

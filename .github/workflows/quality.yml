@@ -95,11 +95,11 @@ jobs:
       - name: Check every default target
         run: cargo check --workspace --all-targets --locked
       - name: Check the capability-minimal application
-        run: cargo check -p flectar-mail --no-default-features --locked
+        run: cargo check -p fortax-mail --no-default-features --locked
       - name: Check the Flatpak application profile
-        run: cargo check -p flectar-mail --no-default-features --features remote-content,gpu-renderer,flatpak --locked
+        run: cargo check -p fortax-mail --no-default-features --features remote-content,gpu-renderer,flatpak --locked
       - name: Check the CPU-only renderer build
-        run: cargo check -p flectar-mail --no-default-features --features remote-content --locked
+        run: cargo check -p fortax-mail --no-default-features --features remote-content --locked
       - name: Lint without warnings
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Validate the Spanish catalog
@@ -108,20 +108,20 @@ jobs:
           cargo install slint-tr-extractor --version 1.17.1 --locked
           bash scripts/check-translations.sh
           msgfmt --check --check-header --check-format \
-            -o /tmp/flectar-mail-es.mo \
-            lang/es/LC_MESSAGES/flectar-mail.po
-          test -z "$(msgattrib --untranslated --no-obsolete lang/es/LC_MESSAGES/flectar-mail.po)"
-          test -z "$(msgattrib --only-fuzzy --no-obsolete lang/es/LC_MESSAGES/flectar-mail.po)"
-          test -z "$(msgattrib --only-obsolete lang/es/LC_MESSAGES/flectar-mail.po)"
+            -o /tmp/fortax-mail-es.mo \
+            lang/es/LC_MESSAGES/fortax-mail.po
+          test -z "$(msgattrib --untranslated --no-obsolete lang/es/LC_MESSAGES/fortax-mail.po)"
+          test -z "$(msgattrib --only-fuzzy --no-obsolete lang/es/LC_MESSAGES/fortax-mail.po)"
+          test -z "$(msgattrib --only-obsolete lang/es/LC_MESSAGES/fortax-mail.po)"
       - name: Run the default test suite
         run: cargo test --workspace --all-targets --locked
       - name: Exercise the mobile PDF renderer with bundled PDFium on the host
         run: |
           python3 scripts/stage-pdfium.py linux-x64 target/pdfium-mobile-test
           python3 scripts/test-pdf-preview.py --fixture "$RUNNER_TEMP/mobile-preview.pdf"
-          FLECTAR_TEST_PDFIUM="$PWD/target/pdfium-mobile-test/libpdfium.so" \
-          FLECTAR_TEST_PDF="$RUNNER_TEMP/mobile-preview.pdf" \
-            cargo test -p flectar-mail --lib --locked mobile_native_pages_and_rejection -- --ignored
+          FORTAX_TEST_PDFIUM="$PWD/target/pdfium-mobile-test/libpdfium.so" \
+          FORTAX_TEST_PDF="$RUNNER_TEMP/mobile-preview.pdf" \
+            cargo test -p fortax-mail --lib --locked mobile_native_pages_and_rejection -- --ignored
 
   optional-embeddings:
     if: github.event_name != 'schedule'
@@ -141,9 +141,9 @@ jobs:
         with:
           key: quality-embeddings
       - name: Lint the opt-in model runtime
-        run: cargo clippy -p flectar-mail-core --all-targets --locked --features local-embeddings -- -D warnings
+        run: cargo clippy -p fortax-mail-core --all-targets --locked --features local-embeddings -- -D warnings
       - name: Test the opt-in model runtime
-        run: cargo test -p flectar-mail-core --lib --locked --features local-embeddings
+        run: cargo test -p fortax-mail-core --lib --locked --features local-embeddings
 
   rustsec:
     name: RustSec advisory scan

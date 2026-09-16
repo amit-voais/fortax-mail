@@ -6,7 +6,7 @@
 //! from accumulating one closure per setting.
 
 use super::*;
-use flectar_mail_core::models::CustomTheme;
+use fortax_mail_core::models::CustomTheme;
 
 pub(super) fn register_settings_preference_callbacks(
     app: &AppWindow,

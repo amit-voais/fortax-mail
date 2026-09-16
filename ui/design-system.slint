@@ -37,7 +37,7 @@ export global LayoutMetrics {
 export global AppTheme {
     // Color scheme and palette are separate preferences. This lets every
     // preset follow the OS while a custom palette keeps independent light and
-    // dark values. The default branch below is the original Flectar palette.
+    // dark values. The default branch below is the original Fortax palette.
     in-out property <string> preset: "default";
     in-out property <color> custom-light-primary: #0969da;
     in-out property <color> custom-light-page-bg: #f2f2f0;
@@ -89,7 +89,7 @@ export global AppTheme {
         : themed-surface.mix(themed-text, dark ? 0.90 : 0.94);
     out property <color> muted-control-bg: preset == "default" ? (dark ? #242526 : #e8e8e5)
         : themed-surface.mix(themed-text, dark ? 0.86 : 0.90);
-    // Product actions deliberately keep the established Flectar blue in both
+    // Product actions deliberately keep the established Fortax blue in both
     // themes. The lighter dark-theme accent remains available for selection,
     // focus, and small icons where extra contrast is useful.
     out property <color> primary: preset == "default" ? #0969da : themed-primary;

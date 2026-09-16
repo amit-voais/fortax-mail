@@ -1,11 +1,11 @@
-Package: flectar-mail
+Package: fortax-mail
 Version: @VERSION@
 Section: mail
 Priority: optional
 Architecture: amd64
-Maintainer: Flectar <flectar@users.noreply.github.com>
+Maintainer: Fortax <fortax@users.noreply.github.com>
 Depends: @DEPENDS@
 Recommends: xdg-desktop-portal, gnome-keyring, gnupg, pinentry-gnome3 | pinentry-qt
-Homepage: https://flectar.com
+Homepage: https://fortax.in
 Description: Native Slint mail client
- Flectar Mail is a native desktop mail client built with Rust and Slint.
+ Fortax Mail is a native desktop mail client built with Rust and Slint.

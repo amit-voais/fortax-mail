@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Exercise the packaged PDF worker without initializing UI or account databases.
 
-Usage: python3 scripts/test-pdf-preview.py target/debug/flectar-mail [output.png]
+Usage: python3 scripts/test-pdf-preview.py target/debug/fortax-mail [output.png]
 Creates an original two-page vector/text fixture and checks page selection,
 colors, dimensions, malformed inputs and protocol limits. Requires staged PDFium.
 """
@@ -14,7 +14,7 @@ import zlib
 
 
 def fixture():
-    streams = [b"0.1 0.4 0.8 rg 20 20 160 100 re f BT /F1 16 Tf 20 150 Td (Flectar PDF preview) Tj ET", b"0.8 0.2 0.1 rg 20 20 160 100 re f BT /F1 16 Tf 20 150 Td (Second page) Tj ET"]
+    streams = [b"0.1 0.4 0.8 rg 20 20 160 100 re f BT /F1 16 Tf 20 150 Td (Fortax PDF preview) Tj ET", b"0.8 0.2 0.1 rg 20 20 160 100 re f BT /F1 16 Tf 20 150 Td (Second page) Tj ET"]
     objects = [b"<< /Type /Catalog /Pages 2 0 R >>", b"<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>"]
     for content in (6, 7):
         objects.append(f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Resources << /Font << /F1 5 0 R >> >> /Contents {content} 0 R >>".encode())

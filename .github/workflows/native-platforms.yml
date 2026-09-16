@@ -137,40 +137,40 @@ jobs:
 
       - name: Validate desktop metadata
         run: |
-          desktop-file-validate resources/com.flectar.mail.desktop
+          desktop-file-validate resources/in.fortax.mail.desktop
           # Network checks make private pre-publication repositories look like
           # broken URLs. Flathub performs its own online validation on submit.
-          appstreamcli validate --no-net resources/com.flectar.mail.metainfo.xml
+          appstreamcli validate --no-net resources/in.fortax.mail.metainfo.xml
 
       - name: Build release executable
         env:
-          FLECTAR_GOOGLE_DESKTOP_CLIENT_ID: ${{ secrets.FLECTAR_GOOGLE_DESKTOP_CLIENT_ID }}
-          FLECTAR_GOOGLE_DESKTOP_CLIENT_SECRET: ${{ secrets.FLECTAR_GOOGLE_DESKTOP_CLIENT_SECRET }}
-          FLECTAR_MICROSOFT_DESKTOP_CLIENT_ID: ${{ secrets.FLECTAR_MICROSOFT_DESKTOP_CLIENT_ID }}
-        run: cargo build --locked --release --no-default-features --features remote-content,gpu-renderer --bin flectar-mail
+          FORTAX_GOOGLE_DESKTOP_CLIENT_ID: ${{ secrets.FORTAX_GOOGLE_DESKTOP_CLIENT_ID }}
+          FORTAX_GOOGLE_DESKTOP_CLIENT_SECRET: ${{ secrets.FORTAX_GOOGLE_DESKTOP_CLIENT_SECRET }}
+          FORTAX_MICROSOFT_DESKTOP_CLIENT_ID: ${{ secrets.FORTAX_MICROSOFT_DESKTOP_CLIENT_ID }}
+        run: cargo build --locked --release --no-default-features --features remote-content,gpu-renderer --bin fortax-mail
 
       - name: Build AppImage
         env:
           APPIMAGE_EXTRACT_AND_RUN: "1"
-          FLECTAR_SKIP_BUILD: "1"
+          FORTAX_SKIP_BUILD: "1"
         run: ./scripts/build-appimage.sh
 
       - name: Build Debian package
         env:
-          FLECTAR_SKIP_BUILD: "1"
+          FORTAX_SKIP_BUILD: "1"
         run: ./scripts/build-deb.sh
 
       - name: Benchmark startup and idle resources
         run: |
           xvfb-run -a ./scripts/benchmark-startup.py \
-            --binary target/release/flectar-mail \
+            --binary target/release/fortax-mail \
             --profile-cache-dir resources/benchmarks/warm-cache \
             --rounds 3 \
             --idle-seconds 3
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: flectar-mail-linux-x64
+          name: fortax-mail-linux-x64
           path: |
             target/appimage/*.AppImage
             target/deb/*.deb
@@ -220,26 +220,26 @@ jobs:
           key: native-fedora-rpm-x64
       - name: Build Fedora release executable
         env:
-          FLECTAR_GOOGLE_DESKTOP_CLIENT_ID: ${{ secrets.FLECTAR_GOOGLE_DESKTOP_CLIENT_ID }}
-          FLECTAR_GOOGLE_DESKTOP_CLIENT_SECRET: ${{ secrets.FLECTAR_GOOGLE_DESKTOP_CLIENT_SECRET }}
-          FLECTAR_MICROSOFT_DESKTOP_CLIENT_ID: ${{ secrets.FLECTAR_MICROSOFT_DESKTOP_CLIENT_ID }}
-        run: cargo build --locked --release --no-default-features --features remote-content,gpu-renderer --bin flectar-mail
+          FORTAX_GOOGLE_DESKTOP_CLIENT_ID: ${{ secrets.FORTAX_GOOGLE_DESKTOP_CLIENT_ID }}
+          FORTAX_GOOGLE_DESKTOP_CLIENT_SECRET: ${{ secrets.FORTAX_GOOGLE_DESKTOP_CLIENT_SECRET }}
+          FORTAX_MICROSOFT_DESKTOP_CLIENT_ID: ${{ secrets.FORTAX_MICROSOFT_DESKTOP_CLIENT_ID }}
+        run: cargo build --locked --release --no-default-features --features remote-content,gpu-renderer --bin fortax-mail
       - name: Build and inspect RPM
         env:
-          FLECTAR_SKIP_BUILD: "1"
+          FORTAX_SKIP_BUILD: "1"
         run: |
           ./scripts/build-rpm.sh
-          rpm -qip target/rpm/flectar-mail.rpm
-          rpm -qlp target/rpm/flectar-mail.rpm
+          rpm -qip target/rpm/fortax-mail.rpm
+          rpm -qlp target/rpm/fortax-mail.rpm
       - name: Test RPM installation and removal
         run: |
-          dnf install -y target/rpm/flectar-mail.rpm
-          test -x /usr/bin/flectar-mail
-          test -f "$(rpm --eval '%{_libdir}')/flectar-mail/libpdfium.so"
-          desktop-file-validate /usr/share/applications/com.flectar.mail.desktop
-          appstreamcli validate --no-net /usr/share/metainfo/com.flectar.mail.metainfo.xml
+          dnf install -y target/rpm/fortax-mail.rpm
+          test -x /usr/bin/fortax-mail
+          test -f "$(rpm --eval '%{_libdir}')/fortax-mail/libpdfium.so"
+          desktop-file-validate /usr/share/applications/in.fortax.mail.desktop
+          appstreamcli validate --no-net /usr/share/metainfo/in.fortax.mail.metainfo.xml
           set +e
-          timeout 15s dbus-run-session -- xvfb-run -a /usr/bin/flectar-mail \
+          timeout 15s dbus-run-session -- xvfb-run -a /usr/bin/fortax-mail \
             > target/rpm/launch.log 2>&1
           status=$?
           set -e
@@ -248,12 +248,12 @@ jobs:
             echo "Installed RPM launch smoke test exited unexpectedly with status $status" >&2
             exit 1
           fi
-          dnf remove -y flectar-mail
-          test ! -e /usr/bin/flectar-mail
+          dnf remove -y fortax-mail
+          test ! -e /usr/bin/fortax-mail
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: flectar-mail-rpm-x64
-          path: target/rpm/flectar-mail.rpm
+          name: fortax-mail-rpm-x64
+          path: target/rpm/fortax-mail.rpm
           if-no-files-found: error
 
   flatpak:
@@ -280,19 +280,19 @@ jobs:
         env:
           EXPECTED_VERSION: ${{ needs.metadata.outputs.version }}
         run: |
-          flatpak install --user --noninteractive -y target/flatpak/flectar-mail.flatpak
-          flatpak run --command=sh --env=EXPECTED_VERSION="$EXPECTED_VERSION" com.flectar.mail -c '
-            test -x /app/bin/flectar-mail
-            test -f /app/lib/flectar-mail/libpdfium.so
+          flatpak install --user --noninteractive -y target/flatpak/fortax-mail.flatpak
+          flatpak run --command=sh --env=EXPECTED_VERSION="$EXPECTED_VERSION" in.fortax.mail -c '
+            test -x /app/bin/fortax-mail
+            test -f /app/lib/fortax-mail/libpdfium.so
             test -x /usr/bin/gpg
-            test -f /app/share/applications/com.flectar.mail.desktop
-            test -f /app/share/metainfo/com.flectar.mail.metainfo.xml
-            ! grep -q X-AppImage /app/share/applications/com.flectar.mail.desktop
-            grep -q "version=\"$EXPECTED_VERSION\"" /app/share/metainfo/com.flectar.mail.metainfo.xml
+            test -f /app/share/applications/in.fortax.mail.desktop
+            test -f /app/share/metainfo/in.fortax.mail.metainfo.xml
+            ! grep -q X-AppImage /app/share/applications/in.fortax.mail.desktop
+            grep -q "version=\"$EXPECTED_VERSION\"" /app/share/metainfo/in.fortax.mail.metainfo.xml
           '
-          flatpak info --user --show-permissions com.flectar.mail
+          flatpak info --user --show-permissions in.fortax.mail
           set +e
-          timeout 15s dbus-run-session -- xvfb-run -a flatpak run com.flectar.mail \
+          timeout 15s dbus-run-session -- xvfb-run -a flatpak run in.fortax.mail \
             > target/flatpak/launch.log 2>&1
           status=$?
           set -e
@@ -301,11 +301,11 @@ jobs:
             echo "Flatpak launch smoke test exited unexpectedly with status $status" >&2
             exit 1
           fi
-          flatpak uninstall --user --noninteractive -y com.flectar.mail
+          flatpak uninstall --user --noninteractive -y in.fortax.mail
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: flectar-mail-flatpak-x64
-          path: target/flatpak/flectar-mail.flatpak
+          name: fortax-mail-flatpak-x64
+          path: target/flatpak/fortax-mail.flatpak
           if-no-files-found: error
 
   windows:
@@ -329,12 +329,12 @@ jobs:
           # Keep the portable build independent of an installed VC++ runtime.
           # RUSTFLAGS replaces .cargo/config.toml, so retain its stack setting.
           RUSTFLAGS: "-C target-feature=+crt-static -C link-arg=/STACK:8000000"
-          FLECTAR_GOOGLE_DESKTOP_CLIENT_ID: ${{ secrets.FLECTAR_GOOGLE_DESKTOP_CLIENT_ID }}
-          FLECTAR_GOOGLE_DESKTOP_CLIENT_SECRET: ${{ secrets.FLECTAR_GOOGLE_DESKTOP_CLIENT_SECRET }}
-          FLECTAR_MICROSOFT_DESKTOP_CLIENT_ID: ${{ secrets.FLECTAR_MICROSOFT_DESKTOP_CLIENT_ID }}
+          FORTAX_GOOGLE_DESKTOP_CLIENT_ID: ${{ secrets.FORTAX_GOOGLE_DESKTOP_CLIENT_ID }}
+          FORTAX_GOOGLE_DESKTOP_CLIENT_SECRET: ${{ secrets.FORTAX_GOOGLE_DESKTOP_CLIENT_SECRET }}
+          FORTAX_MICROSOFT_DESKTOP_CLIENT_ID: ${{ secrets.FORTAX_MICROSOFT_DESKTOP_CLIENT_ID }}
         run: |
           mkdir -p target
-          if cargo build --locked --release --no-default-features --features remote-content,gpu-renderer --bin flectar-mail 2>&1 | tee target/windows-build.log; then
+          if cargo build --locked --release --no-default-features --features remote-content,gpu-renderer --bin fortax-mail 2>&1 | tee target/windows-build.log; then
             exit 0
           fi
           # Keep the compiler's final diagnostics available in the check result,
@@ -355,7 +355,7 @@ jobs:
           New-Item -ItemType Directory -Force "target/package/windows/LICENSES/Noto Emoji" | Out-Null
           python scripts/stage-pdfium.py win-x64 target/package/windows
           if ($LASTEXITCODE -ne 0) { throw "PDFium staging failed" }
-          Copy-Item target/release/flectar-mail.exe target/package/windows/
+          Copy-Item target/release/fortax-mail.exe target/package/windows/
           Copy-Item README.md target/package/windows/
           Copy-Item LICENSE target/package/windows/
           Copy-Item LICENSES/* target/package/windows/LICENSES/ -Recurse -Force
@@ -364,9 +364,9 @@ jobs:
           Copy-Item resources/fonts/google-sans-flex/README.md "target/package/windows/LICENSES/Google Sans Flex/"
           Copy-Item resources/fonts/noto-emoji/OFL.txt "target/package/windows/LICENSES/Noto Emoji/"
           Copy-Item resources/fonts/noto-emoji/README.md "target/package/windows/LICENSES/Noto Emoji/"
-          python scripts/test-pdf-preview.py target/package/windows/flectar-mail.exe
+          python scripts/test-pdf-preview.py target/package/windows/fortax-mail.exe
           if ($LASTEXITCODE -ne 0) { throw "Packaged PDF preview test failed" }
-          Compress-Archive -Path target/package/windows/* -DestinationPath target/flectar-mail-windows-x64.zip -Force
+          Compress-Archive -Path target/package/windows/* -DestinationPath target/fortax-mail-windows-x64.zip -Force
 
       - name: Install pinned Inno Setup compiler
         shell: pwsh
@@ -392,22 +392,22 @@ jobs:
       - name: Verify unattended installation and uninstall
         shell: pwsh
         run: |
-          $destination = Join-Path $env:RUNNER_TEMP 'Flectar Mail install test'
-          $installer = (Resolve-Path target/flectar-mail-windows-x64-setup.exe).Path
+          $destination = Join-Path $env:RUNNER_TEMP 'Fortax Mail install test'
+          $installer = (Resolve-Path target/fortax-mail-windows-x64-setup.exe).Path
           $arguments = @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=`"$destination`"")
           $process = Start-Process $installer -ArgumentList $arguments -Wait -PassThru
           if ($process.ExitCode -ne 0) { throw "Installation failed: $($process.ExitCode)" }
-          if (-not (Test-Path "$destination/flectar-mail.exe")) { throw 'Installed executable is missing' }
+          if (-not (Test-Path "$destination/fortax-mail.exe")) { throw 'Installed executable is missing' }
           $process = Start-Process "$destination/unins000.exe" -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait -PassThru
           if ($process.ExitCode -ne 0) { throw "Uninstall failed: $($process.ExitCode)" }
-          if (Test-Path "$destination/flectar-mail.exe") { throw 'Uninstall left the executable behind' }
+          if (Test-Path "$destination/fortax-mail.exe") { throw 'Uninstall left the executable behind' }
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: flectar-mail-windows-x64
+          name: fortax-mail-windows-x64
           path: |
-            target/flectar-mail-windows-x64.zip
-            target/flectar-mail-windows-x64-setup.exe
+            target/fortax-mail-windows-x64.zip
+            target/fortax-mail-windows-x64-setup.exe
           if-no-files-found: error
 
   macos:
@@ -439,16 +439,16 @@ jobs:
 
       - name: Build release application
         env:
-          FLECTAR_GOOGLE_DESKTOP_CLIENT_ID: ${{ secrets.FLECTAR_GOOGLE_DESKTOP_CLIENT_ID }}
-          FLECTAR_GOOGLE_DESKTOP_CLIENT_SECRET: ${{ secrets.FLECTAR_GOOGLE_DESKTOP_CLIENT_SECRET }}
-          FLECTAR_MICROSOFT_DESKTOP_CLIENT_ID: ${{ secrets.FLECTAR_MICROSOFT_DESKTOP_CLIENT_ID }}
-        run: cargo build --locked --release --no-default-features --features remote-content,gpu-renderer --bin flectar-mail
+          FORTAX_GOOGLE_DESKTOP_CLIENT_ID: ${{ secrets.FORTAX_GOOGLE_DESKTOP_CLIENT_ID }}
+          FORTAX_GOOGLE_DESKTOP_CLIENT_SECRET: ${{ secrets.FORTAX_GOOGLE_DESKTOP_CLIENT_SECRET }}
+          FORTAX_MICROSOFT_DESKTOP_CLIENT_ID: ${{ secrets.FORTAX_MICROSOFT_DESKTOP_CLIENT_ID }}
+        run: cargo build --locked --release --no-default-features --features remote-content,gpu-renderer --bin fortax-mail
 
       - name: Create ad-hoc signed app bundle
         run: |
           mkdir -p target/macos
           if ./scripts/package-macos.sh \
-            target/release/flectar-mail target/macos \
+            target/release/fortax-mail target/macos \
             "${{ matrix.architecture }}" 2>&1 | tee target/macos/package.log; then
             exit 0
           fi
@@ -462,10 +462,10 @@ jobs:
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: flectar-mail-macos-${{ matrix.architecture }}
+          name: fortax-mail-macos-${{ matrix.architecture }}
           path: |
-            target/macos/flectar-mail-macos-${{ matrix.architecture }}.zip
-            target/macos/flectar-mail-macos-${{ matrix.architecture }}.dmg
+            target/macos/fortax-mail-macos-${{ matrix.architecture }}.zip
+            target/macos/fortax-mail-macos-${{ matrix.architecture }}.dmg
           if-no-files-found: error
 
   android:
@@ -506,44 +506,44 @@ jobs:
 
       - name: Restore persistent test signing key when configured
         env:
-          TEST_KEYSTORE_BASE64: ${{ secrets.FLECTAR_ANDROID_TEST_KEYSTORE_BASE64 }}
+          TEST_KEYSTORE_BASE64: ${{ secrets.FORTAX_ANDROID_TEST_KEYSTORE_BASE64 }}
         run: |
           if [[ -n "$TEST_KEYSTORE_BASE64" ]]; then
-            keystore="$RUNNER_TEMP/flectar-android-test.keystore"
+            keystore="$RUNNER_TEMP/fortax-android-test.keystore"
             umask 077
             printf '%s' "$TEST_KEYSTORE_BASE64" | base64 --decode > "$keystore"
-            echo "FLECTAR_ANDROID_TEST_KEYSTORE=$keystore" >> "$GITHUB_ENV"
+            echo "FORTAX_ANDROID_TEST_KEYSTORE=$keystore" >> "$GITHUB_ENV"
           else
             echo '::warning::No persistent Android test key configured. This APK will not update installations signed by a previous CI run.'
           fi
 
       - name: Build test-signed release APK
         env:
-          FLECTAR_ANDROID_VERSION_NAME: ${{ needs.metadata.outputs.version }}
-          FLECTAR_ANDROID_VERSION_CODE: ${{ github.run_number }}
-          FLECTAR_GOOGLE_ANDROID_CLIENT_ID: ${{ secrets.FLECTAR_GOOGLE_ANDROID_CLIENT_ID }}
-          FLECTAR_MICROSOFT_ANDROID_CLIENT_ID: ${{ secrets.FLECTAR_MICROSOFT_ANDROID_CLIENT_ID }}
-          FLECTAR_MICROSOFT_ANDROID_REDIRECT_URI: ${{ secrets.FLECTAR_MICROSOFT_ANDROID_REDIRECT_URI }}
+          FORTAX_ANDROID_VERSION_NAME: ${{ needs.metadata.outputs.version }}
+          FORTAX_ANDROID_VERSION_CODE: ${{ github.run_number }}
+          FORTAX_GOOGLE_ANDROID_CLIENT_ID: ${{ secrets.FORTAX_GOOGLE_ANDROID_CLIENT_ID }}
+          FORTAX_MICROSOFT_ANDROID_CLIENT_ID: ${{ secrets.FORTAX_MICROSOFT_ANDROID_CLIENT_ID }}
+          FORTAX_MICROSOFT_ANDROID_REDIRECT_URI: ${{ secrets.FORTAX_MICROSOFT_ANDROID_REDIRECT_URI }}
         run: ./scripts/build-android-test-apk.sh
 
       - name: Verify release APK manifest, ABI, and signature
         env:
-          FLECTAR_ANDROID_VERSION_NAME: ${{ needs.metadata.outputs.version }}
-          FLECTAR_ANDROID_VERSION_CODE: ${{ github.run_number }}
+          FORTAX_ANDROID_VERSION_NAME: ${{ needs.metadata.outputs.version }}
+          FORTAX_ANDROID_VERSION_CODE: ${{ github.run_number }}
         run: ./scripts/verify-android-apk.sh
 
       - name: Record public test signing identity
-        run: ./scripts/android-signing-identities.sh target/android/release/apk/flectar-mail.apk > target/android/release/apk/signing-identities.txt
+        run: ./scripts/android-signing-identities.sh target/android/release/apk/fortax-mail.apk > target/android/release/apk/signing-identities.txt
 
       - name: Remove restored signing key
         if: always()
-        run: rm -f "$RUNNER_TEMP/flectar-android-test.keystore"
+        run: rm -f "$RUNNER_TEMP/fortax-android-test.keystore"
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: flectar-mail-android-test-signed-arm64
+          name: fortax-mail-android-test-signed-arm64
           path: |
-            target/android/release/apk/flectar-mail.apk
+            target/android/release/apk/fortax-mail.apk
             target/android/release/apk/signing-identities.txt
           if-no-files-found: error
 
@@ -572,28 +572,28 @@ jobs:
 
       - name: Build unsigned device archive
         env:
-          FLECTAR_GOOGLE_DESKTOP_CLIENT_ID: ${{ secrets.FLECTAR_GOOGLE_DESKTOP_CLIENT_ID }}
-          FLECTAR_GOOGLE_DESKTOP_CLIENT_SECRET: ${{ secrets.FLECTAR_GOOGLE_DESKTOP_CLIENT_SECRET }}
-          FLECTAR_MICROSOFT_DESKTOP_CLIENT_ID: ${{ secrets.FLECTAR_MICROSOFT_DESKTOP_CLIENT_ID }}
+          FORTAX_GOOGLE_DESKTOP_CLIENT_ID: ${{ secrets.FORTAX_GOOGLE_DESKTOP_CLIENT_ID }}
+          FORTAX_GOOGLE_DESKTOP_CLIENT_SECRET: ${{ secrets.FORTAX_GOOGLE_DESKTOP_CLIENT_SECRET }}
+          FORTAX_MICROSOFT_DESKTOP_CLIENT_ID: ${{ secrets.FORTAX_MICROSOFT_DESKTOP_CLIENT_ID }}
         run: |
           mkdir -p target/ios
           xcodebuild \
-            -project platform/ios/FlectarMail.xcodeproj \
-            -scheme FlectarMail \
+            -project platform/ios/FortaxMail.xcodeproj \
+            -scheme FortaxMail \
             -configuration Release \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
-            -archivePath "$PWD/target/ios/FlectarMail.xcarchive" \
+            -archivePath "$PWD/target/ios/FortaxMail.xcarchive" \
             CODE_SIGNING_ALLOWED=NO \
             archive
           ditto -c -k --sequesterRsrc --keepParent \
-            target/ios/FlectarMail.xcarchive \
-            target/ios/flectar-mail-ios-unsigned-xcarchive.zip
+            target/ios/FortaxMail.xcarchive \
+            target/ios/fortax-mail-ios-unsigned-xcarchive.zip
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: flectar-mail-ios-arm64-unsigned
-          path: target/ios/flectar-mail-ios-unsigned-xcarchive.zip
+          name: fortax-mail-ios-arm64-unsigned
+          path: target/ios/fortax-mail-ios-unsigned-xcarchive.zip
           if-no-files-found: error
 
   release:
@@ -622,44 +622,44 @@ jobs:
       - name: Download Linux packages
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: flectar-mail-linux-x64
+          name: fortax-mail-linux-x64
           path: release-assets/linux
 
       - name: Download Windows package
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: flectar-mail-windows-x64
+          name: fortax-mail-windows-x64
           path: release-assets/windows
 
       - name: Download RPM package
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: flectar-mail-rpm-x64
+          name: fortax-mail-rpm-x64
           path: release-assets/rpm
 
       - name: Download Flatpak bundle
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: flectar-mail-flatpak-x64
+          name: fortax-mail-flatpak-x64
           path: release-assets/flatpak
 
       - name: Download macOS Apple silicon package
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: flectar-mail-macos-arm64
+          name: fortax-mail-macos-arm64
           path: release-assets/macos/arm64
 
       - name: Download macOS Intel package
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: flectar-mail-macos-x64
+          name: fortax-mail-macos-x64
           path: release-assets/macos/x64
 
       - name: Download Android test APK
         if: needs.metadata.outputs.prerelease == 'true'
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: flectar-mail-android-test-signed-arm64
+          name: fortax-mail-android-test-signed-arm64
           path: release-assets/android
 
       - name: Prepare release downloads

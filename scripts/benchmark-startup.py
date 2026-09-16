@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Measure Flectar Mail startup milestones and idle Linux process resources.
+"""Measure Fortax Mail startup milestones and idle Linux process resources.
 
 The application emits structured startup events only while this harness sets
-FLECTAR_STARTUP_METRICS. Each run uses an isolated copy of the supplied local
+FORTAX_STARTUP_METRICS. Each run uses an isolated copy of the supplied local
 profile, disables provider sync, waits for a real rendered core-ready frame,
 then samples /proc after a configurable idle interval.
 """
@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Any
 
 
-METRIC_PREFIX = "FLECTAR_STARTUP_METRIC "
+METRIC_PREFIX = "FORTAX_STARTUP_METRIC "
 RESOURCE_KEYS = ("Pss", "Pss_Anon", "Private_Dirty")
 
 
@@ -144,21 +144,21 @@ def run_once(
     timeout_seconds: float,
     round_number: int,
 ) -> dict[str, Any]:
-    with tempfile.TemporaryDirectory(prefix="flectar-startup-benchmark-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="fortax-startup-benchmark-") as temporary:
         root = Path(temporary)
         data_home = root / "data-home"
         cache_home = root / "cache-home"
-        copy_profile(profile_data, data_home / "flectar-mail")
-        copy_profile(profile_cache, cache_home / "flectar-mail")
+        copy_profile(profile_data, data_home / "fortax-mail")
+        copy_profile(profile_cache, cache_home / "fortax-mail")
 
         environment = os.environ.copy()
         environment.update(
             {
                 "XDG_DATA_HOME": str(data_home),
                 "XDG_CACHE_HOME": str(cache_home),
-                "FLECTAR_STARTUP_METRICS": "1",
-                "FLECTAR_BENCHMARK_DISABLE_SYNC": "1",
-                "FLECTAR_BENCHMARK_EXIT_AFTER_MS": str(
+                "FORTAX_STARTUP_METRICS": "1",
+                "FORTAX_BENCHMARK_DISABLE_SYNC": "1",
+                "FORTAX_BENCHMARK_EXIT_AFTER_MS": str(
                     int((settle_seconds + idle_seconds) * 1000) + 1500
                 ),
             }
@@ -275,12 +275,12 @@ def main() -> None:
     parser.add_argument(
         "--profile-data-dir",
         type=Path,
-        help="Optional flectar-mail data directory copied into every isolated run.",
+        help="Optional fortax-mail data directory copied into every isolated run.",
     )
     parser.add_argument(
         "--profile-cache-dir",
         type=Path,
-        help="Optional flectar-mail cache directory containing the warm projection.",
+        help="Optional fortax-mail cache directory containing the warm projection.",
     )
     parser.add_argument("--rounds", type=int, default=5)
     parser.add_argument(

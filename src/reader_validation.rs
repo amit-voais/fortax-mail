@@ -297,7 +297,7 @@ fn automatic_selection_hydrates_and_reader_controls_are_responsive_and_keyboard_
     assert!(app.get_has_selection());
     // Hydrated attachments must survive a body-rendering failure and remain
     // projected independently of the HTML/plain-text reader.
-    state.borrow_mut().messages[0].attachments = vec![flectar_mail_core::models::AttachmentMeta {
+    state.borrow_mut().messages[0].attachments = vec![fortax_mail_core::models::AttachmentMeta {
         id: 42,
         filename: Some("Project overview.pdf".into()),
         mime_type: Some("application/pdf".into()),

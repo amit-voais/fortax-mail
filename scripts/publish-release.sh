@@ -15,7 +15,7 @@ if existing_draft="$(gh release view "$GITHUB_REF_NAME" --json isDraft --jq .isD
 else
   gh release create "$GITHUB_REF_NAME" \
     --verify-tag --draft --prerelease="$RELEASE_PRERELEASE" \
-    --title "Flectar Mail ${GITHUB_REF_NAME#v}" \
+    --title "Fortax Mail ${GITHUB_REF_NAME#v}" \
     --notes-file release-notes.md --generate-notes
 fi
 

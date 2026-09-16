@@ -1,0 +1,88 @@
+[package]
+name = "fortax-mail-core"
+version = "0.2.29"
+edition = "2024"
+license = "AGPL-3.0-only"
+repository = "https://github.com/amit-voais/fortax-mail"
+homepage = "https://fortax.in"
+publish = false
+
+[features]
+# Keep the protocol/database core lean by default. Hosts that expose semantic
+# search opt in explicitly; mail-only applications should never compile or
+# link an unused model runtime.
+default = []
+local-embeddings = [
+    "dep:candle-core",
+    "dep:candle-nn",
+    "dep:candle-transformers",
+    "dep:tokenizers",
+    "dep:hf-hub",
+]
+
+[dependencies]
+tokio = { workspace = true, features = ["process"] }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+chrono.workspace = true
+
+# email protocols
+async-imap = { version = "0.11", default-features = false, features = ["runtime-tokio"] }
+jmap-client = { version = "0.4.2", default-features = false, features = ["async", "ring"] }
+lettre = { version = "0.11", default-features = false, features = ["smtp-transport", "tokio1", "tokio1-rustls-tls", "builder", "pool", "hostname"] }
+# full_encoding pulls in encoding_rs so non-UTF-8 header/body charsets
+# (GB2312/GBK/Big5, Shift-JIS, EUC-KR, ...) decode correctly instead of
+# turning into U+FFFD replacement chars. Default features are empty in 0.11.
+mail-parser = { version = "0.11", features = ["full_encoding"] }
+mail-builder = "0.4"
+
+# TLS
+tokio-rustls = "0.26"
+rustls = "0.23"
+webpki = { package = "rustls-webpki", version = "0.103" }
+webpki-roots = "1"
+futures = "0.3"
+
+# storage
+rusqlite = { version = "0.40", features = ["backup", "bundled", "functions"] }
+dirs = "6"
+
+# Local embeddings use Candle's CPU backend only: no MKL, CUDA, Metal, or
+# Accelerate runtime. Match Candle's tokenizer version so the opt-in feature
+# links one tokenizer implementation instead of two.
+candle-core = { version = "0.11", optional = true }
+candle-nn = { version = "0.11", optional = true }
+candle-transformers = { version = "0.11", optional = true }
+tokenizers = { version = "0.22", default-features = false, features = ["fancy-regex"], optional = true }
+hf-hub = { version = "1", default-features = false, features = ["rustls-tls"], optional = true }
+
+# auth
+keyring = { version = "3", features = ["sync-secret-service", "apple-native", "windows-native"] }
+base64 = "0.23"
+sha2 = "0.10"
+url = "2"
+percent-encoding = "2"
+
+# CalDAV (HTTP + multistatus XML); rustls keeps the no-native-TLS property
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "http2", "form", "json", "stream"] }
+quick-xml = { version = "0.42", features = ["encoding"] }
+async-trait = "0.1"
+
+# misc
+ammonia = "4"
+deunicode = "1"
+rand = "0.9"
+regex = "1"
+once_cell = "1"
+encoding_rs = "0.8"
+tempfile = "3"
+ring = "0.17"
+
+[dev-dependencies]
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[target.'cfg(any(target_os = "linux", target_os = "android", target_os = "macos", target_os = "ios"))'.dependencies]
+rustix = { version = "1", features = ["fs"] }

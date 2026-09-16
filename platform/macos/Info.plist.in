@@ -5,17 +5,17 @@
   <key>CFBundleDevelopmentRegion</key>
   <string>en</string>
   <key>CFBundleDisplayName</key>
-  <string>Flectar Mail</string>
+  <string>Fortax Mail</string>
   <key>CFBundleExecutable</key>
-  <string>flectar-mail</string>
+  <string>fortax-mail</string>
   <key>CFBundleIdentifier</key>
-  <string>com.flectar.mail</string>
+  <string>in.fortax.mail</string>
   <key>CFBundleIconFile</key>
-  <string>FlectarMail</string>
+  <string>FortaxMail</string>
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>
-  <string>Flectar Mail</string>
+  <string>Fortax Mail</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>

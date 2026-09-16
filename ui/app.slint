@@ -185,8 +185,8 @@ export global I18n {
         if (key == "System tray behavior is unavailable in this package.") { return @tr("System tray behavior is unavailable in this package."); }
         if (key == "Close-to-tray is active for this session.") { return @tr("Close-to-tray is active for this session."); }
         if (key == "Saving close behavior…") { return @tr("Saving close behavior…"); }
-        if (key == "Closing the window will now keep Flectar Mail in the tray.") { return @tr("Closing the window will now keep Flectar Mail in the tray."); }
-        if (key == "Closing the window will now quit Flectar Mail.") { return @tr("Closing the window will now quit Flectar Mail."); }
+        if (key == "Closing the window will now keep Fortax Mail in the tray.") { return @tr("Closing the window will now keep Fortax Mail in the tray."); }
+        if (key == "Closing the window will now quit Fortax Mail.") { return @tr("Closing the window will now quit Fortax Mail."); }
         if (key == "Could not save close behavior: {}") { return @tr("Could not save close behavior: {}", argument); }
         return "";
     }
@@ -228,9 +228,9 @@ export global I18n {
 
     ui-message-data(key, argument, second-argument, third-argument) => {
         if (key == "Connect an account before creating a backup.") { return @tr("Connect an account before creating a backup."); }
-        if (key == "Export Flectar Mail account backup") { return @tr("Export Flectar Mail account backup"); }
-        if (key == "Import Flectar Mail account backup") { return @tr("Import Flectar Mail account backup"); }
-        if (key == "Flectar Mail backup") { return @tr("Flectar Mail backup"); }
+        if (key == "Export Fortax Mail account backup") { return @tr("Export Fortax Mail account backup"); }
+        if (key == "Import Fortax Mail account backup") { return @tr("Import Fortax Mail account backup"); }
+        if (key == "Fortax Mail backup") { return @tr("Fortax Mail backup"); }
         if (key == "Choose where to export the database snapshot") { return @tr("Choose where to export the database snapshot"); }
         if (key == "The platform host does not provide document export.") { return @tr("The platform host does not provide document export."); }
         if (key == "The platform host does not provide document import.") { return @tr("The platform host does not provide document import."); }
@@ -241,7 +241,7 @@ export global I18n {
         if (key == "Backup imported. All {} account configurations already existed.") { return @tr("Backup imported. All {} account configurations already existed.", argument); }
         if (key == "Imported {} account configurations. Open Accounts and sign in to each one.") { return @tr("Imported {} account configurations. Open Accounts and sign in to each one.", argument); }
         if (key == "Could not import backup: {}") { return @tr("Could not import backup: {}", argument); }
-        if (key == "All local Flectar Mail data was deleted.") { return @tr("All local Flectar Mail data was deleted."); }
+        if (key == "All local Fortax Mail data was deleted.") { return @tr("All local Fortax Mail data was deleted."); }
         if (key == "Could not delete all local data: {}") { return @tr("Could not delete all local data: {}", argument); }
         if (key == "Deleting local accounts and cached data…") { return @tr("Deleting local accounts and cached data…"); }
         return "";
@@ -277,8 +277,8 @@ export global I18n {
         if (key == "Calendar shown and syncing.") { return @tr("Calendar shown and syncing."); }
         if (key == "Calendar hidden and sync paused.") { return @tr("Calendar hidden and sync paused."); }
         if (key == "Calendar update failed: {}") { return @tr("Calendar update failed: {}", argument); }
-        if (key == "Only events created in Flectar Mail can be edited.") { return @tr("Only events created in Flectar Mail can be edited."); }
-        if (key == "Only events created in Flectar Mail can be deleted.") { return @tr("Only events created in Flectar Mail can be deleted."); }
+        if (key == "Only events created in Fortax Mail can be edited.") { return @tr("Only events created in Fortax Mail can be edited."); }
+        if (key == "Only events created in Fortax Mail can be deleted.") { return @tr("Only events created in Fortax Mail can be deleted."); }
         if (key == "Calendar storage is unavailable.") { return @tr("Calendar storage is unavailable."); }
         if (key == "Could not delete event: {}") { return @tr("Could not delete event: {}", argument); }
         if (key == "Event deleted, but refresh failed: {}") { return @tr("Event deleted, but refresh failed: {}", argument); }
@@ -425,8 +425,8 @@ export global I18n {
 }
 
 export component AppWindow inherits Window {
-    title: @tr("Flectar Mail");
-    icon: @image-url("../resources/app-icon/flectar-mail-masked.png");
+    title: @tr("Fortax Mail");
+    icon: @image-url("../resources/app-icon/fortax-mail-masked.png");
     default-font-family: "Google Sans Flex";
     preferred-width: 1320px;
     preferred-height: 800px;
@@ -1693,7 +1693,7 @@ export component AppWindow inherits Window {
                 padding: parent.cramped ? 12px : 24px;
                 spacing: parent.cramped ? 8px : 12px;
                 Text {
-                    text: @tr("Flectar Mail could not open local storage");
+                    text: @tr("Fortax Mail could not open local storage");
                     color: root.title-color;
                     font-size: TypeScale.heading;
                     font-weight: 700;

@@ -43,11 +43,11 @@ export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$toolchain/aarch64-linux-andro
 # Gradle signs the final package with this app-specific test key, keeping
 # production signing credentials out of the test build.
 data_home="${XDG_DATA_HOME:-$HOME/.local/share}"
-keystore_dir="$data_home/flectar-mail/android"
-keystore="${FLECTAR_ANDROID_TEST_KEYSTORE:-$keystore_dir/test-signing.keystore}"
+keystore_dir="$data_home/fortax-mail/android"
+keystore="${FORTAX_ANDROID_TEST_KEYSTORE:-$keystore_dir/test-signing.keystore}"
 mkdir -p "$keystore_dir"
 
-if [[ -n "${FLECTAR_ANDROID_TEST_KEYSTORE:-}" && ! -f "$keystore" ]]; then
+if [[ -n "${FORTAX_ANDROID_TEST_KEYSTORE:-}" && ! -f "$keystore" ]]; then
   printf 'Configured Android test keystore does not exist: %s\n' "$keystore" >&2
   exit 1
 fi
@@ -59,7 +59,7 @@ if [[ ! -f "$keystore" ]]; then
     -storepass android \
     -alias androiddebugkey \
     -keypass android \
-    -dname 'CN=Flectar Mail Test,O=Android,C=US' \
+    -dname 'CN=Fortax Mail Test,O=Android,C=US' \
     -keyalg RSA \
     -keysize 2048 \
     -validity 10000
@@ -72,9 +72,9 @@ export CARGO_TARGET_DIR="$target_dir"
 # device startup can be exercised without borrowing production registrations.
 # Provider sign-in intentionally remains unavailable until the release-owner
 # values documented in ANDROID_FUNCTIONAL_APP_TODO.md are supplied.
-export FLECTAR_GOOGLE_ANDROID_CLIENT_ID="${FLECTAR_GOOGLE_ANDROID_CLIENT_ID:-test.apps.googleusercontent.com}"
-export FLECTAR_MICROSOFT_ANDROID_CLIENT_ID="${FLECTAR_MICROSOFT_ANDROID_CLIENT_ID:-00000000-0000-0000-0000-000000000000}"
-export FLECTAR_MICROSOFT_ANDROID_REDIRECT_URI="${FLECTAR_MICROSOFT_ANDROID_REDIRECT_URI:-msauth://com.flectar.mail/test-signature-hash}"
+export FORTAX_GOOGLE_ANDROID_CLIENT_ID="${FORTAX_GOOGLE_ANDROID_CLIENT_ID:-test.apps.googleusercontent.com}"
+export FORTAX_MICROSOFT_ANDROID_CLIENT_ID="${FORTAX_MICROSOFT_ANDROID_CLIENT_ID:-00000000-0000-0000-0000-000000000000}"
+export FORTAX_MICROSOFT_ANDROID_REDIRECT_URI="${FORTAX_MICROSOFT_ANDROID_REDIRECT_URI:-msauth://in.fortax.mail/test-signature-hash}"
 
 cargo build \
   --locked \
@@ -83,17 +83,17 @@ cargo build \
   --release \
   --lib
 
-native_lib="$target_dir/aarch64-linux-android/release/libflectar_mail_android.so"
+native_lib="$target_dir/aarch64-linux-android/release/libfortax_mail_android.so"
 jni_dir="$target_dir/android/gradle-jni/arm64-v8a"
 mkdir -p "$jni_dir"
-cp "$native_lib" "$jni_dir/libflectar_mail_android.so"
+cp "$native_lib" "$jni_dir/libfortax_mail_android.so"
 python3 "$project_dir/scripts/stage-pdfium.py" android-arm64 "$jni_dir" \
   --cache "$target_dir/pdfium-downloads"
 
-export FLECTAR_ANDROID_KEYSTORE="$keystore"
-export FLECTAR_ANDROID_KEYSTORE_PASSWORD=android
-export FLECTAR_ANDROID_KEY_ALIAS=androiddebugkey
-export FLECTAR_ANDROID_KEY_PASSWORD=android
+export FORTAX_ANDROID_KEYSTORE="$keystore"
+export FORTAX_ANDROID_KEYSTORE_PASSWORD=android
+export FORTAX_ANDROID_KEY_ALIAS=androiddebugkey
+export FORTAX_ANDROID_KEY_PASSWORD=android
 "$gradle_command" \
   --no-daemon \
   --project-cache-dir "$target_dir/android/gradle-cache" \
@@ -103,5 +103,5 @@ export FLECTAR_ANDROID_KEY_PASSWORD=android
 gradle_apk="$target_dir/android/gradle/app/outputs/apk/release/app-release.apk"
 artifact_dir="$target_dir/android/release/apk"
 mkdir -p "$artifact_dir"
-cp "$gradle_apk" "$artifact_dir/flectar-mail.apk"
-printf 'Built Google-AuthorizationClient Android package %s\n' "$artifact_dir/flectar-mail.apk"
+cp "$gradle_apk" "$artifact_dir/fortax-mail.apk"
+printf 'Built Google-AuthorizationClient Android package %s\n' "$artifact_dir/fortax-mail.apk"

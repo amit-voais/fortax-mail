@@ -18,20 +18,20 @@ cd "$repo_root"
 find ui -type f -name '*.slint' -print0 \
   | sort -z \
   | xargs -0 slint-tr-extractor --no-default-translation-context \
-      --package-name flectar-mail --package-version 0.1.0 \
-      -o "$work_dir/flectar-mail.pot"
+      --package-name fortax-mail --package-version 0.1.0 \
+      -o "$work_dir/fortax-mail.pot"
 
 # Extraction timestamps are intentionally volatile; compare every semantic
 # catalog line while ignoring only that generated header field.
 diff -u \
-  <(sed '/^"POT-Creation-Date:/d' lang/flectar-mail.pot) \
-  <(sed '/^"POT-Creation-Date:/d' "$work_dir/flectar-mail.pot")
+  <(sed '/^"POT-Creation-Date:/d' lang/fortax-mail.pot) \
+  <(sed '/^"POT-Creation-Date:/d' "$work_dir/fortax-mail.pot")
 
 msgmerge --quiet --no-fuzzy-matching \
-  --output-file "$work_dir/flectar-mail-es.po" \
-  lang/es/LC_MESSAGES/flectar-mail.po "$work_dir/flectar-mail.pot"
+  --output-file "$work_dir/fortax-mail-es.po" \
+  lang/es/LC_MESSAGES/fortax-mail.po "$work_dir/fortax-mail.pot"
 diff -u \
-  <(sed '/^"POT-Creation-Date:/d' lang/es/LC_MESSAGES/flectar-mail.po) \
-  <(sed '/^"POT-Creation-Date:/d' "$work_dir/flectar-mail-es.po")
+  <(sed '/^"POT-Creation-Date:/d' lang/es/LC_MESSAGES/fortax-mail.po) \
+  <(sed '/^"POT-Creation-Date:/d' "$work_dir/fortax-mail-es.po")
 
 bash scripts/check-ui-message-catalog.sh

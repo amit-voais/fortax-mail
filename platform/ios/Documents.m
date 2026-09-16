@@ -1,26 +1,26 @@
 #import <UIKit/UIKit.h>
 #import <Foundation/Foundation.h>
 
-typedef void (*FlectarDocumentCallback)(long long, const char *, const char *);
+typedef void (*FortaxDocumentCallback)(long long, const char *, const char *);
 // Accessed only on the main queue. The delegate survives picker dismissal
 // while a coordinated background import is still running.
 static NSMutableDictionary<NSNumber *, id> *requests;
 
 static NSError *documentError(NSString *message) {
-    return [NSError errorWithDomain:@"FlectarDocuments" code:1
+    return [NSError errorWithDomain:@"FortaxDocuments" code:1
                           userInfo:@{NSLocalizedDescriptionKey: message}];
 }
 
-@interface FlectarDocumentDelegate : NSObject <UIDocumentPickerDelegate, UIAdaptivePresentationControllerDelegate>
+@interface FortaxDocumentDelegate : NSObject <UIDocumentPickerDelegate, UIAdaptivePresentationControllerDelegate>
 @property(nonatomic) long long requestId;
-@property(nonatomic) FlectarDocumentCallback callback;
+@property(nonatomic) FortaxDocumentCallback callback;
 @property(nonatomic) BOOL exporting;
 @property(nonatomic) BOOL finished;
 @property(atomic) BOOL cancelled;
 @property(nonatomic, strong) UIDocumentPickerViewController *picker;
 @end
 
-@implementation FlectarDocumentDelegate
+@implementation FortaxDocumentDelegate
 - (void)finish:(NSString *)path error:(NSString *)error {
     if (self.finished) return;
     self.finished = YES;
@@ -108,9 +108,9 @@ static NSError *documentError(NSString *message) {
 }
 @end
 
-void flectar_cancel_document(long long requestId) {
+void fortax_cancel_document(long long requestId) {
     dispatch_async(dispatch_get_main_queue(), ^{
-        FlectarDocumentDelegate *delegate = requests[@(requestId)];
+        FortaxDocumentDelegate *delegate = requests[@(requestId)];
         if (!delegate) return;
         delegate.cancelled = YES;
         [delegate.picker dismissViewControllerAnimated:YES completion:nil];
@@ -118,7 +118,7 @@ void flectar_cancel_document(long long requestId) {
     });
 }
 
-void flectar_choose_document(long long requestId, const char *exportPath, FlectarDocumentCallback callback) {
+void fortax_choose_document(long long requestId, const char *exportPath, FortaxDocumentCallback callback) {
     NSString *path = exportPath ? [NSString stringWithUTF8String:exportPath] : @"";
     dispatch_async(dispatch_get_main_queue(), ^{
         if (!requests) requests = [NSMutableDictionary dictionary];
@@ -137,7 +137,7 @@ void flectar_choose_document(long long requestId, const char *exportPath, Flecta
         UIViewController *presenter = window.rootViewController;
         while (presenter.presentedViewController) presenter = presenter.presentedViewController;
         if (!presenter || requests.count) { callback(requestId, "", "A document picker cannot be opened right now."); return; }
-        FlectarDocumentDelegate *delegate = [FlectarDocumentDelegate new];
+        FortaxDocumentDelegate *delegate = [FortaxDocumentDelegate new];
         delegate.requestId = requestId;
         delegate.callback = callback;
         delegate.exporting = path.length > 0;

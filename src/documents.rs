@@ -54,7 +54,7 @@ pub fn default_provider() -> Arc<dyn DocumentProvider> {
     }
 }
 pub(crate) fn safe_name(name: &str) -> String {
-    if flectar_mail_core::files::validate_name(name).is_ok() {
+    if fortax_mail_core::files::validate_name(name).is_ok() {
         name.into()
     } else {
         "download".into()
@@ -91,7 +91,7 @@ impl DocumentProvider for DesktopDocuments {
                 else {
                     return Ok(false);
                 };
-                flectar_mail_core::files::save_cached_file(&path, file.path())
+                fortax_mail_core::files::save_cached_file(&path, file.path())
                     .await
                     .map_err(|e| e.to_string())?;
                 Ok(true)

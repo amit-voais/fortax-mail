@@ -1,20 +1,20 @@
-name: FlectarMail
+name: FortaxMail
 options:
-  bundleIdPrefix: com.flectar
+  bundleIdPrefix: in.fortax
 settings:
   base:
     ENABLE_USER_SCRIPT_SANDBOXING: NO
-    PRODUCT_BUNDLE_IDENTIFIER: com.flectar.mail
+    PRODUCT_BUNDLE_IDENTIFIER: in.fortax.mail
     ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
 targets:
-  FlectarMail:
+  FortaxMail:
     type: application
     platform: iOS
     deploymentTarget: "17.0"
     info:
       path: Info.plist
       properties:
-        CFBundleDisplayName: Flectar Mail
+        CFBundleDisplayName: Fortax Mail
         UILaunchScreen: {}
         UIRequiresFullScreen: false
     sources:
@@ -23,13 +23,13 @@ targets:
     postCompileScripts:
       - name: Build Rust application
         script: |
-          "$SRCROOT/build-with-cargo.sh" flectar-mail
+          "$SRCROOT/build-with-cargo.sh" fortax-mail
         basedOnDependencyAnalysis: false
     postBuildScripts:
       - name: Bundle license notices
         script: |
           license_root="$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/Licenses"
-          app_license_dir="$license_root/Flectar Mail"
+          app_license_dir="$license_root/Fortax Mail"
           google_font_license_dir="$license_root/Google Sans Flex"
           emoji_font_license_dir="$license_root/Noto Emoji"
           mkdir -p "$app_license_dir" "$google_font_license_dir" "$emoji_font_license_dir"

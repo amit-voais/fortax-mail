@@ -9,7 +9,7 @@ def write(path, simulator):
     metadata = {
         "CFBundleDevelopmentRegion": "en",
         "CFBundleExecutable": "PDFium",
-        "CFBundleIdentifier": "com.flectar.pdfium",
+        "CFBundleIdentifier": "in.fortax.pdfium",
         "CFBundleInfoDictionaryVersion": "6.0",
         "CFBundleName": "PDFium",
         "CFBundlePackageType": "FMWK",

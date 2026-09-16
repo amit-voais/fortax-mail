@@ -532,7 +532,7 @@ fn make_thread_rows(
 
 pub(super) fn apply_label_rows(
     app: &AppWindow,
-    labels: &[flectar_mail_core::models::Label],
+    labels: &[fortax_mail_core::models::Label],
     selected: Option<&MailMessage>,
 ) {
     let rows = make_label_rows(labels, selected, "");
@@ -542,7 +542,7 @@ pub(super) fn apply_label_rows(
 }
 
 pub(super) fn make_label_rows(
-    labels: &[flectar_mail_core::models::Label],
+    labels: &[fortax_mail_core::models::Label],
     selected: Option<&MailMessage>,
     query: &str,
 ) -> Vec<MailLabelRow> {
@@ -553,7 +553,7 @@ pub(super) fn make_label_rows(
 }
 
 fn project_label_rows(
-    labels: &[flectar_mail_core::models::Label],
+    labels: &[fortax_mail_core::models::Label],
     applied: &[i64],
     query: &str,
 ) -> Vec<MailLabelRow> {
@@ -580,7 +580,7 @@ fn project_label_rows(
 /// shows labels actually on the message, so the catalog is filtered down
 /// *before* building rows rather than after.
 fn applied_label_rows(
-    labels: &[flectar_mail_core::models::Label],
+    labels: &[fortax_mail_core::models::Label],
     applied: &[i64],
 ) -> Vec<MailLabelRow> {
     labels
@@ -724,7 +724,7 @@ pub(super) fn make_rows(
     selected_id: Option<i32>,
     checked_ids: &HashSet<i32>,
     favicon_icons: &HashMap<String, FaviconImages>,
-    labels: &[flectar_mail_core::models::Label],
+    labels: &[fortax_mail_core::models::Label],
 ) -> Vec<EmailRow> {
     messages
         .iter()
@@ -762,7 +762,7 @@ pub(super) fn make_rows(
         .collect()
 }
 
-fn label_summary(ids: &[i64], labels: &[flectar_mail_core::models::Label]) -> String {
+fn label_summary(ids: &[i64], labels: &[fortax_mail_core::models::Label]) -> String {
     labels
         .iter()
         .filter(|label| ids.contains(&label.id))
@@ -1145,7 +1145,7 @@ fn contains_emoji(text: &str) -> bool {
 pub(super) fn make_mailbox_rows(
     mailboxes: &[MailboxEntry],
     avatars: &HashMap<i64, ProfileAvatarImages>,
-    labels: &[flectar_mail_core::models::Label],
+    labels: &[fortax_mail_core::models::Label],
     collapsed_folder_ids: &HashSet<i64>,
 ) -> Vec<MailboxRow> {
     // Index label colors once; matching every folder against the entire label
@@ -1220,7 +1220,7 @@ fn mailbox_scope_title(
     scope: &str,
     mailboxes: &[MailboxEntry],
     unified_mailboxes: &[MailboxEntry],
-    labels: &[flectar_mail_core::models::Label],
+    labels: &[fortax_mail_core::models::Label],
 ) -> String {
     if scope.starts_with("Folder:") {
         mailboxes
@@ -1474,7 +1474,7 @@ mod tests {
     #[test]
     fn label_summary_uses_label_order_and_ignores_unknown_ids() {
         let labels = vec![
-            flectar_mail_core::models::Label {
+            fortax_mail_core::models::Label {
                 id: 2,
                 name: "Work".into(),
                 color: "#2563eb".into(),
@@ -1482,7 +1482,7 @@ mod tests {
                 position: 0,
                 is_auto: false,
             },
-            flectar_mail_core::models::Label {
+            fortax_mail_core::models::Label {
                 id: 4,
                 name: "Follow up".into(),
                 color: "#7c3aed".into(),
@@ -1500,7 +1500,7 @@ mod tests {
         let mut selected = message(12);
         selected.labels = vec![4];
         let labels = vec![
-            flectar_mail_core::models::Label {
+            fortax_mail_core::models::Label {
                 id: 2,
                 name: "Work".into(),
                 color: "#2563eb".into(),
@@ -1508,7 +1508,7 @@ mod tests {
                 position: 0,
                 is_auto: false,
             },
-            flectar_mail_core::models::Label {
+            fortax_mail_core::models::Label {
                 id: 4,
                 name: "Follow Up".into(),
                 color: "#7c3aed".into(),
@@ -1529,7 +1529,7 @@ mod tests {
         let mut email = message(12);
         email.labels = vec![4];
         let labels = vec![
-            flectar_mail_core::models::Label {
+            fortax_mail_core::models::Label {
                 id: 2,
                 name: "Personal".into(),
                 color: "#ef4444".into(),
@@ -1537,7 +1537,7 @@ mod tests {
                 position: 0,
                 is_auto: false,
             },
-            flectar_mail_core::models::Label {
+            fortax_mail_core::models::Label {
                 id: 4,
                 name: "Viaje".into(),
                 color: "#7c3aed".into(),
@@ -1571,7 +1571,7 @@ mod tests {
             is_account: false,
             count: String::new(),
         }];
-        let labels = vec![flectar_mail_core::models::Label {
+        let labels = vec![fortax_mail_core::models::Label {
             id: 7,
             name: "Projects".into(),
             color: "#22c55e".into(),
@@ -1629,7 +1629,7 @@ mod tests {
         assert!(!contains_emoji("Cars"));
         assert!(!contains_emoji("Folder 1"));
 
-        let labels = [flectar_mail_core::models::Label {
+        let labels = [fortax_mail_core::models::Label {
             id: 1,
             name: "🚗🚗".into(),
             color: "#4a86e8".into(),

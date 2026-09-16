@@ -22,7 +22,7 @@ def stage(project: Path, destination: Path, *, flatpak: bool = False) -> str:
         if epoch is not None else datetime.now(timezone.utc)
     ).date().isoformat()
     resources = project / "resources"
-    desktop = (resources / "com.flectar.mail.desktop").read_text(encoding="utf-8")
+    desktop = (resources / "in.fortax.mail.desktop").read_text(encoding="utf-8")
     desktop, count = re.subn(
         r"^X-AppImage-Version=.*$", f"X-AppImage-Version={version}", desktop,
         flags=re.MULTILINE,
@@ -32,7 +32,7 @@ def stage(project: Path, destination: Path, *, flatpak: bool = False) -> str:
     if flatpak:
         desktop = re.sub(r"^X-AppImage-[^\n]*\n?", "", desktop, flags=re.MULTILINE)
     parser = ET.XMLParser(target=ET.TreeBuilder(insert_comments=True))
-    metainfo = ET.parse(resources / "com.flectar.mail.metainfo.xml", parser=parser)
+    metainfo = ET.parse(resources / "in.fortax.mail.metainfo.xml", parser=parser)
     # The first release describes the build being packaged. Retain older entries.
     release = metainfo.find("./releases/release")
     if release is None:
@@ -41,8 +41,8 @@ def stage(project: Path, destination: Path, *, flatpak: bool = False) -> str:
     release.set("date", release_date)
     release.set("type", "development" if "-" in version else "stable")
     release.attrib.pop("timestamp", None)
-    desktop_path = destination / "usr/share/applications/com.flectar.mail.desktop"
-    metainfo_path = destination / "usr/share/metainfo/com.flectar.mail.metainfo.xml"
+    desktop_path = destination / "usr/share/applications/in.fortax.mail.desktop"
+    metainfo_path = destination / "usr/share/metainfo/in.fortax.mail.metainfo.xml"
     desktop_path.parent.mkdir(parents=True, exist_ok=True)
     metainfo_path.parent.mkdir(parents=True, exist_ok=True)
     desktop_path.write_text(desktop, encoding="utf-8")

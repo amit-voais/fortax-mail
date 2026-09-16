@@ -80,7 +80,7 @@ pub struct FaviconLoader {
 impl FaviconLoader {
     pub fn new() -> Result<Self, String> {
         let client = Client::builder()
-            .user_agent("Flectar Mail native sender icon/0.1")
+            .user_agent("Fortax Mail native sender icon/0.1")
             .connect_timeout(Duration::from_secs(3))
             .timeout(Duration::from_secs(8))
             .redirect(service_redirect_policy("twenty-icons.com"))
@@ -88,7 +88,7 @@ impl FaviconLoader {
             .map_err(|error| format!("could not create favicon client: {error}"))?;
 
         let base = dirs::cache_dir().unwrap_or_else(std::env::temp_dir);
-        let cache_dir = base.join("flectar-mail").join("sender-icons");
+        let cache_dir = base.join("fortax-mail").join("sender-icons");
         std::fs::create_dir_all(&cache_dir)
             .map_err(|error| format!("could not create favicon cache: {error}"))?;
 
@@ -182,14 +182,14 @@ pub struct ProfileAvatarLoader {
 impl ProfileAvatarLoader {
     pub fn new() -> Result<Self, String> {
         let client = Client::builder()
-            .user_agent("Flectar Mail native account avatar/0.1")
+            .user_agent("Fortax Mail native account avatar/0.1")
             .connect_timeout(Duration::from_secs(3))
             .timeout(Duration::from_secs(8))
             .redirect(service_redirect_policy("googleusercontent.com"))
             .build()
             .map_err(|error| format!("could not create account-avatar client: {error}"))?;
         let base = dirs::cache_dir().unwrap_or_else(std::env::temp_dir);
-        let cache_dir = base.join("flectar-mail").join("account-avatars");
+        let cache_dir = base.join("fortax-mail").join("account-avatars");
         std::fs::create_dir_all(&cache_dir)
             .map_err(|error| format!("could not create account-avatar cache: {error}"))?;
         Ok(Self { client, cache_dir })

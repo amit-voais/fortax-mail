@@ -5,7 +5,7 @@ use crate::{
     paged_visible_count,
 };
 use chrono::{Datelike, Local, TimeZone};
-use flectar_mail_core::models::{ContactRecord, ContactRecordCursor, ContactRecordPage};
+use fortax_mail_core::models::{ContactRecord, ContactRecordCursor, ContactRecordPage};
 use slint::{ComponentHandle, Model, VecModel};
 use std::{
     cell::RefCell,

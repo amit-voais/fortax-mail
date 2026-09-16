@@ -1843,7 +1843,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "flectar-mail"
+name = "fortax-mail"
 version = "0.1.0-alpha.6"
 dependencies = [
  "anyrender",
@@ -1861,7 +1861,7 @@ dependencies = [
  "cssparser",
  "data-url",
  "dirs",
- "flectar-mail-core",
+ "fortax-mail-core",
  "fontique 0.10.0",
  "fontique 0.11.1",
  "html5ever",
@@ -1894,12 +1894,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "flectar-mail-android"
+name = "fortax-mail-android"
 version = "0.1.0"
 dependencies = [
  "async-trait",
  "base64 0.23.1",
- "flectar-mail",
+ "fortax-mail",
  "jni 0.21.1",
  "serde_json",
  "slint",
@@ -1910,7 +1910,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "flectar-mail-core"
+name = "fortax-mail-core"
 version = "0.2.29"
 dependencies = [
  "ammonia",

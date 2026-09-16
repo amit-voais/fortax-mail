@@ -2,8 +2,8 @@
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(not(target_os = "ios"))]
-    if let Some(code) = flectar_mail::pdf_preview::run_worker_if_requested() {
+    if let Some(code) = fortax_mail::pdf_preview::run_worker_if_requested() {
         std::process::exit(code);
     }
-    flectar_mail::run_desktop(flectar_mail::PlatformContext::desktop()?)
+    fortax_mail::run_desktop(fortax_mail::PlatformContext::desktop()?)
 }

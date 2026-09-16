@@ -51,11 +51,11 @@ const EMAIL_LINK_STYLE: &str = "a:any-link { color: #0969da; cursor: pointer; }"
 
 pub(crate) fn render_timings_enabled() -> bool {
     static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *ENABLED.get_or_init(|| std::env::var_os("FLECTAR_RENDER_TIMINGS").is_some())
+    *ENABLED.get_or_init(|| std::env::var_os("FORTAX_RENDER_TIMINGS").is_some())
 }
 
 const EMAIL_FONT_FALLBACK_STYLE: &str = r#"
-<style data-flectar-mail="font-fallback">
+<style data-fortax-mail="font-fallback">
   html, body {
     font-family: Arial, "Liberation Sans", "Noto Sans", sans-serif;
   }
@@ -1026,7 +1026,7 @@ impl GpuEmailRenderer {
                 );
             }
             let texture = device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("flectar-mail-email-tile"),
+                label: Some("fortax-mail-email-tile"),
                 size: wgpu::Extent3d {
                     width: physical_width,
                     height: physical_tile_height,
@@ -1950,7 +1950,7 @@ mod tests {
 
     #[test]
     fn display_none_content_does_not_generate_email_layout_or_pixels() {
-        let html = flectar_mail_core::mime::sanitize_html(
+        let html = fortax_mail_core::mime::sanitize_html(
             r#"<html><head><title>Metadata title</title><style>.content { height:40px;background:#ef3340 }</style></head><body style="margin:0">
                 <span id="preheader" style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden">Hidden preview text</span>
                 <div id="content" class="content">Visible content</div>
@@ -2213,7 +2213,7 @@ mod tests {
 
     #[test]
     fn css_table_with_direct_cells_gets_an_anonymous_row() {
-        let html = flectar_mail_core::mime::sanitize_html(
+        let html = fortax_mail_core::mime::sanitize_html(
             r#"<html><head><style>
               .inner-grid { display:table; width:320px; table-layout:fixed; }
               .column { float:left; display:table-cell; width:160px; vertical-align:top; }
@@ -2276,7 +2276,7 @@ mod tests {
 
     #[test]
     fn inline_table_button_paints_its_text() {
-        let html = flectar_mail_core::mime::sanitize_html(
+        let html = fortax_mail_core::mime::sanitize_html(
             r##"<html><head><style>
               a { color:#ff6633 !important; }
               .button a { color:#000 !important; }

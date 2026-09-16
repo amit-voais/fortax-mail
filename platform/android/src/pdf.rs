@@ -25,13 +25,13 @@ pub fn configure(app: &slint::android::AndroidApp) -> Result<(), String> {
         .get_string(&JString::from(directory))
         .map_err(|e| e.to_string())?
         .into();
-    flectar_mail::pdf_preview::configure_android(directory.into())
+    fortax_mail::pdf_preview::configure_android(directory.into())
 }
 
 #[unsafe(no_mangle)]
-extern "system" fn Java_com_flectar_mail_FlectarActivity_nativeSuspendPdfPreview(
+extern "system" fn Java_com_fortax_mail_FortaxActivity_nativeSuspendPdfPreview(
     _env: jni::JNIEnv,
     _class: JClass,
 ) {
-    flectar_mail::suspend_file_preview();
+    fortax_mail::suspend_file_preview();
 }

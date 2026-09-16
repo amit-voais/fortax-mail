@@ -1,0 +1,79 @@
+%global debug_package %{nil}
+
+Name:           fortax-mail
+Version:        @RPM_VERSION@
+Release:        @RPM_RELEASE@%{?dist}
+Summary:        Native, offline-first email client
+License:        AGPL-3.0-only
+URL:            https://fortax.in
+ExclusiveArch:  x86_64
+
+Source0:        fortax-mail
+Source1:        libpdfium.so
+Source2:        pdfium-licenses.tar.gz
+Source3:        in.fortax.mail.desktop
+Source4:        in.fortax.mail.metainfo.xml
+Source5:        in.fortax.mail.png
+Source6:        in.fortax.mail.svg
+Source7:        LICENSE
+Source8:        LICENSES.tar.gz
+Source9:        THIRD_PARTY_NOTICES.md
+Source10:       google-sans-flex-OFL.txt
+Source11:       google-sans-flex-README.md
+
+# rpmbuild derives linked ELF requirements. Slint and winit load the display
+# and font libraries at runtime, so keep those packages explicit.
+Requires:       fontconfig
+Requires:       hicolor-icon-theme
+Requires:       libX11
+Requires:       libX11-xcb
+Requires:       libwayland-client
+Requires:       libxkbcommon
+Requires:       libxkbcommon-x11
+Requires:       xdg-utils
+Recommends:     gnome-keyring
+Recommends:     gnupg2
+Recommends:     pinentry
+Recommends:     xdg-desktop-portal
+
+%description
+Fortax Mail is a native Rust and Slint mail client with offline-first
+storage, Gmail and Microsoft account support, contacts, and calendars.
+
+%prep
+
+%build
+
+%install
+install -Dm0755 %{SOURCE0} %{buildroot}%{_bindir}/fortax-mail
+install -Dm0755 %{SOURCE1} %{buildroot}%{_libdir}/fortax-mail/libpdfium.so
+install -Dm0644 %{SOURCE3} %{buildroot}%{_datadir}/applications/in.fortax.mail.desktop
+install -Dm0644 %{SOURCE4} %{buildroot}%{_datadir}/metainfo/in.fortax.mail.metainfo.xml
+install -Dm0644 %{SOURCE5} %{buildroot}%{_datadir}/icons/hicolor/512x512/apps/in.fortax.mail.png
+install -Dm0644 %{SOURCE6} %{buildroot}%{_datadir}/icons/hicolor/scalable/apps/in.fortax.mail.svg
+install -Dm0644 %{SOURCE7} %{buildroot}%{_licensedir}/%{name}/LICENSE
+mkdir -p %{buildroot}%{_licensedir}/%{name}/LICENSES
+tar -xzf %{SOURCE8} -C %{buildroot}%{_licensedir}/%{name}/LICENSES
+install -Dm0644 %{SOURCE9} %{buildroot}%{_docdir}/%{name}/THIRD_PARTY_NOTICES.md
+install -Dm0644 %{SOURCE10} %{buildroot}%{_licensedir}/%{name}/google-sans-flex/OFL.txt
+install -Dm0644 %{SOURCE11} %{buildroot}%{_docdir}/%{name}/google-sans-flex/README.md
+mkdir -p %{buildroot}%{_licensedir}/%{name}/pdfium
+tar -xzf %{SOURCE2} -C %{buildroot}%{_licensedir}/%{name}/pdfium
+
+%check
+desktop-file-validate %{buildroot}%{_datadir}/applications/in.fortax.mail.desktop
+appstreamcli validate --no-net %{buildroot}%{_datadir}/metainfo/in.fortax.mail.metainfo.xml
+
+%files
+%{_bindir}/fortax-mail
+%{_libdir}/fortax-mail/libpdfium.so
+%{_datadir}/applications/in.fortax.mail.desktop
+%{_datadir}/metainfo/in.fortax.mail.metainfo.xml
+%{_datadir}/icons/hicolor/512x512/apps/in.fortax.mail.png
+%{_datadir}/icons/hicolor/scalable/apps/in.fortax.mail.svg
+%license %{_licensedir}/%{name}
+%doc %{_docdir}/%{name}
+
+%changelog
+* @RPM_CHANGELOG_DATE@ Fortax <fortax@users.noreply.github.com> - @RPM_VERSION@-@RPM_RELEASE@
+- Package the Fortax Mail preview for RPM-based test systems

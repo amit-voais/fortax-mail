@@ -29,7 +29,7 @@ sha1_escaped="$(printf '%s' "$sha1_line" | sed 's/../\\x&/g')"
 microsoft_hash="$(printf '%b' "$sha1_escaped" | base64 | tr -d '\n')"
 microsoft_path="$(printf '%s' "$microsoft_hash" | sed 's/+/%2B/g; s#/#%2F#g; s/=/%3D/g')"
 
-printf 'Package name: com.flectar.mail\n'
+printf 'Package name: in.fortax.mail\n'
 printf 'Google Android OAuth SHA-1: %s\n' "$google_sha1"
 printf 'Microsoft signature hash: %s\n' "$microsoft_hash"
-printf 'Microsoft redirect URI: msauth://com.flectar.mail/%s\n' "$microsoft_path"
+printf 'Microsoft redirect URI: msauth://in.fortax.mail/%s\n' "$microsoft_path"

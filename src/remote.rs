@@ -390,7 +390,7 @@ async fn pinned_public_client(url: &reqwest::Url) -> Option<reqwest::Client> {
     }
     let mut builder = reqwest::Client::builder()
         .no_proxy()
-        .user_agent("Flectar Mail bounded remote image loader/0.1")
+        .user_agent("Fortax Mail bounded remote image loader/0.1")
         .connect_timeout(Duration::from_secs(4))
         .timeout(Duration::from_secs(12))
         .pool_max_idle_per_host(2)

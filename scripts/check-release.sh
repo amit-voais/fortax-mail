@@ -14,16 +14,16 @@ command -v "$appstream" >/dev/null || { printf 'AppStream validator is missing: 
 python3 -c 'import sys; assert sys.version_info >= (3, 11), "Python 3.11+ is required"'
 python3 scripts/release-metadata.py "$@"
 GITHUB_OUTPUT= python3 scripts/test-release.py
-desktop-file-validate resources/com.flectar.mail.desktop
+desktop-file-validate resources/in.fortax.mail.desktop
 "$appstream" --version
-"$appstream" validate --no-net resources/com.flectar.mail.metainfo.xml
+"$appstream" validate --no-net resources/in.fortax.mail.metainfo.xml
 
 # Validate the metadata that packaging will embed, as well as its source files.
 metadata_dir="$(mktemp -d)"
 trap 'rm -rf "$metadata_dir"' EXIT
 python3 scripts/stage-linux-metadata.py "$metadata_dir"
-desktop-file-validate "$metadata_dir/usr/share/applications/com.flectar.mail.desktop"
-"$appstream" validate --no-net "$metadata_dir/usr/share/metainfo/com.flectar.mail.metainfo.xml"
+desktop-file-validate "$metadata_dir/usr/share/applications/in.fortax.mail.desktop"
+"$appstream" validate --no-net "$metadata_dir/usr/share/metainfo/in.fortax.mail.metainfo.xml"
 
 python3 - <<'PY'
 import ast
@@ -35,7 +35,7 @@ for path in Path("scripts").glob("*.sh"):
     subprocess.run(["bash", "-n", str(path)], check=True)
 for path in Path("scripts").glob("*.py"):
     ast.parse(path.read_text(), filename=str(path))
-icon = Path("resources/app-icon/flectar-mail.ico").read_bytes()
+icon = Path("resources/app-icon/fortax-mail.ico").read_bytes()
 reserved, kind, count = struct.unpack_from("<HHH", icon)
 assert reserved == 0 and kind == 1 and count > 0, "Windows ICO header is invalid"
 for index in range(count):

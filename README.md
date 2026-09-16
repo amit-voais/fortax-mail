@@ -1,236 +1,69 @@
 <div align="center">
-  <img src="resources/app-icon/flectar-mail-masked.png" width="112" alt="Flectar Mail logo">
-  <h1 align="center">
-    Flectar Mail
-  </h1>
+  <img src="resources/app-icon/fortax-mail-masked-512.png" width="112" alt="Fortax Mail">
+  <h1 align="center">Fortax Mail</h1>
   <div align="center">
-    <h3>Email, made fast again</h3>
-    <p>Built from the ground up for speed. Flectar Mail delivers native performance, instant startup, and as little as 20 MB of RAM.</p>
+    <h3>The CA firm's mailbox, on the firm's own machine</h3>
+    <p>A fast, native, offline-first mail, calendar and contacts client — and the mailbox hiSAI works from,
+       so a client mail is read, drafted and sent from your own address, not from a server in the middle.</p>
   </div>
   <p>
-    <a href="https://flectar.com">Website</a> ·
-    <a href="https://github.com/flectar/mail/issues">Report an issue</a> ·
-    <a href="CONTRIBUTING.md">Contribute</a>
+    <a href="https://fortax.in">fortax.in</a> ·
+    <a href="https://github.com/amit-voais/fortax-mail/issues">Report an issue</a> ·
+    <a href="FORK.md">What we changed</a>
   </p>
 </div>
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="resources/screenshots/desktop-dark.png">
-  <source media="(prefers-color-scheme: light)" srcset="resources/screenshots/desktop-light.png">
-  <img src="resources/screenshots/desktop-light.png" alt="Flectar Mail unified inbox and message view">
-</picture>
+> **Derived from Flectar Mail.** Fortax Mail is a modified build of
+> [Flectar Mail](https://github.com/flectar/mail) by Flectar. It is **not produced, sponsored, endorsed or
+> supported by Flectar** — please do not take Flectar's issue tracker, security contacts or support channels
+> to problems with this build; bring them [here](https://github.com/amit-voais/fortax-mail/issues) instead.
+> Like the original, Fortax Mail is licensed under the **GNU Affero General Public License v3 only**
+> ([LICENSE](LICENSE)). See [FORK.md](FORK.md) for exactly what differs.
 
-Flectar Mail is a lightweight, native home for your email, calendars, and
-contacts. It is engineered to open instantly, stay responsive, and use a
-fraction of the memory of a typical web-based mail client.
+## Why Fortax Mail exists
 
-## Why Flectar Mail?
+A Chartered Accountant's mail *is* the practice: the client asking for a figure, the notice with a deadline,
+the acknowledgement that has to be filed away. hiSAI already works inside the firm's client folder and on the
+government portals. The one thing it could not touch was the mailbox — so mail went out through a server, from
+an address that was not the firm's.
 
-- **Fast from the first click.** A native interface and local-first data path
-  get you to your inbox without waiting on a browser runtime.
-- **As little as 20 MB of RAM.** Flectar Mail is deliberately designed to keep
-  memory use low, even with a full-featured inbox at your fingertips.
-- **Everything in one place.** Move between mail, calendars, and contacts
-  without stitching together separate apps.
-- **Offline by design.** Your mailbox and calendar are stored locally, so your
-  synced data remains useful without a connection.
-- **Works with your accounts.** Connect Gmail, Outlook and Microsoft 365, or
-  standards-based IMAP/SMTP, JMAP, CalDAV, and CardDAV services.
-- **Privacy-conscious defaults.** Remote images are blocked until you allow
-  them, helping prevent tracking pixels from reporting when you read a message.
-- **Security by architecture.** Email content is never opened in a WebView.
-  Flectar Mail renders HTML and CSS through its own Rust-native pipeline, does
-  not execute email scripts, and blocks remote images by default. This avoids
-  the embedded-browser attack surface by design.
-- **An experimental Rust renderer.** Building an email renderer without a
-  browser engine is new territory. Rendering issues are expected, especially
-  in complex messages, while compatibility continues to improve.
-- **Made for every screen.** Spacious and minimal desktop layouts share the
-  same experience as the touch-friendly compact interface.
-- **Native and open source.** Built from the ground up with Rust. It is not a
-  browser wrapped in a window, and it is released under the AGPLv3.
+Fortax Mail closes that gap:
 
-## Files and attachments
+- **Your own account, connected once.** Gmail, Outlook and Microsoft 365, or plain IMAP/SMTP, JMAP, CalDAV and
+  CardDAV — the same standards the upstream client supports.
+- **It stays on the machine.** Mail, calendar and contacts are stored locally and work offline. Nothing is
+  copied to Fortax's servers, and passwords and tokens live in the operating system's own keychain.
+- **hiSAI can use it, with your permission.** A local bridge lets hiSAI search the mailbox, read a thread,
+  file an attachment into the client folder and draft a reply. Sending still waits for your tap.
+- **Native and light.** Rust, Slint and Blitz — no browser engine, no WebView for email HTML, remote images
+  blocked until you allow them.
 
-Browse JMAP/WebDAV storage, search mail attachments, keep files offline, and
-preview PDFs, images and text.
+## Status
 
-## Account signatures and OpenPGP
+Early. Upstream is itself pre-stable, and this fork adds the hiSAI bridge on top. Treat it as a preview:
+use it beside your normal mail client, not instead of it, until we say otherwise.
 
-Settings → Accounts → Signatures & OpenPGP provides named signatures, separate
-new-message and reply defaults, and a composer signature selector. Desktop
-OpenPGP/MIME signing and encryption use installed GnuPG 2.x with pinentry for
-private-key passphrases. Required encryption blocks delivery when recipient keys
-are missing or invalid; protected drafts remain local until Send.
+Gmail and Outlook sign-in needs OAuth client IDs. Until Fortax's own registrations are approved by Google and
+Microsoft, use **Sign-in settings** on the welcome screen to paste your own, or connect the account over
+IMAP/JMAP.
 
-S/MIME and mobile OpenPGP are not currently supported.
-
-## Experimental HTML rendering
-
-> [!WARNING]
-> HTML email rendering is currently the most experimental part of Flectar Mail.
-> Some messages, especially those with complex or unusual markup and CSS, may
-> not render correctly yet.
-
-To keep the client fully native and memory usage around 20 MB, Flectar Mail
-renders email HTML with [Blitz](https://github.com/DioxusLabs/blitz), a Rust
-HTML/CSS renderer from the Dioxus team, instead of embedding a browser or
-WebView.
-
-Desktop builds include **CPU — Low Memory** and **GPU — WGPU** under
-Settings → General → Renderer. CPU is selected initially and does not initialize
-WGPU. The GPU option uses Slint and Vello on a shared WGPU 29 device; changing
-the setting takes effect after restarting the app. A failed GPU startup falls
-back to CPU automatically.
-
-As far as we know, Flectar Mail is one of the first projects using Blitz for
-arbitrary, real-world email HTML. Email markup contains plenty of unusual HTML
-and CSS, so this pushes the renderer into demanding territory. We currently
-carry several patches on top of Blitz and hope to upstream as much of that work
-as possible over time.
-
-If you find an email that renders incorrectly, please
-[report it](https://github.com/flectar/mail/issues). This approach is still
-experimental, but it is also a major reason Flectar Mail can remain so
-lightweight compared with WebView-based clients built with frameworks such as
-Tauri or Wails.
-
-## Make it yours
-
-Choose the workspace that fits the way you handle email. Keep the detailed
-three-pane layout, switch to a streamlined minimal view, choose a light or dark
-theme, select a built-in color palette or create a custom one, and show or hide
-sender avatars.
-
-The full workspace keeps your folders, message list, and selected email visible
-together. The minimal layout reduces visual noise and gives each part of your
-inbox more room when you need it.
-
-### Conversation threads
-
-Replies stay grouped in chronological order, with the active message expanded
-inside the reading pane.
-
-![Flectar Mail conversation with incoming and replied messages](resources/screenshots/desktop-thread-light.png)
-
-### Light
-
-| Full workspace | Minimal workspace |
-| --- | --- |
-| ![Flectar Mail full desktop workspace in light mode](resources/screenshots/desktop-light.png) | ![Flectar Mail minimal desktop workspace in light mode](resources/screenshots/desktop-minimal-light.png) |
-
-### Dark
-
-| Full workspace | Minimal workspace |
-| --- | --- |
-| ![Flectar Mail full desktop workspace in dark mode](resources/screenshots/desktop-dark.png) | ![Flectar Mail minimal desktop workspace in dark mode](resources/screenshots/desktop-minimal-dark.png) |
-
-### Color palettes
-
-| Teal | Green | Purple | Custom |
-| --- | --- | --- | --- |
-| ![Flectar Mail teal palette in light mode](resources/screenshots/desktop-teal-light.png) | ![Flectar Mail green palette in light mode](resources/screenshots/desktop-green-light.png) | ![Flectar Mail purple palette in light mode](resources/screenshots/desktop-purple-light.png) | ![Flectar Mail custom palette in light mode](resources/screenshots/desktop-light.png) |
-| ![Flectar Mail teal palette in dark mode](resources/screenshots/desktop-teal-dark.png) | ![Flectar Mail green palette in dark mode](resources/screenshots/desktop-green-dark.png) | ![Flectar Mail purple palette in dark mode](resources/screenshots/desktop-purple-dark.png) | ![Flectar Mail custom palette in dark mode](resources/screenshots/desktop-dark.png) |
-
-### Calendar, contacts, and files
-
-| Calendar | Contacts | Files (WebDAV/JMAP) |
-| --- | --- | --- |
-| ![Flectar Mail calendar](resources/screenshots/desktop-calendar-light.png) | ![Flectar Mail contacts](resources/screenshots/desktop-contacts-light.png) | ![Flectar Mail files](resources/screenshots/desktop-files-light.png) |
-
-### Made for smaller screens
-
-The compact interface keeps the important actions within reach while giving
-messages, events, and contacts the full screen when they need it.
-
-| Light | Dark |
-| --- | --- |
-| ![Flectar Mail mobile inbox in light mode](resources/screenshots/mobile-light.png) | ![Flectar Mail mobile inbox in dark mode](resources/screenshots/mobile-dark.png) |
-
-## Get Flectar Mail
-
-Flectar Mail is currently in development and is not yet stable.
-
-> [!NOTE]
-> We are waiting for Google and Microsoft to complete OAuth app verification
-> before the first stable release with Gmail, Outlook, and Microsoft 365 OAuth
-> configured by default. Earlier GitHub prereleases are intended for testers
-> using their own OAuth registrations or IMAP/JMAP accounts.
-
-Builds without OAuth app keys keep Gmail and Outlook sign-in disabled. Use the
-**Sign-in settings** cog on the welcome screen to save your own Google or
-Microsoft app registration, or connect an IMAP/JMAP account. Custom keys are
-shared with Settings and take precedence over bundled keys; clearing a custom
-client ID restores the defaults when available. Each provider enables separately
-once its configuration is saved.
-
-When preview builds are published, download them from
-[GitHub Releases](https://github.com/flectar/mail/releases) and look for the
-**Pre-release** badge:
-
-- **Linux x64:** AppImage, Debian/Ubuntu `.deb`, Fedora `.rpm`, or a
-  sideloaded Flatpak preview bundle
-- **Windows x64:** Setup `.exe` or portable ZIP
-- **macOS Apple silicon or Intel (macOS 14+):** DMG or application ZIP
-- **Android arm64 (Android 8.0+):** Experimental test APK in prereleases
-
-Windows previews are unsigned; macOS previews are ad-hoc signed and not
-notarized, so operating-system security prompts are expected. Install updates
-manually.
-
-The Flatpak preview is provided as a standalone test bundle. It is not yet a
-Flathub package and therefore does not receive automatic Flathub updates. Its
-close-to-tray option is disabled until the tray backend can use a sandbox-safe
-D-Bus name.
-
-Install the downloaded Linux package with either
-`sudo dnf install ./flectar-mail-<version>-linux-x64.rpm` or
-`flatpak install --user ./flectar-mail-<version>-linux-x64.flatpak`. Launch the
-Flatpak with `flatpak run com.flectar.mail`.
-
-Each GitHub release includes `SHA256SUMS` and signed build-provenance
-attestations. With GitHub CLI installed, verify a download with
-`gh attestation verify <download> --repo flectar/mail`.
-
-Android APK updates require the same signing key; builds without a persistent
-test key may require uninstalling the previous app, which deletes local app data.
-
-You can also build Flectar Mail from source with the
-[Rust toolchain](https://rustup.rs/):
+## Build it
 
 ```bash
-cargo run --bin flectar-mail
+# macOS 14+, Windows 10+, or Linux. Needs the Rust toolchain (https://rustup.rs), 1.92 or newer.
+cargo run --bin fortax-mail          # run it
+bash scripts/package-macos.sh        # a .app and a .dmg
 ```
 
-Linux desktop OAuth uses the system browser through the desktop portal and
-stores refresh credentials through the freedesktop Secret Service. A normal
-desktop session therefore needs an `xdg-desktop-portal` backend and a Secret
-Service provider such as GNOME Keyring. Release builds stop before opening the
-OAuth page when secure credential storage is unavailable, so an authorization
-grant can never be completed without a safe place to persist it.
+## Licence
 
-Podman and Docker development shells commonly have neither the host session
-D-Bus nor the host browser's loopback network. Debug builds support that setup
-with a clearly marked, owner-only development credential file and an accordion
-for pasting the final loopback callback URL. The file backend is excluded from
-release builds.
-
-## Open source, for everyone
-
-Flectar Mail is one open-source application. There is no separate community
-edition. The client is licensed under the
-[GNU Affero General Public License v3](LICENSE). Read the
-[licensing overview](LICENSING.md) for the practical details, or see
-[CONTRIBUTING.md](CONTRIBUTING.md) to help shape the project.
+AGPL-3.0-only, the same as upstream. That is deliberate: the client that reads your mail should be one you
+can read too. The complete corresponding source of any build we ship is this repository at the tag that
+built it. Third-party components keep their own licences — see
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and [LICENSES/](LICENSES).
 
 ## Acknowledgements
 
-Flectar Mail is made possible by the work of these projects and their
-contributors:
-
-- [Slint](https://slint.dev/), the native UI toolkit that powers the Flectar
-  Mail interface.
-- [Blitz](https://github.com/DioxusLabs/blitz), the Rust HTML/CSS renderer from
-  the Dioxus team that powers the email reading experience.
-
----
+- [Flectar Mail](https://github.com/flectar/mail) — the client this one is built from.
+- [Slint](https://slint.dev/), the native UI toolkit.
+- [Blitz](https://github.com/DioxusLabs/blitz), the Rust HTML/CSS renderer from the Dioxus team.

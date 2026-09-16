@@ -27,7 +27,7 @@ fn launch(app: slint::Weak<AppWindow>, url: String) {
 
 pub(super) fn register(
     app: &AppWindow,
-    redirects: flectar_mail_core::oauth::redirect::OAuthRedirectBrokerHandle,
+    redirects: fortax_mail_core::oauth::redirect::OAuthRedirectBrokerHandle,
 ) {
     let weak = app.as_weak();
     app.on_retry_oauth_browser(move || {
@@ -91,7 +91,7 @@ mod tests {
         let app = AppWindow::new().unwrap();
         register(
             &app,
-            Arc::new(flectar_mail_core::oauth::redirect::LoopbackRedirectBroker::default()),
+            Arc::new(fortax_mail_core::oauth::redirect::LoopbackRedirectBroker::default()),
         );
         app.set_startup_ready(true);
         app.set_oauth_in_progress(true);

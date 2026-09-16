@@ -1,6 +1,6 @@
 #import <UIKit/UIKit.h>
 
-extern void flectar_suspend_pdf_preview(void);
+extern void fortax_suspend_pdf_preview(void);
 
 // NotificationCenter retains these process-lifetime observer blocks. Install
 // once on the main queue; the Rust callback schedules UI work on Slint.
@@ -14,7 +14,7 @@ void install_pdf_lifecycle_observers(void) {
                 [center addObserverForName:name object:nil queue:NSOperationQueue.mainQueue
                                 usingBlock:^(NSNotification *notification) {
                     (void)notification;
-                    flectar_suspend_pdf_preview();
+                    fortax_suspend_pdf_preview();
                 }];
             }
         });

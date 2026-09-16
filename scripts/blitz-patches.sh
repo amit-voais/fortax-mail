@@ -215,7 +215,7 @@ case "$command" in
             exit 1
         fi
         verify_manifest_wiring "$version"
-        work_root=$(mktemp -d "${TMPDIR:-/tmp}/flectar-blitz-verify.XXXXXX")
+        work_root=$(mktemp -d "${TMPDIR:-/tmp}/fortax-blitz-verify.XXXXXX")
         trap 'rm -rf -- "$work_root"' EXIT
         prepare_trees "$version" verify "$work_root"
         verify_revision "$work_root/upstream" "$revision"
@@ -230,7 +230,7 @@ case "$command" in
             printf 'Invalid crate version: %s\n' "$version" >&2
             exit 2
         fi
-        work_root=$(mktemp -d "${TMPDIR:-/tmp}/flectar-blitz-stage.XXXXXX")
+        work_root=$(mktemp -d "${TMPDIR:-/tmp}/fortax-blitz-stage.XXXXXX")
         printf 'Staging Blitz %s in %s\n' "$version" "$work_root"
         prepare_trees "$version" stage "$work_root"
         if ! apply_series "$work_root/patched" true; then

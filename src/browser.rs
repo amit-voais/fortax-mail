@@ -7,8 +7,8 @@ fn host_command(program: &str) -> Command {
     let mut command = Command::new(program);
     restore_library_path(
         &mut command,
-        std::env::var_os("FLECTAR_MAIL_BUNDLED").is_some(),
-        std::env::var_os("FLECTAR_MAIL_HOST_LD_LIBRARY_PATH"),
+        std::env::var_os("FORTAX_MAIL_BUNDLED").is_some(),
+        std::env::var_os("FORTAX_MAIL_HOST_LD_LIBRARY_PATH"),
     );
     command
         .stdin(Stdio::null())

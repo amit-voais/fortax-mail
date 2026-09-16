@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Copyright 2026 Fortax -->
+<component type="desktop-application">
+  <id>in.fortax.mail</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>AGPL-3.0-only</project_license>
+  <name>Fortax Mail</name>
+  <summary>Native, offline-first email client</summary>
+  <!-- Keep compatibility with AppStream 0.15 on the Ubuntu 22.04 build host. -->
+  <developer_name>Fortax</developer_name>
+  <description>
+    <p>
+      Fortax Mail is a native Rust and Slint mail client with offline-first
+      storage, Gmail and Microsoft account support, contacts, and calendars.
+    </p>
+  </description>
+  <content_rating type="oars-1.1">
+    <content_attribute id="social-chat">intense</content_attribute>
+    <content_attribute id="social-contacts">intense</content_attribute>
+  </content_rating>
+  <launchable type="desktop-id">in.fortax.mail.desktop</launchable>
+  <url type="homepage">https://fortax.in</url>
+  <url type="bugtracker">https://github.com/amit-voais/fortax-mail/issues</url>
+  <screenshots>
+    <screenshot type="default">
+      <image type="source" width="2640" height="1600">https://raw.githubusercontent.com/fortax/mail/main/resources/screenshots/desktop-light.png</image>
+      <caption>Unified inbox and message workspace in the light theme</caption>
+    </screenshot>
+    <screenshot>
+      <image type="source" width="2640" height="1600">https://raw.githubusercontent.com/fortax/mail/main/resources/screenshots/desktop-dark.png</image>
+      <caption>Unified inbox and message workspace in the dark theme</caption>
+    </screenshot>
+    <screenshot>
+      <image type="source" width="2640" height="1600">https://raw.githubusercontent.com/fortax/mail/main/resources/screenshots/desktop-thread-light.png</image>
+      <caption>Conversation with incoming and replied messages</caption>
+    </screenshot>
+    <screenshot>
+      <image type="source" width="2640" height="1600">https://raw.githubusercontent.com/fortax/mail/main/resources/screenshots/desktop-minimal-light.png</image>
+      <caption>Minimal desktop inbox in the light theme</caption>
+    </screenshot>
+    <screenshot>
+      <image type="source" width="2640" height="1600">https://raw.githubusercontent.com/fortax/mail/main/resources/screenshots/desktop-minimal-dark.png</image>
+      <caption>Minimal desktop inbox in the dark theme</caption>
+    </screenshot>
+    <screenshot>
+      <image type="source" width="780" height="1688">https://raw.githubusercontent.com/fortax/mail/main/resources/screenshots/mobile-light.png</image>
+      <caption>Compact mobile inbox in the light theme</caption>
+    </screenshot>
+    <screenshot>
+      <image type="source" width="780" height="1688">https://raw.githubusercontent.com/fortax/mail/main/resources/screenshots/mobile-dark.png</image>
+      <caption>Compact mobile inbox in the dark theme</caption>
+    </screenshot>
+  </screenshots>
+  <provides>
+    <binary>fortax-mail</binary>
+  </provides>
+  <releases>
+    <!-- Packaging stamps the first release with the Cargo version and build date. -->
+    <release version="0.1.0-alpha.4" date="2026-09-08" type="development">
+      <description>
+        <p>Initial native desktop and mobile preview release.</p>
+      </description>
+    </release>
+  </releases>
+</component>

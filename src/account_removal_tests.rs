@@ -19,7 +19,7 @@ fn account(id: i64) -> Account {
         display_name: Some(format!("Account {id}")),
         avatar_url: None,
         provider: Provider::Imap,
-        auth_kind: flectar_mail_core::models::AuthKind::Password,
+        auth_kind: fortax_mail_core::models::AuthKind::Password,
         mail_protocol: MailProtocol::Imap,
         sync_state: "idle".into(),
         sync_error: None,

@@ -1,0 +1,15 @@
+[Desktop Entry]
+Name=Fortax Mail
+GenericName=Email Client
+Comment=Native email client built with Slint and Blitz
+Exec=fortax-mail
+Icon=in.fortax.mail
+Type=Application
+Categories=Office;Email;
+Keywords=Mail;Email;IMAP;Gmail;Outlook;Calendar;
+Terminal=false
+StartupNotify=true
+X-AppImage-Name=Fortax Mail
+# Packaging replaces this with the Cargo.toml version.
+X-AppImage-Version=0.1.0-alpha.4
+X-AppImage-Arch=x86_64

@@ -23,10 +23,10 @@ integrate_appimage() {
   fi
 
   local applications_dir="$HOME/Applications"
-  local installed_appimage="$applications_dir/flectar-mail.AppImage"
+  local installed_appimage="$applications_dir/fortax-mail.AppImage"
   local desktop_dir="$data_home/applications"
   local icon_root="$data_home/icons/hicolor"
-  local desktop_file="$desktop_dir/com.flectar.mail.desktop"
+  local desktop_file="$desktop_dir/in.fortax.mail.desktop"
   local desktop_exec
 
   if [[ "$(readlink -f "$APPIMAGE")" != "$(readlink -m "$installed_appimage")" ]]; then
@@ -36,11 +36,11 @@ integrate_appimage() {
     chmod 0755 "$installed_appimage"
   fi
   install -Dm644 \
-    "$app_dir/usr/share/icons/hicolor/512x512/apps/com.flectar.mail.png" \
-    "$icon_root/512x512/apps/com.flectar.mail.png"
+    "$app_dir/usr/share/icons/hicolor/512x512/apps/in.fortax.mail.png" \
+    "$icon_root/512x512/apps/in.fortax.mail.png"
   install -Dm644 \
-    "$app_dir/usr/share/icons/hicolor/scalable/apps/com.flectar.mail.svg" \
-    "$icon_root/scalable/apps/com.flectar.mail.svg"
+    "$app_dir/usr/share/icons/hicolor/scalable/apps/in.fortax.mail.svg" \
+    "$icon_root/scalable/apps/in.fortax.mail.svg"
   install -d "$desktop_dir"
 
   # A Wayland compositor resolves the xdg app-id from this exact desktop-file
@@ -55,7 +55,7 @@ integrate_appimage() {
     else
       printf '%s\n' "$line"
     fi
-  done < "$app_dir/usr/share/applications/com.flectar.mail.desktop" \
+  done < "$app_dir/usr/share/applications/in.fortax.mail.desktop" \
     > "$desktop_file.new"
   chmod 0644 "$desktop_file.new"
   mv -f "$desktop_file.new" "$desktop_file"
@@ -70,7 +70,7 @@ integrate_appimage() {
     gtk-update-icon-cache -f -t "$icon_root" >/dev/null 2>&1 || true
   fi
 
-  printf 'Integrated Flectar Mail at %s\n' "$installed_appimage"
+  printf 'Integrated Fortax Mail at %s\n' "$installed_appimage"
   printf 'Launch it from the desktop application menu.\n'
 }
 
@@ -86,8 +86,8 @@ export MALLOC_ARENA_MAX="${MALLOC_ARENA_MAX:-1}"
 export MALLOC_TRIM_THRESHOLD_="${MALLOC_TRIM_THRESHOLD_:-65536}"
 
 # Preserve the host search path for external programs such as the browser.
-export FLECTAR_MAIL_HOST_LD_LIBRARY_PATH="${LD_LIBRARY_PATH-}"
-export FLECTAR_MAIL_BUNDLED=1
+export FORTAX_MAIL_HOST_LD_LIBRARY_PATH="${LD_LIBRARY_PATH-}"
+export FORTAX_MAIL_BUNDLED=1
 
 # linuxdeploy places any non-system ELF dependencies here.
 export LD_LIBRARY_PATH="$app_dir/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
@@ -97,4 +97,4 @@ export SLINT_BACKEND="${SLINT_BACKEND:-winit-software}"
 
 # Keep the process name stable. Some native UI/runtime discovery code uses
 # argv[0], while the generic cargo-appimage runner passes "AppRun" here.
-exec -a flectar-mail "$app_dir/usr/bin/flectar-mail" "$@"
+exec -a fortax-mail "$app_dir/usr/bin/fortax-mail" "$@"

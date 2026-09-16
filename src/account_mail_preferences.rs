@@ -1,6 +1,6 @@
 //! Native account signature and OpenPGP controls.
 use super::*;
-use flectar_mail_core::{
+use fortax_mail_core::{
     Core,
     mail_security::{MailSecurity, OpenedMessage},
     models::{Settings, Signature, SignatureDefaults},
@@ -55,7 +55,7 @@ impl UiWork {
 
 async fn preferences(
     core: &Core,
-) -> Result<(Settings, Vec<flectar_mail_core::models::AccountConfig>), String> {
+) -> Result<(Settings, Vec<fortax_mail_core::models::AccountConfig>), String> {
     let settings = core.get_settings().await.map_err(|e| e.to_string())?;
     let configs = core
         .list_account_configs()
@@ -95,7 +95,7 @@ fn project(app: &AppWindow, settings: &Settings, account_id: i64) {
             .map(|s| SignatureChoice {
                 id: s.id.clone().into(),
                 name: s.name.clone().into(),
-                text: flectar_mail_core::signatures::plain_text(s).into(),
+                text: fortax_mail_core::signatures::plain_text(s).into(),
             })
             .collect::<Vec<_>>(),
     )));
@@ -264,7 +264,7 @@ pub(super) fn register(
             id: ui.get_editing_id().to_string(),
             account_id: i64::from(ui.get_account_id()),
             name: ui.get_signature_name().to_string(),
-            html: flectar_mail_core::signatures::text_html(ui.get_signature_text().as_str()),
+            html: fortax_mail_core::signatures::text_html(ui.get_signature_text().as_str()),
         };
         work.spawn(
             &app,
@@ -559,7 +559,7 @@ enum KeyResult {
 }
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 async fn key_action(action: &str, fingerprint: &str, email: &str) -> Result<KeyResult, String> {
-    let gpg = flectar_mail_core::mail_security::Gpg::default();
+    let gpg = fortax_mail_core::mail_security::Gpg::default();
     match action {
         "generate" => gpg
             .generate_key(email)
@@ -579,7 +579,7 @@ async fn key_action(action: &str, fingerprint: &str, email: &str) -> Result<KeyR
                             "sec" => Some("Private key".to_owned()),
                             "fpr" => f.get(9).map(|s| format!("  {s}")),
                             "uid" => f.get(9).map(|s| {
-                                format!("  {}", flectar_mail_core::mail_security::decode_colon(s))
+                                format!("  {}", fortax_mail_core::mail_security::decode_colon(s))
                             }),
                             _ => None,
                         }
@@ -815,8 +815,8 @@ fn register_composer(
             }
         };
         let signature = usize::try_from(index - 1).ok().and_then(|i| available.borrow().get(i).cloned());
-        let text = signature.as_ref().map(flectar_mail_core::signatures::plain_text).unwrap_or_default();
-        let new_body = flectar_mail_core::signatures::insert(&body, &text);
+        let text = signature.as_ref().map(fortax_mail_core::signatures::plain_text).unwrap_or_default();
+        let new_body = fortax_mail_core::signatures::insert(&body, &text);
         *inserted.borrow_mut() = if text.is_empty() { None } else { Some(format!("\n\n-- \n{}", text.trim())) };
         let selection = document.synchronize(&new_body, 0, 0);
         apply_rich_compose(&app, &document, selection, &mut editor.borrow_mut());

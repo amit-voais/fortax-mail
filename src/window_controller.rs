@@ -5,15 +5,15 @@
 //! the application composition root independent of platform window policy.
 
 use super::*;
-use crate::tray_ui::FlectarTray;
+use crate::tray_ui::FortaxTray;
 
 pub(super) fn create_and_register_window_lifecycle(
     app: &AppWindow,
-) -> Result<Option<FlectarTray>, slint::PlatformError> {
+) -> Result<Option<FortaxTray>, slint::PlatformError> {
     #[cfg(not(any(target_os = "android", target_os = "ios", feature = "flatpak")))]
-    let tray = Some(FlectarTray::new()?);
+    let tray = Some(FortaxTray::new()?);
     #[cfg(any(target_os = "android", target_os = "ios", feature = "flatpak"))]
-    let tray: Option<FlectarTray> = None;
+    let tray: Option<FortaxTray> = None;
 
     #[cfg(any(target_os = "android", target_os = "ios", feature = "flatpak"))]
     app.set_close_to_tray(false);
@@ -57,7 +57,7 @@ pub(super) fn create_and_register_window_lifecycle(
 
 pub(super) fn register_window_preference_callbacks(
     app: &AppWindow,
-    tray: Option<&FlectarTray>,
+    tray: Option<&FortaxTray>,
     state: &Rc<RefCell<InboxState>>,
     runtime: &Rc<tokio::runtime::Runtime>,
     ui_task_tx: &UiSender<UiTaskUpdate>,
@@ -71,7 +71,7 @@ pub(super) fn register_window_preference_callbacks(
     });
 
     let app_weak = app.as_weak();
-    let tray_for_close_setting = tray.map(FlectarTray::as_weak);
+    let tray_for_close_setting = tray.map(FortaxTray::as_weak);
     let state_for_close_setting = Rc::clone(state);
     let runtime_for_close_setting = Rc::clone(runtime);
     let ui_task_tx_for_close_setting = ui_task_tx.clone();
@@ -111,10 +111,10 @@ pub(super) fn register_window_preference_callbacks(
                 Ok(()) => UiTaskUpdate {
                     message: if enabled {
                         UiMessage::plain(
-                            "Closing the window will now keep Flectar Mail in the tray.",
+                            "Closing the window will now keep Fortax Mail in the tray.",
                         )
                     } else {
-                        UiMessage::plain("Closing the window will now quit Flectar Mail.")
+                        UiMessage::plain("Closing the window will now quit Fortax Mail.")
                     },
                     accounts: None,
                     calendar_connections: None,

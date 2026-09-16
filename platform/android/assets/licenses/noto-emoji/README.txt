@@ -1,6 +1,6 @@
 Noto Emoji
 
-Flectar Mail embeds the unmodified Noto Emoji variable font from:
+Fortax Mail embeds the unmodified Noto Emoji variable font from:
 https://github.com/google/fonts/tree/main/ofl/notoemoji
 
 SHA-256:

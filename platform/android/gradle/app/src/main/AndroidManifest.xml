@@ -8,13 +8,13 @@
         android:allowBackup="false"
         android:fullBackupContent="false"
         android:icon="@mipmap/ic_launcher"
-        android:label="Flectar Mail"
+        android:label="Fortax Mail"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar"
         android:usesCleartextTraffic="false">
         <activity
-            android:name=".FlectarActivity"
+            android:name=".FortaxActivity"
             android:alwaysRetainTaskState="true"
             android:configChanges="orientation|keyboardHidden|screenSize|screenLayout|smallestScreenSize|density|uiMode|locale|layoutDirection|fontScale|keyboard|navigation|touchscreen"
             android:exported="true"
@@ -22,7 +22,7 @@
             android:screenOrientation="unspecified">
             <meta-data
                 android:name="android.app.lib_name"
-                android:value="flectar_mail_android" />
+                android:value="fortax_mail_android" />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -32,7 +32,7 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data
-                    android:host="com.flectar.mail"
+                    android:host="in.fortax.mail"
                     android:scheme="msauth" />
             </intent-filter>
         </activity>

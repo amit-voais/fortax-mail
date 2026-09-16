@@ -35,7 +35,7 @@ def main() -> None:
     for path in (Path("Cargo.lock"), Path("platform/android/Cargo.lock")):
         with path.open("rb") as lockfile:
             packages = tomllib.load(lockfile)["package"]
-        if not any(p["name"] == "flectar-mail" and p["version"] == version for p in packages):
+        if not any(p["name"] == "fortax-mail" and p["version"] == version for p in packages):
             raise SystemExit(f"{path} does not match the root Cargo.toml; refresh its workspace lockfile")
     try:
         values = metadata(version, args.tag)

@@ -373,7 +373,7 @@ export component SettingsDialog inherits Rectangle {
                                         height: root.compact ? 120px : 58px;
                                         compact: root.compact;
                                         title: @tr("Renderer");
-                                        description: RendererSettings.gpu-supported ? @tr("Changes take effect after restarting Flectar Mail.") : @tr("GPU mode is unavailable in this build.");
+                                        description: RendererSettings.gpu-supported ? @tr("Changes take effect after restarting Fortax Mail.") : @tr("GPU mode is unavailable in this build.");
                                         choices: RendererSettings.gpu-supported ? [@tr("CPU — Low Memory"), @tr("GPU — WGPU")] : [@tr("CPU — Low Memory")];
                                         selected-index: RendererSettings.gpu-supported && RendererSettings.preferred == "gpu" ? 1 : 0;
                                         title-color: root.body-text;
@@ -607,7 +607,7 @@ export component SettingsDialog inherits Rectangle {
                                     VerticalBox {
                                         spacing: 5px;
                                         Text { text: @tr("Keep running in system tray"); color: root.heading; font-size: TypeScale.subtitle; font-weight: 700; }
-                                        Text { text: @tr("Closing the window hides Flectar Mail while mail continues syncing."); color: root.faint-text; font-size: TypeScale.secondary; }
+                                        Text { text: @tr("Closing the window hides Fortax Mail while mail continues syncing."); color: root.faint-text; font-size: TypeScale.secondary; }
                                         Text { text: @tr("Disabled by default; Quit from the tray menu stops the app."); color: root.faint-text; font-size: TypeScale.caption; }
                                     }
                                     Rectangle { horizontal-stretch: 1; }
@@ -1044,7 +1044,7 @@ export component SettingsDialog inherits Rectangle {
                         mouse-drag-pan-enabled: root.compact;
                         VerticalBox { x: root.compact ? 16px : max(24px, (notifications-scroll.visible-width - 920px) / 2); width: root.compact ? notifications-scroll.visible-width - 32px : min(920px, notifications-scroll.visible-width - 48px); padding-top: root.compact ? LayoutMetrics.compact-header-height + 16px : 28px; padding-bottom: 32px; spacing: 10px;
                             Text { height: 28px; text: @tr("Notifications"); color: root.title-color; font-size: TypeScale.display; font-weight: 700; vertical-alignment: center; }
-                            Text { height: 20px; text: @tr("Choose how Flectar Mail gets your attention."); color: root.secondary-text; font-size: TypeScale.secondary; vertical-alignment: center; }
+                            Text { height: 20px; text: @tr("Choose how Fortax Mail gets your attention."); color: root.secondary-text; font-size: TypeScale.secondary; vertical-alignment: center; }
                             Rectangle {
                                 height: root.compact ? 228px : 152px;
                                 vertical-stretch: 0;
@@ -1118,7 +1118,7 @@ export component SettingsDialog inherits Rectangle {
                             spacing: 14px;
 
                             Text { height: 28px; text: @tr("About"); color: root.title-color; font-size: TypeScale.display; font-weight: 700; vertical-alignment: center; }
-                            Text { height: root.compact ? 34px : 17px; text: @tr("Flectar Mail, its makers, and its community."); color: root.secondary-text; font-size: TypeScale.secondary; vertical-alignment: center; wrap: word-wrap; }
+                            Text { height: root.compact ? 34px : 17px; text: @tr("Fortax Mail, its makers, and its community."); color: root.secondary-text; font-size: TypeScale.secondary; vertical-alignment: center; wrap: word-wrap; }
 
                             Rectangle {
                                 height: root.compact ? 228px : 204px;
@@ -1132,16 +1132,16 @@ export component SettingsDialog inherits Rectangle {
                                     y: 24px;
                                     width: 62px;
                                     height: 62px;
-                                    source: @image-url("../../resources/app-icon/flectar-mail-masked.svg");
+                                    source: @image-url("../../resources/app-icon/fortax-mail-masked.svg");
                                     image-fit: contain;
-                                    accessible-label: @tr("Flectar Mail logo");
+                                    accessible-label: @tr("Fortax Mail logo");
                                 }
                                 Text {
                                     x: 20px;
                                     y: 104px;
                                     width: parent.width - 40px;
                                     height: 28px;
-                                    text: @tr("Flectar Mail");
+                                    text: @tr("Fortax Mail");
                                     color: root.title-color;
                                     font-size: TypeScale.display-large;
                                     font-weight: 600;
@@ -1177,7 +1177,7 @@ export component SettingsDialog inherits Rectangle {
                             Rectangle {
                                 height: root.compact ? 188px : 178px;
                                 vertical-stretch: 0;
-                                SettingsCard { title: @tr("Credits"); description: @tr("Built by Flectar with help from the open-source community."); surface: root.surface; card-border-color: root.border-subtle; heading: root.heading; secondary-text: root.faint-text; }
+                                SettingsCard { title: @tr("Credits"); description: @tr("Built by Fortax with help from the open-source community."); surface: root.surface; card-border-color: root.border-subtle; heading: root.heading; secondary-text: root.faint-text; }
                                 VerticalBox {
                                     x: 20px;
                                     y: 66px;
@@ -1185,15 +1185,15 @@ export component SettingsDialog inherits Rectangle {
                                     height: 104px;
                                     spacing: 0px;
                                     SettingsLinkRow {
-                                        text: @tr("Flectar");
+                                        text: @tr("Fortax");
                                         description: @tr("Company website");
-                                        icon: @image-url("../../resources/app-icon/flectar-mail-masked.svg");
+                                        icon: @image-url("../../resources/app-icon/fortax-mail-masked.svg");
                                         colorize-icon: false;
                                         accent: root.accent;
                                         body-text: root.body-text;
                                         muted-text: root.faint-text;
                                         hover-background: root.accent-soft;
-                                        clicked => { root.open-link("https://flectar.com"); }
+                                        clicked => { root.open-link("https://fortax.in"); }
                                     }
                                     SettingsLinkRow {
                                         text: @tr("Open-source contributors");
@@ -1203,14 +1203,14 @@ export component SettingsDialog inherits Rectangle {
                                         body-text: root.body-text;
                                         muted-text: root.faint-text;
                                         hover-background: root.accent-soft;
-                                        clicked => { root.open-link("https://github.com/flectar/mail/graphs/contributors"); }
+                                        clicked => { root.open-link("https://github.com/amit-voais/fortax-mail/graphs/contributors"); }
                                     }
                                 }
                             }
 
                             Rectangle {
                                 height: root.compact ? 164px : 132px;
-                                SettingsCard { title: @tr("License"); description: root.compact ? @tr("AGPL-3.0-only.") : @tr("Flectar Mail is released under the GNU Affero General Public License v3.0 only."); surface: root.surface; card-border-color: root.border-subtle; heading: root.heading; secondary-text: root.faint-text; }
+                                SettingsCard { title: @tr("License"); description: root.compact ? @tr("AGPL-3.0-only.") : @tr("Fortax Mail is released under the GNU Affero General Public License v3.0 only."); surface: root.surface; card-border-color: root.border-subtle; heading: root.heading; secondary-text: root.faint-text; }
                                 Text {
                                     x: 20px;
                                     y: 76px;
@@ -1575,7 +1575,7 @@ export component SettingsDialog inherits Rectangle {
             height: parent.height;
             open <=> root.delete_data_confirmation;
             title: @tr("Delete all local data?");
-            description: @tr("This removes every account, downloaded message, calendar, contact, preference, and credential stored by Flectar Mail on this device.");
+            description: @tr("This removes every account, downloaded message, calendar, contact, preference, and credential stored by Fortax Mail on this device.");
             detail: @tr("Mail and events on Gmail, Outlook, and IMAP servers will not be deleted.");
             confirm-label: @tr("Delete everything");
             cancel-label: @tr("Keep my data");

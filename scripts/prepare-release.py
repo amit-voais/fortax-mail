@@ -13,19 +13,19 @@ def prepare(source: Path, destination: Path, version: str) -> None:
     # the package's internal Debian version keeps '~' for prerelease ordering.
     deb_filename_version = deb_version.replace("~", ".")
     packages = {
-        "flectar-mail.AppImage": f"flectar-mail-{version}-linux-x64.AppImage",
-        f"flectar-mail_{deb_version}_amd64.deb": f"flectar-mail_{deb_filename_version}_amd64.deb",
-        "flectar-mail.rpm": f"flectar-mail-{version}-linux-x64.rpm",
-        "flectar-mail.flatpak": f"flectar-mail-{version}-linux-x64.flatpak",
-        "flectar-mail-windows-x64.zip": f"flectar-mail-{version}-windows-x64.zip",
-        "flectar-mail-windows-x64-setup.exe": f"flectar-mail-{version}-windows-x64-setup.exe",
-        "flectar-mail-macos-arm64.zip": f"flectar-mail-{version}-macos-arm64.zip",
-        "flectar-mail-macos-arm64.dmg": f"flectar-mail-{version}-macos-arm64.dmg",
-        "flectar-mail-macos-x64.zip": f"flectar-mail-{version}-macos-x64.zip",
-        "flectar-mail-macos-x64.dmg": f"flectar-mail-{version}-macos-x64.dmg",
+        "fortax-mail.AppImage": f"fortax-mail-{version}-linux-x64.AppImage",
+        f"fortax-mail_{deb_version}_amd64.deb": f"fortax-mail_{deb_filename_version}_amd64.deb",
+        "fortax-mail.rpm": f"fortax-mail-{version}-linux-x64.rpm",
+        "fortax-mail.flatpak": f"fortax-mail-{version}-linux-x64.flatpak",
+        "fortax-mail-windows-x64.zip": f"fortax-mail-{version}-windows-x64.zip",
+        "fortax-mail-windows-x64-setup.exe": f"fortax-mail-{version}-windows-x64-setup.exe",
+        "fortax-mail-macos-arm64.zip": f"fortax-mail-{version}-macos-arm64.zip",
+        "fortax-mail-macos-arm64.dmg": f"fortax-mail-{version}-macos-arm64.dmg",
+        "fortax-mail-macos-x64.zip": f"fortax-mail-{version}-macos-x64.zip",
+        "fortax-mail-macos-x64.dmg": f"fortax-mail-{version}-macos-x64.dmg",
     }
     if "-" in version:
-        packages["flectar-mail.apk"] = f"flectar-mail-{version}-android-arm64-test.apk"
+        packages["fortax-mail.apk"] = f"fortax-mail-{version}-android-arm64-test.apk"
     # Validate every input before copying anything; unrelated benchmark files
     # are intentionally excluded from the public downloads.
     selected = []

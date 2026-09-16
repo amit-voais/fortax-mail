@@ -11,7 +11,7 @@ use crate::{
     theme::stored_color,
     ui_dispatch::UiWake,
 };
-use flectar_mail_core::{
+use fortax_mail_core::{
     config::Paths,
     events::CoreEvent,
     models::{
@@ -443,8 +443,8 @@ impl PendingCoreUpdates {
 
 pub(crate) async fn load_startup_snapshot(
     paths: Paths,
-    credentials: flectar_mail_core::accounts::credentials::CredentialStoreHandle,
-    oauth_redirects: flectar_mail_core::oauth::redirect::OAuthRedirectBrokerHandle,
+    credentials: fortax_mail_core::accounts::credentials::CredentialStoreHandle,
+    oauth_redirects: fortax_mail_core::oauth::redirect::OAuthRedirectBrokerHandle,
     preferred_scope: &str,
     metrics: &StartupMetrics,
 ) -> Result<StartupSnapshot, String> {
@@ -599,7 +599,7 @@ pub(crate) fn spawn_core_event_listener(
 }
 
 pub(crate) fn refresh_oauth_availability(app: &AppWindow) {
-    use flectar_mail_core::{models::Provider, oauth::providers::resolve_credentials};
+    use fortax_mail_core::{models::Provider, oauth::providers::resolve_credentials};
     app.set_google_oauth_available(resolve_credentials(Provider::Gmail).is_ok());
     app.set_microsoft_oauth_available(resolve_credentials(Provider::Microsoft).is_ok());
 }
@@ -664,7 +664,7 @@ pub(crate) fn apply_settings(app: &AppWindow, settings: &Settings) {
 #[cfg(test)]
 mod warm_start_tests {
     use super::*;
-    use flectar_mail_core::models::{AuthKind, MailProtocol, Provider};
+    use fortax_mail_core::models::{AuthKind, MailProtocol, Provider};
 
     fn account() -> Account {
         Account {

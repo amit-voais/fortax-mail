@@ -29,9 +29,9 @@ def verify_elf(data, name):
 def verify_apk(path):
     with zipfile.ZipFile(path) as archive:
         names = set(archive.namelist())
-        app_libraries = sorted(name for name in names if name.endswith("/libflectar_mail_android.so"))
+        app_libraries = sorted(name for name in names if name.endswith("/libfortax_mail_android.so"))
         if not app_libraries:
-            raise ValueError("APK contains no Flectar native application")
+            raise ValueError("APK contains no Fortax native application")
         for app in app_libraries:
             abi = app.split("/")[1]
             pdfium = f"lib/{abi}/libpdfium.so"

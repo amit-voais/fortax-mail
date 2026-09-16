@@ -66,8 +66,8 @@ use favicon::{
     FaviconImage, FaviconImages, FaviconLoader, ProfileAvatarImages, ProfileAvatarLoader,
     physical_pixel_side,
 };
-use flectar_mail_core::config::Paths;
-use flectar_mail_core::models::{
+use fortax_mail_core::config::Paths;
+use fortax_mail_core::models::{
     Account, AccountConfig, AddPasswordAccountArgs, CalendarConnection, CardDavConnection,
     ContactRecord, ContactRecordCursor, ContactRecordPage, CreateEventArgs, DraftAttachmentIn,
     Label, MailProtocol, Provider, Snippet, ThreadCursor, UpdateEventArgs,
@@ -875,12 +875,12 @@ impl InboxState {
 pub struct PlatformContext {
     pub paths: Paths,
     pub documents: Arc<dyn documents::DocumentProvider>,
-    pub credentials: flectar_mail_core::accounts::credentials::CredentialStoreHandle,
-    pub oauth_redirects: flectar_mail_core::oauth::redirect::OAuthRedirectBrokerHandle,
+    pub credentials: fortax_mail_core::accounts::credentials::CredentialStoreHandle,
+    pub oauth_redirects: fortax_mail_core::oauth::redirect::OAuthRedirectBrokerHandle,
 }
 
 impl PlatformContext {
-    pub fn desktop() -> Result<Self, flectar_mail_core::error::CoreError> {
+    pub fn desktop() -> Result<Self, fortax_mail_core::error::CoreError> {
         let paths = Paths::default_dirs()?;
         let credentials = desktop_credential_store(&paths);
         Ok(Self {
@@ -888,7 +888,7 @@ impl PlatformContext {
             documents: documents::default_provider(),
             credentials,
             oauth_redirects: Arc::new(
-                flectar_mail_core::oauth::redirect::LoopbackRedirectBroker::default(),
+                fortax_mail_core::oauth::redirect::LoopbackRedirectBroker::default(),
             ),
         })
     }
@@ -896,8 +896,8 @@ impl PlatformContext {
     pub fn app_private(
         data_root: PathBuf,
         cache_root: PathBuf,
-        credentials: flectar_mail_core::accounts::credentials::CredentialStoreHandle,
-        oauth_redirects: flectar_mail_core::oauth::redirect::OAuthRedirectBrokerHandle,
+        credentials: fortax_mail_core::accounts::credentials::CredentialStoreHandle,
+        oauth_redirects: fortax_mail_core::oauth::redirect::OAuthRedirectBrokerHandle,
     ) -> Self {
         Self {
             paths: Paths::new(data_root.join("data"), cache_root.join("cache")),
@@ -910,7 +910,7 @@ impl PlatformContext {
 
 fn desktop_credential_store(
     paths: &Paths,
-) -> flectar_mail_core::accounts::credentials::CredentialStoreHandle {
+) -> fortax_mail_core::accounts::credentials::CredentialStoreHandle {
     #[cfg(all(target_os = "linux", debug_assertions))]
     if isolated_container_without_secret_service() {
         let path = paths.data_dir.join("credentials-v1.json");
@@ -919,12 +919,12 @@ fn desktop_credential_store(
             "credential: no D-Bus session in development container; using debug-only plaintext storage"
         );
         return Arc::new(
-            flectar_mail_core::accounts::credentials::DevelopmentFileCredentialStore::new(path),
+            fortax_mail_core::accounts::credentials::DevelopmentFileCredentialStore::new(path),
         );
     }
     #[cfg(not(all(target_os = "linux", debug_assertions)))]
     let _ = paths;
-    Arc::new(flectar_mail_core::accounts::credentials::SystemCredentialStore)
+    Arc::new(fortax_mail_core::accounts::credentials::SystemCredentialStore)
 }
 
 #[cfg(all(target_os = "linux", debug_assertions))]
@@ -979,7 +979,7 @@ fn startup_diagnostic_id(error: &str) -> String {
 
 fn startup_diagnostics(paths: &Paths, diagnostic_id: &str, error: &str) -> String {
     format!(
-        "Flectar Mail {}\nplatform={}\nabi={}\ndiagnostic_id={}\nmail_db={}\ncalendar_db={}\nmail_db_exists={}\ncalendar_db_exists={}\nstartup_error={}\n",
+        "Fortax Mail {}\nplatform={}\nabi={}\ndiagnostic_id={}\nmail_db={}\ncalendar_db={}\nmail_db_exists={}\ncalendar_db_exists={}\nstartup_error={}\n",
         env!("CARGO_PKG_VERSION"),
         std::env::consts::OS,
         std::env::consts::ARCH,
@@ -995,8 +995,8 @@ fn startup_diagnostics(paths: &Paths, diagnostic_id: &str, error: &str) -> Strin
 fn spawn_startup_load(
     runtime: &tokio::runtime::Runtime,
     paths: Paths,
-    credentials: flectar_mail_core::accounts::credentials::CredentialStoreHandle,
-    oauth_redirects: flectar_mail_core::oauth::redirect::OAuthRedirectBrokerHandle,
+    credentials: fortax_mail_core::accounts::credentials::CredentialStoreHandle,
+    oauth_redirects: fortax_mail_core::oauth::redirect::OAuthRedirectBrokerHandle,
     startup_tx: UiSender<StartupUpdate>,
     metrics: StartupMetrics,
 ) {
@@ -1071,7 +1071,7 @@ pub fn run_desktop(platform: PlatformContext) -> Result<(), Box<dyn std::error::
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     if let Err(error) = &result
         && error.is::<renderer_preferences::GpuStartupError>()
-        && std::env::var_os("FLECTAR_GPU_FALLBACK").is_none()
+        && std::env::var_os("FORTAX_GPU_FALLBACK").is_none()
     {
         return renderer_preferences::restart_cpu(error.as_ref());
     }
@@ -1081,14 +1081,14 @@ pub fn run_desktop(platform: PlatformContext) -> Result<(), Box<dyn std::error::
 pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> {
     let startup_metrics = StartupMetrics::from_environment();
     let benchmark_disable_background =
-        std::env::var("FLECTAR_BENCHMARK_DISABLE_SYNC").as_deref() == Ok("1");
+        std::env::var("FORTAX_BENCHMARK_DISABLE_SYNC").as_deref() == Ok("1");
     normalize_appimage_environment();
 
     let renderer_preference_path = platform.paths.data_dir.join("renderer.json");
     let preferred_renderer = renderer_preferences::load(&renderer_preference_path);
     let requested_renderer = renderer_preferences::requested(preferred_renderer);
     eprintln!(
-        "FLECTAR_RENDERER {}",
+        "FORTAX_RENDERER {}",
         serde_json::json!({
             "event": "requested", "pid": std::process::id(),
             "preferred": preferred_renderer.key(), "requested": requested_renderer.key(),
@@ -1113,7 +1113,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     };
 
     eprintln!(
-        "FLECTAR_RENDERER {}",
+        "FORTAX_RENDERER {}",
         serde_json::json!({
             "event": "selected", "pid": std::process::id(),
             "preferred": preferred_renderer.key(), "requested": requested_renderer.key(),
@@ -1125,13 +1125,13 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         })
     );
 
-    // Match resources/com.flectar.mail.desktop so Wayland compositors and XDG
+    // Match resources/in.fortax.mail.desktop so Wayland compositors and XDG
     // window managers can associate the native window with the installed icon.
     #[cfg(all(
         unix,
         not(any(target_os = "android", target_os = "ios", target_os = "macos"))
     ))]
-    slint::set_xdg_app_id("com.flectar.mail")?;
+    slint::set_xdg_app_id("in.fortax.mail")?;
 
     let runtime = Rc::new(
         tokio::runtime::Builder::new_multi_thread()
@@ -1219,21 +1219,21 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
         eprintln!("email images unavailable: {error}");
     }
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    if let Some(value) = std::env::var_os("FLECTAR_PREVIEW_SIZE") {
+    if let Some(value) = std::env::var_os("FORTAX_PREVIEW_SIZE") {
         match value.to_str().map(parse_preview_window_size) {
             Some(Ok(size)) => app.window().set_size(size),
-            Some(Err(error)) => eprintln!("ignoring FLECTAR_PREVIEW_SIZE: {error}"),
-            None => eprintln!("ignoring FLECTAR_PREVIEW_SIZE: value is not valid UTF-8"),
+            Some(Err(error)) => eprintln!("ignoring FORTAX_PREVIEW_SIZE: {error}"),
+            None => eprintln!("ignoring FORTAX_PREVIEW_SIZE: value is not valid UTF-8"),
         }
     }
     app.set_compose_from_label(app.global::<I18n>().invoke_no_connected_account());
     app.set_remote_images_available(cfg!(feature = "remote-content"));
     app.set_remote_images_enabled(false);
     app.set_google_oauth_bundled(
-        flectar_mail_core::oauth::providers::has_bundled_credentials(Provider::Gmail),
+        fortax_mail_core::oauth::providers::has_bundled_credentials(Provider::Gmail),
     );
     app.set_microsoft_oauth_bundled(
-        flectar_mail_core::oauth::providers::has_bundled_credentials(Provider::Microsoft),
+        fortax_mail_core::oauth::providers::has_bundled_credentials(Provider::Microsoft),
     );
     let tray = create_and_register_window_lifecycle(&app)?;
     let email_renderer = Rc::clone(&initial_state.email_renderer);
@@ -1271,7 +1271,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                         return;
                     }
                     let info = device.adapter_info();
-                    eprintln!("FLECTAR_RENDERER {}", serde_json::json!({
+                    eprintln!("FORTAX_RENDERER {}", serde_json::json!({
                         "event": "gpu_ready", "wgpu_version": 29,
                         "backend": format!("{:?}", info.backend), "adapter": info.name,
                         "device_type": format!("{:?}", info.device_type),
@@ -1315,7 +1315,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                     }
                     Ok(None) => {}
                     Err(gpu_error) => {
-                        eprintln!("FLECTAR_RENDERER {}", serde_json::json!({
+                        eprintln!("FORTAX_RENDERER {}", serde_json::json!({
                             "event": "email_render_fallback", "slint": "femtovg-wgpu",
                             "blitz": "vello-cpu", "error": gpu_error,
                         }));
@@ -2147,7 +2147,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             .cloned();
         let Some(event) = event else {
             app.set_sync_status(UiMessage::plain(
-                "Only events created in Flectar Mail can be edited.",
+                "Only events created in Fortax Mail can be edited.",
             ));
             return;
         };
@@ -2184,7 +2184,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             .any(|event| event.id == event_id && event.is_local);
         if !is_local {
             app.set_sync_status(UiMessage::plain(
-                "Only events created in Flectar Mail can be deleted.",
+                "Only events created in Fortax Mail can be deleted.",
             ));
             return;
         }
@@ -4602,7 +4602,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
     let compose_document = Rc::new(RefCell::new(RichComposeDocument::default()));
     let compose_editor = Rc::new(RefCell::new(CosmicComposeEditor::default()));
     let compose_contacts = Rc::new(RefCell::new(
-        Vec::<flectar_mail_core::models::Address>::new(),
+        Vec::<fortax_mail_core::models::Address>::new(),
     ));
     let compose_intent = Rc::new(RefCell::new(ComposeIntent::default()));
     let compose_send_action = Rc::new(Cell::new(None::<i64>));
@@ -5725,12 +5725,12 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                 imap_port,
                 smtp_host: smtp_host.to_string(),
                 smtp_port,
-                connection: flectar_mail_core::models::MailConnectionSettings {
-                    imap_security: flectar_mail_core::models::ConnectionSecurity::parse(
+                connection: fortax_mail_core::models::MailConnectionSettings {
+                    imap_security: fortax_mail_core::models::ConnectionSecurity::parse(
                         app.get_imap_security().as_str(),
                     )
                     .unwrap_or_default(),
-                    smtp_security: flectar_mail_core::models::ConnectionSecurity::parse(
+                    smtp_security: fortax_mail_core::models::ConnectionSecurity::parse(
                         app.get_smtp_security().as_str(),
                     )
                     .unwrap_or_default(),
@@ -5809,7 +5809,7 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
             return;
         };
         startup::refresh_oauth_availability(&app);
-        if flectar_mail_core::oauth::providers::resolve_credentials(provider).is_err() {
+        if fortax_mail_core::oauth::providers::resolve_credentials(provider).is_err() {
             app.set_sync_status(UiMessage::plain(
                 "Add app keys in Sign-in settings to enable this provider.",
             ));
@@ -6619,7 +6619,7 @@ mod tests {
         assert_eq!(filtered.len(), 8);
         assert!(filtered.iter().all(|email| email.folder == "Inbox"));
         assert!(filtered.iter().any(|email| email.account == "Personal"));
-        assert!(filtered.iter().any(|email| email.account == "Flectar"));
+        assert!(filtered.iter().any(|email| email.account == "Fortax"));
     }
 
     #[test]
@@ -6700,7 +6700,7 @@ mod tests {
 
     #[test]
     fn selecting_a_contact_replaces_the_active_token() {
-        let contact = flectar_mail_core::models::Address {
+        let contact = fortax_mail_core::models::Address {
             name: Some("Maya Chen".to_owned()),
             email: "maya@example.com".to_owned(),
         };
@@ -6787,6 +6787,6 @@ pub fn suspend_file_preview() {
 
 #[cfg(target_os = "ios")]
 #[unsafe(no_mangle)]
-extern "C" fn flectar_suspend_pdf_preview() {
+extern "C" fn fortax_suspend_pdf_preview() {
     suspend_file_preview();
 }

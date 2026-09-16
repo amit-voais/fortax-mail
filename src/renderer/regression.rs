@@ -964,7 +964,7 @@ fn complex_template_recovery_paints_text_in_the_first_viewport() {
 
 #[test]
 fn floated_inline_content_finishes_layout_and_remains_visible() {
-    const CHILD: &str = "FLECTAR_FLOAT_LAYOUT_TEST_CHILD";
+    const CHILD: &str = "FORTAX_FLOAT_LAYOUT_TEST_CHILD";
     if std::env::var_os(CHILD).is_none() {
         // An infinite line-breaking loop must fail this regression, not hang
         // the entire test suite. Keep the renderer in a killable subprocess.
@@ -1006,7 +1006,7 @@ fn floated_inline_content_finishes_layout_and_remains_visible() {
              <a href='https://example.com/offer'>Visible offer</a>\
              </td></tr></table> After</td></tr></table></body>"
         );
-        for html in [html.clone(), flectar_mail_core::mime::sanitize_html(&html)] {
+        for html in [html.clone(), fortax_mail_core::mime::sanitize_html(&html)] {
             let mut r = renderer(&html);
             assert!(r.notice.is_none());
             for phrase in ["Before", "Visible offer", "After"] {

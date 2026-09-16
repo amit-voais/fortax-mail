@@ -37,11 +37,11 @@ stage_linux_metadata = linux_metadata.stage
 class ReleaseTests(unittest.TestCase):
     def test_flatpak_pdfium_archive_keeps_expected_layout(self):
         manifest = (
-            SCRIPTS.parent / "packaging/flatpak/com.flectar.mail.yml"
+            SCRIPTS.parent / "packaging/flatpak/in.fortax.mail.yml"
         ).read_text()
         self.assertIn(
             "install -Dm0755 pdfium-runtime/lib/libpdfium.so "
-            "/app/lib/flectar-mail/libpdfium.so",
+            "/app/lib/fortax-mail/libpdfium.so",
             manifest,
         )
         self.assertRegex(
@@ -130,11 +130,11 @@ class ReleaseTests(unittest.TestCase):
                 env={**os.environ, "ANDROID_HOME": str(root)}, text=True,
             )
             self.assertIn("Google Android OAuth SHA-1: CE:48:C4:6E:4A:A0:46:EF:00:7C:1F:96:5F:87:97:69:1B:A4:0E:9F", output)
-            self.assertIn("Microsoft redirect URI: msauth://com.flectar.mail/", output)
+            self.assertIn("Microsoft redirect URI: msauth://in.fortax.mail/", output)
 
     def test_android_signing_uses_certificate_not_display_name(self):
         digest = "ab" * 32
-        for subject in ("CN=Flectar Mail Test, O=Android, C=US", "C=US,O=Android,CN=Flectar Mail Test"):
+        for subject in ("CN=Fortax Mail Test, O=Android, C=US", "C=US,O=Android,CN=Fortax Mail Test"):
             signing = (
                 "Verified using v2 scheme (APK Signature Scheme v2): true\n"
                 "Number of signers: 1\n"
@@ -152,16 +152,16 @@ class ReleaseTests(unittest.TestCase):
                     verify_android_signing(signing.replace("signers: 1", "signers: 2"), "test", digest)
                 with self.assertRaises(ValueError):
                     verify_android_signing(signing.replace(": true", ": false"), "test", digest)
-        production = signing.replace("CN=Flectar Mail Test", "CN=Flectar")
+        production = signing.replace("CN=Fortax Mail Test", "CN=Fortax")
         verify_android_signing(production, "production")
         with self.assertRaises(ValueError):
-            verify_android_signing(production.replace("CN=Flectar", "CN=Android Debug"), "production")
+            verify_android_signing(production.replace("CN=Fortax", "CN=Android Debug"), "production")
 
     def test_linux_metadata_versions(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "resources").mkdir()
-            for name in ("com.flectar.mail.desktop", "com.flectar.mail.metainfo.xml"):
+            for name in ("in.fortax.mail.desktop", "in.fortax.mail.metainfo.xml"):
                 shutil.copyfile(SCRIPTS.parent / "resources" / name, root / "resources" / name)
             for version in ("0.2.0-alpha.1", "0.2.0-beta.2", "0.2.0-rc.3", "0.2.0"):
                 with self.subTest(version=version):
@@ -169,9 +169,9 @@ class ReleaseTests(unittest.TestCase):
                     destination = root / version
                     with patch.dict(os.environ, {"SOURCE_DATE_EPOCH": "1767225600"}):
                         stage_linux_metadata(root, destination)
-                    desktop = (destination / "usr/share/applications/com.flectar.mail.desktop").read_text()
+                    desktop = (destination / "usr/share/applications/in.fortax.mail.desktop").read_text()
                     self.assertIn(f"X-AppImage-Version={version}\n", desktop)
-                    release = ET.parse(destination / "usr/share/metainfo/com.flectar.mail.metainfo.xml").find("./releases/release")
+                    release = ET.parse(destination / "usr/share/metainfo/in.fortax.mail.metainfo.xml").find("./releases/release")
                     self.assertEqual(release.get("version"), version)
                     self.assertEqual(release.get("date"), "2026-01-01")
                     self.assertEqual(release.get("type"), "development" if "-" in version else "stable")
@@ -188,9 +188,9 @@ class ReleaseTests(unittest.TestCase):
                 flatpak = root / f"{version}-flatpak"
                 with patch.dict(os.environ, {"SOURCE_DATE_EPOCH": "1767225600"}):
                     stage_linux_metadata(root, flatpak, flatpak=True)
-                desktop = (flatpak / "usr/share/applications/com.flectar.mail.desktop").read_text()
+                desktop = (flatpak / "usr/share/applications/in.fortax.mail.desktop").read_text()
                 self.assertNotIn("X-AppImage-", desktop)
-            for name in ("com.flectar.mail.desktop", "com.flectar.mail.metainfo.xml"):
+            for name in ("in.fortax.mail.desktop", "in.fortax.mail.metainfo.xml"):
                 self.assertEqual((root / "resources" / name).read_bytes(), (SCRIPTS.parent / "resources" / name).read_bytes())
 
     def test_linux_package_metadata(self):
@@ -202,9 +202,9 @@ class ReleaseTests(unittest.TestCase):
                 "scripts/build-deb.sh", "scripts/build-appimage.sh",
                 "scripts/stage-linux-metadata.py", "resources/AppRun",
                 "LICENSE", "THIRD_PARTY_NOTICES.md",
-                "resources/com.flectar.mail.desktop", "resources/com.flectar.mail.metainfo.xml",
-                "resources/app-icon/flectar-mail-masked-512.png",
-                "resources/app-icon/flectar-mail-masked.svg",
+                "resources/in.fortax.mail.desktop", "resources/in.fortax.mail.metainfo.xml",
+                "resources/app-icon/fortax-mail-masked-512.png",
+                "resources/app-icon/fortax-mail-masked.svg",
                 "resources/fonts/google-sans-flex/OFL.txt",
                 "resources/fonts/google-sans-flex/README.md",
                 "resources/debian/source-control.in", "resources/debian/control.in",
@@ -216,7 +216,7 @@ class ReleaseTests(unittest.TestCase):
             shutil.copytree(SCRIPTS.parent / "LICENSES", root / "LICENSES")
             (root / "Cargo.toml").write_text('[package]\nversion = "0.1.0-alpha.1"\n')
             (root / "target/release").mkdir(parents=True)
-            shutil.copyfile("/bin/true", root / "target/release/flectar-mail")
+            shutil.copyfile("/bin/true", root / "target/release/fortax-mail")
             # This test checks package metadata using fixture ELFs. Stub only
             # the download/renderer helpers in the disposable checkout; actual
             # native PDF rendering is exercised by the dedicated smoke tests.
@@ -242,18 +242,18 @@ class ReleaseTests(unittest.TestCase):
             result = subprocess.run(
                 ["bash", str(root / "scripts/build-deb.sh")], cwd=root,
                 env={**os.environ, "PATH": f"{root / 'bin'}:{os.environ['PATH']}",
-                     "FLECTAR_SKIP_BUILD": "0", "FLECTAR_APP_FEATURES": ""},
+                     "FORTAX_SKIP_BUILD": "0", "FORTAX_APP_FEATURES": ""},
                 capture_output=True, text=True,
             )
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            package = root / "target/deb/flectar-mail_0.1.0~alpha.1_amd64.deb"
+            package = root / "target/deb/fortax-mail_0.1.0~alpha.1_amd64.deb"
             self.assertTrue(package.is_file())
             version = subprocess.check_output(["dpkg-deb", "--field", str(package), "Version"], text=True)
             self.assertEqual(version.strip(), "0.1.0~alpha.1")
             extracted = root / "extracted"
             subprocess.run(["dpkg-deb", "--extract", str(package), str(extracted)], check=True)
-            desktop_path = "usr/share/applications/com.flectar.mail.desktop"
-            metainfo_path = "usr/share/metainfo/com.flectar.mail.metainfo.xml"
+            desktop_path = "usr/share/applications/in.fortax.mail.desktop"
+            metainfo_path = "usr/share/metainfo/in.fortax.mail.metainfo.xml"
             self.assertIn("X-AppImage-Version=0.1.0-alpha.1\n", (extracted / desktop_path).read_text())
             release = ET.parse(extracted / metainfo_path).find("./releases/release")
             self.assertEqual(release.get("version"), "0.1.0-alpha.1")
@@ -265,7 +265,7 @@ class ReleaseTests(unittest.TestCase):
             deploy.write_text('''#!/usr/bin/env python3
 import pathlib, sys
 appdir = pathlib.Path(sys.argv[sys.argv.index("--appdir") + 1])
-(appdir / "com.flectar.mail.desktop").symlink_to("usr/share/applications/com.flectar.mail.desktop")
+(appdir / "in.fortax.mail.desktop").symlink_to("usr/share/applications/in.fortax.mail.desktop")
 ''')
             pack = root / "bin/appimagetool"
             pack.write_text('''#!/usr/bin/env python3
@@ -273,8 +273,8 @@ import json, os, pathlib, sys
 appdir = pathlib.Path(sys.argv[1])
 pathlib.Path(sys.argv[2]).write_text(json.dumps({
     "version": os.environ.get("VERSION"),
-    "desktop": (appdir / "com.flectar.mail.desktop").read_text(),
-    "metainfo": (appdir / "usr/share/metainfo/com.flectar.mail.metainfo.xml").read_text(),
+    "desktop": (appdir / "in.fortax.mail.desktop").read_text(),
+    "metainfo": (appdir / "usr/share/metainfo/in.fortax.mail.metainfo.xml").read_text(),
 }))
 ''')
             deploy.chmod(0o755)
@@ -283,11 +283,11 @@ pathlib.Path(sys.argv[2]).write_text(json.dumps({
                 ["bash", str(root / "scripts/build-appimage.sh")], cwd=root,
                 env={**os.environ, "PATH": f"{root / 'bin'}:{os.environ['PATH']}",
                      "LINUXDEPLOY": str(deploy), "APPIMAGETOOL": str(pack), "VERSION": "stale",
-                     "FLECTAR_SKIP_BUILD": "0", "FLECTAR_APP_FEATURES": ""},
+                     "FORTAX_SKIP_BUILD": "0", "FORTAX_APP_FEATURES": ""},
                 capture_output=True, text=True,
             )
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            packaged = json.loads((root / "target/appimage/flectar-mail.AppImage").read_text())
+            packaged = json.loads((root / "target/appimage/fortax-mail.AppImage").read_text())
             self.assertEqual(packaged["version"], "0.1.0-alpha.1")
             self.assertIn("X-AppImage-Version=0.1.0-alpha.1\n", packaged["desktop"])
             release = ET.fromstring(packaged["metainfo"]).find("./releases/release")
@@ -330,17 +330,17 @@ pathlib.Path(sys.argv[2]).write_text(json.dumps({
             source = root / "assets"
             source.mkdir()
             names = (
-                "linux/appimage/flectar-mail.AppImage",
-                "linux/deb/flectar-mail_0.1.0~beta.1_amd64.deb",
-                "linux/rpm/flectar-mail.rpm",
-                "linux/flatpak/flectar-mail.flatpak",
-                "windows/flectar-mail-windows-x64.zip",
-                "windows/flectar-mail-windows-x64-setup.exe",
-                "macos/flectar-mail-macos-arm64.zip",
-                "macos/flectar-mail-macos-arm64.dmg",
-                "macos/flectar-mail-macos-x64.zip",
-                "macos/flectar-mail-macos-x64.dmg",
-                "android/flectar-mail.apk",
+                "linux/appimage/fortax-mail.AppImage",
+                "linux/deb/fortax-mail_0.1.0~beta.1_amd64.deb",
+                "linux/rpm/fortax-mail.rpm",
+                "linux/flatpak/fortax-mail.flatpak",
+                "windows/fortax-mail-windows-x64.zip",
+                "windows/fortax-mail-windows-x64-setup.exe",
+                "macos/fortax-mail-macos-arm64.zip",
+                "macos/fortax-mail-macos-arm64.dmg",
+                "macos/fortax-mail-macos-x64.zip",
+                "macos/fortax-mail-macos-x64.dmg",
+                "android/fortax-mail.apk",
             )
             for name in names:
                 path = source / name
@@ -350,9 +350,9 @@ pathlib.Path(sys.argv[2]).write_text(json.dumps({
             dist = root / "dist"
             prepare(source, dist, "0.1.0-beta.1")
             self.assertEqual(len(list(dist.iterdir())), 12)
-            self.assertTrue((dist / "flectar-mail-0.1.0-beta.1-android-arm64-test.apk").is_file())
+            self.assertTrue((dist / "fortax-mail-0.1.0-beta.1-android-arm64-test.apk").is_file())
             # GitHub must not rewrite a download name after we checksum it.
-            deb = dist / "flectar-mail_0.1.0.beta.1_amd64.deb"
+            deb = dist / "fortax-mail_0.1.0.beta.1_amd64.deb"
             self.assertEqual(deb.read_bytes(), (source / names[1]).read_bytes())
             for path in dist.iterdir():
                 self.assertRegex(path.name, r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
@@ -376,13 +376,13 @@ pathlib.Path(sys.argv[2]).write_text(json.dumps({
 
             # Stable releases keep the ten desktop downloads, even if the
             # input folder happens to contain test APKs from another step.
-            (source / "linux/deb/flectar-mail_0.1.0~beta.1_amd64.deb").rename(
-                source / "linux/deb/flectar-mail_0.1.0_amd64.deb"
+            (source / "linux/deb/fortax-mail_0.1.0~beta.1_amd64.deb").rename(
+                source / "linux/deb/fortax-mail_0.1.0_amd64.deb"
             )
             stable_dist = root / "stable"
             prepare(source, stable_dist, "0.1.0")
             self.assertEqual(len(list(stable_dist.iterdir())), 11)
-            self.assertTrue((stable_dist / "flectar-mail_0.1.0_amd64.deb").is_file())
+            self.assertTrue((stable_dist / "fortax-mail_0.1.0_amd64.deb").is_file())
             self.assertFalse(list(stable_dist.glob("*.apk")))
 
     def test_notes_distinguish_android_preview(self):
@@ -397,7 +397,7 @@ pathlib.Path(sys.argv[2]).write_text(json.dumps({
             root = Path(directory)
             (root / "platform/android").mkdir(parents=True)
             (root / "Cargo.toml").write_text('[package]\nversion = "0.2.0-beta.1"\n')
-            lock = '[[package]]\nname = "flectar-mail"\nversion = "0.2.0-beta.1"\n'
+            lock = '[[package]]\nname = "fortax-mail"\nversion = "0.2.0-beta.1"\n'
             (root / "Cargo.lock").write_text(lock)
             android_lock = root / "platform/android/Cargo.lock"
             android_lock.write_text(lock.replace("0.2.0-beta.1", "0.1.0"))

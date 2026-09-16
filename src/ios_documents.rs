@@ -13,8 +13,8 @@ type Reply = oneshot::Sender<Result<Option<ImportedDocument>, String>>;
 static PENDING: OnceLock<Mutex<HashMap<i64, (Reply, bool)>>> = OnceLock::new();
 static NEXT: AtomicI64 = AtomicI64::new(1);
 unsafe extern "C" {
-    fn flectar_cancel_document(id: i64);
-    fn flectar_choose_document(
+    fn fortax_cancel_document(id: i64);
+    fn fortax_choose_document(
         id: i64,
         path: *const c_char,
         callback: extern "C" fn(i64, *const c_char, *const c_char),
@@ -85,7 +85,7 @@ fn request(path: PathBuf) -> DocumentFuture<Option<ImportedDocument>> {
             .unwrap()
             .insert(id, (sender, path.as_os_str().is_empty()));
         unsafe {
-            flectar_choose_document(id, value.as_ptr(), result);
+            fortax_choose_document(id, value.as_ptr(), result);
         }
     }
     let guard = DocumentRequestGuard(Box::new(move || {
@@ -97,7 +97,7 @@ fn request(path: PathBuf) -> DocumentFuture<Option<ImportedDocument>> {
             .is_some()
         {
             unsafe {
-                flectar_cancel_document(id);
+                fortax_cancel_document(id);
             }
         }
     }));
@@ -116,11 +116,11 @@ impl DocumentProvider for IosDocuments {
     }
     fn export(&self, path: PathBuf, name: String) -> DocumentFuture<bool> {
         Box::pin(async move {
-            flectar_mail_core::files::validate_name(&name).map_err(|e| e.to_string())?;
+            fortax_mail_core::files::validate_name(&name).map_err(|e| e.to_string())?;
             let folder = tempfile::tempdir_in(path.parent().ok_or("Invalid export directory.")?)
                 .map_err(|e| e.to_string())?;
             let destination = folder.path().join(name);
-            flectar_mail_core::files::save_cached_file(&path, &destination)
+            fortax_mail_core::files::save_cached_file(&path, &destination)
                 .await
                 .map_err(|e| e.to_string())?;
             Ok(request(destination).await?.is_some())

@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/flectar-mail-core", "crates/renderer-probe"]
+members = ["crates/fortax-mail-core", "crates/renderer-probe"]
 exclude = ["crates/blitz-dom", "crates/blitz-paint", "crates/parley", "crates/parley_emoji"]
 resolver = "3"
 
@@ -18,12 +18,12 @@ blitz-paint = { path = "crates/blitz-paint" }
 parley = { path = "crates/parley" }
 
 [package]
-name = "flectar-mail"
+name = "fortax-mail"
 version = "0.1.0-alpha.6"
 description = "A native email client built with Rust, Slint, and Blitz"
 license = "AGPL-3.0-only"
-repository = "https://github.com/flectar/mail"
-homepage = "https://flectar.com"
+repository = "https://github.com/amit-voais/fortax-mail"
+homepage = "https://fortax.in"
 publish = false
 edition = "2024"
 rust-version = "1.92"
@@ -34,7 +34,7 @@ autobins = false
 path = "src/lib.rs"
 
 [[bin]]
-name = "flectar-mail"
+name = "fortax-mail"
 path = "src/desktop.rs"
 
 [features]
@@ -81,7 +81,7 @@ pulldown-cmark = "0.13.4"
 vello = { version = "0.10", optional = true }
 # This native shell currently exposes keyword/FTS search, not local semantic
 # search. Do not link Candle, tokenizers, or Hugging Face into every AppImage.
-flectar-mail-core = { path = "crates/flectar-mail-core", default-features = false }
+fortax-mail-core = { path = "crates/fortax-mail-core", default-features = false }
 # Slint 1.17 and Blitz beta.2 use adjacent, semver-incompatible Fontique
 # releases that share the same native Fontconfig crate. Enable dynamic loading
 # on both so Cargo's shared native feature set cannot select an ABI that only
@@ -136,8 +136,8 @@ arboard = { version = "3.6", default-features = false, features = ["wayland-data
 rfd = { version = "0.16", default-features = false, features = ["tokio", "xdg-portal"] }
 
 [package.metadata.appimage]
-icon = "resources/app-icon/flectar-mail-masked-512.png"
-desktop_entry = "resources/com.flectar.mail.desktop"
+icon = "resources/app-icon/fortax-mail-masked-512.png"
+desktop_entry = "resources/in.fortax.mail.desktop"
 auto_link = true
 auto_link_exclude_list = [
     "ld-linux*.so*",

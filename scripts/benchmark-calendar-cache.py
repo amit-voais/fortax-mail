@@ -41,7 +41,7 @@ def main() -> None:
     parser.add_argument("--rounds", type=int, default=7)
     args = parser.parse_args()
 
-    descriptor, path = tempfile.mkstemp(prefix="flectar-calendar-cache-", suffix=".db")
+    descriptor, path = tempfile.mkstemp(prefix="fortax-calendar-cache-", suffix=".db")
     os.close(descriptor)
     try:
         connection = sqlite3.connect(path)

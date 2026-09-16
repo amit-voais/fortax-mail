@@ -50,38 +50,38 @@ jobs:
 
       - name: Materialize protected upload keystore
         env:
-          KEYSTORE_BASE64: ${{ secrets.FLECTAR_ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_BASE64: ${{ secrets.FORTAX_ANDROID_KEYSTORE_BASE64 }}
         run: |
           test -n "$KEYSTORE_BASE64"
-          keystore="$RUNNER_TEMP/flectar-upload.keystore"
+          keystore="$RUNNER_TEMP/fortax-upload.keystore"
           printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$keystore"
           chmod 600 "$keystore"
-          echo "FLECTAR_ANDROID_KEYSTORE=$keystore" >> "$GITHUB_ENV"
+          echo "FORTAX_ANDROID_KEYSTORE=$keystore" >> "$GITHUB_ENV"
 
       - name: Build and validate production candidate
         env:
-          FLECTAR_ANDROID_VERSION_CODE: ${{ inputs.version_code }}
-          FLECTAR_ANDROID_VERSION_NAME: ${{ inputs.version_name }}
-          FLECTAR_GOOGLE_ANDROID_CLIENT_ID: ${{ secrets.FLECTAR_GOOGLE_ANDROID_CLIENT_ID }}
-          FLECTAR_MICROSOFT_ANDROID_CLIENT_ID: ${{ secrets.FLECTAR_MICROSOFT_ANDROID_CLIENT_ID }}
-          FLECTAR_MICROSOFT_ANDROID_REDIRECT_URI: ${{ secrets.FLECTAR_MICROSOFT_ANDROID_REDIRECT_URI }}
-          FLECTAR_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.FLECTAR_ANDROID_KEYSTORE_PASSWORD }}
-          FLECTAR_ANDROID_KEY_ALIAS: ${{ secrets.FLECTAR_ANDROID_KEY_ALIAS }}
-          FLECTAR_ANDROID_KEY_PASSWORD: ${{ secrets.FLECTAR_ANDROID_KEY_PASSWORD }}
+          FORTAX_ANDROID_VERSION_CODE: ${{ inputs.version_code }}
+          FORTAX_ANDROID_VERSION_NAME: ${{ inputs.version_name }}
+          FORTAX_GOOGLE_ANDROID_CLIENT_ID: ${{ secrets.FORTAX_GOOGLE_ANDROID_CLIENT_ID }}
+          FORTAX_MICROSOFT_ANDROID_CLIENT_ID: ${{ secrets.FORTAX_MICROSOFT_ANDROID_CLIENT_ID }}
+          FORTAX_MICROSOFT_ANDROID_REDIRECT_URI: ${{ secrets.FORTAX_MICROSOFT_ANDROID_REDIRECT_URI }}
+          FORTAX_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.FORTAX_ANDROID_KEYSTORE_PASSWORD }}
+          FORTAX_ANDROID_KEY_ALIAS: ${{ secrets.FORTAX_ANDROID_KEY_ALIAS }}
+          FORTAX_ANDROID_KEY_PASSWORD: ${{ secrets.FORTAX_ANDROID_KEY_PASSWORD }}
         run: ./scripts/build-android-release.sh
 
       - name: Record public signing identities
         run: |
           ./scripts/android-signing-identities.sh \
-            target/android/production/flectar-mail.apk \
+            target/android/production/fortax-mail.apk \
             > target/android/production/signing-identities.txt
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: flectar-mail-android-production-${{ inputs.version_name }}
+          name: fortax-mail-android-production-${{ inputs.version_name }}
           path: |
-            target/android/production/flectar-mail.apk
-            target/android/production/flectar-mail.aab
+            target/android/production/fortax-mail.apk
+            target/android/production/fortax-mail.aab
             target/android/production/signing-identities.txt
           if-no-files-found: error
           retention-days: 30

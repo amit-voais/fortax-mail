@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use flectar_mail::flectar_mail_core::{
+use fortax_mail::fortax_mail_core::{
     error::{CoreError, Result},
     models::Provider,
     oauth::{
@@ -26,7 +26,7 @@ use std::{
 use tokio::sync::oneshot;
 
 const MICROSOFT_SCHEME: &str = "msauth";
-const MICROSOFT_HOST: &str = "com.flectar.mail";
+const MICROSOFT_HOST: &str = "in.fortax.mail";
 
 struct PendingRedirect {
     guard: OAuthRedirectGuard,
@@ -61,7 +61,7 @@ impl AndroidOAuthBroker {
         private_root: &Path,
     ) -> Result<Arc<Self>> {
         let transient_microsoft_callback = activity_intent_data(app)
-            .is_some_and(|uri| uri.starts_with("msauth://com.flectar.mail/"));
+            .is_some_and(|uri| uri.starts_with("msauth://in.fortax.mail/"));
         // SAFETY: Android owns this process-wide VM pointer for the lifetime of
         // the process. JavaVM is a non-owning handle.
         let vm = unsafe { JavaVM::from_raw(app.vm_as_ptr().cast()) }
@@ -284,7 +284,7 @@ impl OAuthRedirectBroker for AndroidOAuthBroker {
             || parsed.path() == "/"
         {
             return Err(CoreError::Auth(
-                "Microsoft Android redirect must be msauth://com.flectar.mail/<signature-hash>"
+                "Microsoft Android redirect must be msauth://in.fortax.mail/<signature-hash>"
                     .into(),
             ));
         }
@@ -359,7 +359,7 @@ pub(super) fn route_callback_activity(
     let Some(uri) = activity_intent_data(app) else {
         return false;
     };
-    if !uri.starts_with("msauth://com.flectar.mail/") {
+    if !uri.starts_with("msauth://in.fortax.mail/") {
         return false;
     }
     match broker.publish_redirect(&uri) {
@@ -371,7 +371,7 @@ pub(super) fn route_callback_activity(
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_flectar_mail_FlectarActivity_nativeGoogleAuthorizationResult(
+pub extern "system" fn Java_com_fortax_mail_FortaxActivity_nativeGoogleAuthorizationResult(
     mut env: JNIEnv,
     _class: JClass,
     request_id: jlong,
@@ -418,7 +418,7 @@ pub extern "system" fn Java_com_flectar_mail_FlectarActivity_nativeGoogleAuthori
 }
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_flectar_mail_FlectarActivity_nativeMicrosoftRedirect(
+pub extern "system" fn Java_com_fortax_mail_FortaxActivity_nativeMicrosoftRedirect(
     mut env: JNIEnv,
     _class: JClass,
     redirect_uri: JString,

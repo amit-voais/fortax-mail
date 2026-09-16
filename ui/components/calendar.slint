@@ -445,7 +445,7 @@ export component FunctionalCalendarView inherits Rectangle {
     function show-event(event: CalendarEventRow) {
         root.detail-kind = "event";
         root.detail-title = event.title;
-        root.detail-subtitle = event.source == "local" ? @tr("Created in Flectar Mail") : @tr("Synced provider event");
+        root.detail-subtitle = event.source == "local" ? @tr("Created in Fortax Mail") : @tr("Synced provider event");
         root.detail-provider = event.provider;
         root.detail-date-time = event.iso-date + " · " + event.detail;
         root.detail-calendar = event.calendar != "" ? event.calendar : @tr("Default calendar");

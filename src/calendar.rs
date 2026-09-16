@@ -4,7 +4,7 @@ use crate::{AppWindow, CalendarDay, CalendarEventRow, CalendarSourceRow, Calenda
 use chrono::{
     Datelike, Duration as ChronoDuration, Local, NaiveDate, NaiveTime, TimeZone, Timelike, Utc,
 };
-use flectar_mail_core::models::{Account, Address, Calendar, CalendarEvent};
+use fortax_mail_core::models::{Account, Address, Calendar, CalendarEvent};
 use slint::{ComponentHandle, ModelRc, VecModel};
 use std::{collections::HashMap, rc::Rc};
 

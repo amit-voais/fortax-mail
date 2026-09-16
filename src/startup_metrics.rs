@@ -1,7 +1,7 @@
 //! Opt-in startup phase markers used by the repeatable benchmark harness.
 //!
 //! Normal launches pay only one environment lookup and keep no timers. Set
-//! `FLECTAR_STARTUP_METRICS=1` to emit JSON events on stderr. Benchmark-only
+//! `FORTAX_STARTUP_METRICS=1` to emit JSON events on stderr. Benchmark-only
 //! snapshots force a real Slint render, making the reported frame milestones
 //! comparable across runs without changing production rendering behavior.
 
@@ -14,7 +14,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-const METRIC_PREFIX: &str = "FLECTAR_STARTUP_METRIC ";
+const METRIC_PREFIX: &str = "FORTAX_STARTUP_METRIC ";
 
 #[derive(Clone)]
 pub(crate) struct StartupMetrics {
@@ -28,7 +28,7 @@ struct StartupMetricsInner {
 
 impl StartupMetrics {
     pub(crate) fn from_environment() -> Self {
-        let enabled = std::env::var("FLECTAR_STARTUP_METRICS")
+        let enabled = std::env::var("FORTAX_STARTUP_METRICS")
             .is_ok_and(|value| matches!(value.as_str(), "1" | "true" | "yes"));
         let metrics = Self {
             inner: enabled.then(|| {
@@ -119,7 +119,7 @@ impl StartupMetrics {
         if !self.enabled() {
             return;
         }
-        let Some(delay_ms) = std::env::var("FLECTAR_BENCHMARK_EXIT_AFTER_MS")
+        let Some(delay_ms) = std::env::var("FORTAX_BENCHMARK_EXIT_AFTER_MS")
             .ok()
             .and_then(|value| value.parse::<u64>().ok())
             .filter(|delay| (250..=120_000).contains(delay))

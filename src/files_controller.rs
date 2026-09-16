@@ -3,7 +3,7 @@
 use crate::document_preview::{Preview, preview};
 use crate::documents::safe_name;
 use crate::{AppWindow, FileRow, FilesUi, InboxState, OperationRow};
-use flectar_mail_core::files::{
+use fortax_mail_core::files::{
     self, FileClient,
     service::{
         Entry, FilesService as Directory, Output as ServiceOutput, Preview as ServicePreview,
@@ -67,7 +67,7 @@ pub(crate) fn register(
     let inbox = Rc::clone(state);
     let handle = runtime.handle().clone();
     let worker = Rc::new(RefCell::new(
-        None::<(Arc<flectar_mail_core::Core>, SyncWorker)>,
+        None::<(Arc<fortax_mail_core::Core>, SyncWorker)>,
     ));
     let preview_pending = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let pending = Rc::new(RefCell::new(None::<tokio::task::AbortHandle>));

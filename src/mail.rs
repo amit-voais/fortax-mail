@@ -1,6 +1,6 @@
 use crate::favicon::domain_from_address;
 use chrono::{DateTime, Datelike, Local, Utc};
-use flectar_mail_core::{
+use fortax_mail_core::{
     Core,
     config::Paths,
     events::CoreEvent,
@@ -57,7 +57,7 @@ pub struct MailMessage {
     pub starred: bool,
     pub has_attachments: bool,
     pub message_count: i64,
-    pub attachments: Vec<flectar_mail_core::models::AttachmentMeta>,
+    pub attachments: Vec<fortax_mail_core::models::AttachmentMeta>,
     pub has_replied: bool,
     pub is_outgoing: bool,
     pub labels: Vec<i64>,
@@ -202,7 +202,7 @@ pub fn display_preview(preview: &str) -> String {
 
 /// Thin native host adapter over the existing offline-first mail core.
 /// Authentication, synchronization, persistence, folder discovery, draft
-/// saving, and sending remain owned by flectar-mail-core rather than being
+/// saving, and sending remain owned by fortax-mail-core rather than being
 /// copied
 /// into the Slint application.
 #[derive(Clone)]
@@ -243,8 +243,8 @@ impl CoreMailSource {
     }
     pub async fn start(
         paths: Paths,
-        credentials: flectar_mail_core::accounts::credentials::CredentialStoreHandle,
-        oauth_redirects: flectar_mail_core::oauth::redirect::OAuthRedirectBrokerHandle,
+        credentials: fortax_mail_core::accounts::credentials::CredentialStoreHandle,
+        oauth_redirects: fortax_mail_core::oauth::redirect::OAuthRedirectBrokerHandle,
     ) -> Result<Self, String> {
         let core = Core::start_mail_ui_with_platform(paths, credentials, oauth_redirects)
             .await
@@ -656,7 +656,7 @@ impl CoreMailSource {
     pub async fn create_database_snapshot(
         &self,
         destination: std::path::PathBuf,
-    ) -> Result<flectar_mail_core::DatabaseSnapshotManifest, String> {
+    ) -> Result<fortax_mail_core::DatabaseSnapshotManifest, String> {
         self.core
             .create_database_snapshot(destination)
             .await
@@ -900,8 +900,8 @@ impl CoreMailSource {
 
     pub async fn save_contact(
         &self,
-        contact: flectar_mail_core::models::ContactRecord,
-    ) -> Result<flectar_mail_core::models::ContactRecord, String> {
+        contact: fortax_mail_core::models::ContactRecord,
+    ) -> Result<fortax_mail_core::models::ContactRecord, String> {
         self.core
             .save_contact(contact)
             .await
@@ -1119,7 +1119,7 @@ impl CoreMailSource {
 
     pub async fn update_event(
         &self,
-        args: flectar_mail_core::models::UpdateEventArgs,
+        args: fortax_mail_core::models::UpdateEventArgs,
     ) -> Result<CalendarEvent, String> {
         self.core
             .update_event(args)
@@ -1144,7 +1144,7 @@ impl CoreMailSource {
     pub async fn load_calendars(
         &self,
         account_id: Option<i64>,
-    ) -> Result<Vec<flectar_mail_core::models::Calendar>, String> {
+    ) -> Result<Vec<fortax_mail_core::models::Calendar>, String> {
         self.core
             .list_calendars(account_id)
             .await
@@ -1226,7 +1226,7 @@ impl CoreMailSource {
         &self,
         google: Option<(String, String)>,
         microsoft: Option<String>,
-    ) -> Result<flectar_mail_core::models::Settings, String> {
+    ) -> Result<fortax_mail_core::models::Settings, String> {
         self.core
             .set_oauth_apps(google, microsoft)
             .await
@@ -2022,7 +2022,7 @@ fn markdown_options() -> Options {
 fn markdown_to_html(markdown: &str) -> String {
     let mut fragment = String::new();
     html::push_html(&mut fragment, Parser::new_ext(markdown, markdown_options()));
-    let fragment = flectar_mail_core::mime::sanitize_html(&fragment);
+    let fragment = fortax_mail_core::mime::sanitize_html(&fragment);
     format!(
         "<html><body style=\"margin:0;padding:0;font-family:Arial,sans-serif;font-size:14px;line-height:1.55;color:#202124\">{fragment}</body></html>"
     )
@@ -2097,7 +2097,7 @@ pub fn fixtures() -> Vec<EmailFixture> {
             subject: "A calmer way to plan the week",
             preview: "The latest direction for the product launch…",
             time: "9:41 AM",
-            to: "alex@flectar.example",
+            to: "alex@fortax.example",
             label: "IMPORTANT",
             unread: true,
             html: r##"<!doctype html>
@@ -2139,7 +2139,7 @@ pub fn fixtures() -> Vec<EmailFixture> {
             subject: "Three links for the native UI rabbit hole",
             preview: "Slint, Blitz, and a little time to experiment…",
             time: "Yesterday",
-            to: "alex@flectar.example",
+            to: "alex@fortax.example",
             label: "PROJECTS",
             unread: true,
             html: r##"<!doctype html>
@@ -2161,15 +2161,15 @@ pub fn fixtures() -> Vec<EmailFixture> {
         },
         EmailFixture {
             id: 3,
-            account: "Flectar",
+            account: "Fortax",
             folder: "Inbox",
-            sender: "Flectar Mail Updates",
-            address: "updates@flectar.example",
+            sender: "Fortax Mail Updates",
+            address: "updates@fortax.example",
             initials: "CO",
             subject: "Your weekly mailbox digest",
             preview: "14 conversations, 3 follow-ups, 1 quiet afternoon…",
             time: "Mon",
-            to: "alex@flectar.example",
+            to: "alex@fortax.example",
             label: "DIGEST",
             unread: false,
             html: r##"<!doctype html>
@@ -2184,10 +2184,10 @@ pub fn fixtures() -> Vec<EmailFixture> {
   .caption { color:#708885; font-size:12px; }
   p { font-size:14px; line-height:1.6; }
 </style></head><body><div class="wrap">
-  <div class="badge">FLECTAR MAIL / WEEKLY DIGEST</div><h1>A little room to breathe</h1>
+  <div class="badge">FORTAX MAIL / WEEKLY DIGEST</div><h1>A little room to breathe</h1>
   <div class="grid"><div class="stat"><div class="number">14</div><div class="caption">conversations</div></div><div class="stat"><div class="number">3</div><div class="caption">follow-ups</div></div><div class="stat"><div class="number">1</div><div class="caption">quiet afternoon</div></div></div>
   <p>The mailbox is in good shape. Two threads are waiting on someone else, and the rest can wait until tomorrow.</p>
-  <p>Keep the momentum gentle,<br><b>Flectar Mail</b></p>
+  <p>Keep the momentum gentle,<br><b>Fortax Mail</b></p>
 </div></body></html>"##,
         },
         EmailFixture {
@@ -2200,7 +2200,7 @@ pub fn fixtures() -> Vec<EmailFixture> {
             subject: "Re: the renderer boundary",
             preview: "I think the split between chrome and content is right…",
             time: "Sun",
-            to: "alex@flectar.example",
+            to: "alex@fortax.example",
             label: "REPLY",
             unread: false,
             html: r##"<!doctype html>
@@ -2231,7 +2231,7 @@ pub fn fixtures() -> Vec<EmailFixture> {
             subject: "Photos from the coast",
             preview: "A few favorites from the weekend are attached…",
             time: "Sat",
-            to: "alex@flectar.example",
+            to: "alex@fortax.example",
             label: "PERSONAL",
             unread: true,
             html: messages[1].html,
@@ -2246,22 +2246,22 @@ pub fn fixtures() -> Vec<EmailFixture> {
             subject: "Tomorrow's launch review",
             preview: "The launch review starts at 10:00 AM tomorrow…",
             time: "Fri",
-            to: "alex@flectar.example",
+            to: "alex@fortax.example",
             label: "CALENDAR",
             unread: false,
             html: messages[0].html,
         },
         EmailFixture {
             id: 7,
-            account: "Flectar",
+            account: "Fortax",
             folder: "Inbox",
-            sender: "Flectar Mail Updates",
-            address: "updates@flectar.example",
+            sender: "Fortax Mail Updates",
+            address: "updates@fortax.example",
             initials: "FM",
-            subject: "Your Flectar account is ready",
+            subject: "Your Fortax account is ready",
             preview: "Your inbox is connected and ready for the next step…",
             time: "Thu",
-            to: "alex@flectar.example",
+            to: "alex@fortax.example",
             label: "ACCOUNT",
             unread: true,
             html: messages[2].html,
@@ -2276,7 +2276,7 @@ pub fn fixtures() -> Vec<EmailFixture> {
             subject: "Re: A calmer way to plan the week",
             preview: "The revised plan is in the shared folder…",
             time: "Thu",
-            to: "alex@flectar.example",
+            to: "alex@fortax.example",
             label: "ARCHIVE",
             unread: false,
             html: messages[0].html,
@@ -2298,7 +2298,7 @@ pub fn fixtures() -> Vec<EmailFixture> {
         },
         EmailFixture {
             id: 10,
-            account: "Flectar",
+            account: "Fortax",
             folder: "Archive",
             sender: "Ravi Patel",
             address: "ravi@orbit.tools",
@@ -2306,7 +2306,7 @@ pub fn fixtures() -> Vec<EmailFixture> {
             subject: "Native renderer notes",
             preview: "The CPU boundary keeps the rest of the app small…",
             time: "Tue",
-            to: "alex@flectar.example",
+            to: "alex@fortax.example",
             label: "ARCHIVE",
             unread: false,
             html: messages[3].html,
@@ -2321,7 +2321,7 @@ pub fn fixtures() -> Vec<EmailFixture> {
             subject: "A small plan for next week",
             preview: "Three things we can finish without rushing them…",
             time: "Mon",
-            to: "alex@flectar.example",
+            to: "alex@fortax.example",
             label: "PROJECTS",
             unread: true,
             html: messages[1].html,
@@ -2336,7 +2336,7 @@ pub fn fixtures() -> Vec<EmailFixture> {
             subject: "Dinner next Thursday?",
             preview: "Would Thursday evening work for everyone?",
             time: "Sun",
-            to: "alex@flectar.example",
+            to: "alex@fortax.example",
             label: "PERSONAL",
             unread: true,
             html: messages[2].html,
@@ -2354,7 +2354,7 @@ mod tests {
         summary_to_message, validated_startup_scope,
     };
     use chrono::{Local, TimeZone};
-    use flectar_mail_core::models::{
+    use fortax_mail_core::models::{
         Account, Address, AuthKind, FolderInfo, Label, MailProtocol, Provider, ThreadSummary, View,
     };
 
@@ -2660,10 +2660,10 @@ mod tests {
 #[cfg(test)]
 mod account_removal_snapshot_tests {
     use super::*;
-    use flectar_mail_core::accounts::credentials::{
+    use fortax_mail_core::accounts::credentials::{
         CredentialStore, DevelopmentFileCredentialStore, Slot,
     };
-    use flectar_mail_core::error::{CoreError, Result as CoreResult};
+    use fortax_mail_core::error::{CoreError, Result as CoreResult};
     use std::sync::atomic::{AtomicBool, Ordering};
 
     struct FailingCredentials {
@@ -2706,7 +2706,7 @@ mod account_removal_snapshot_tests {
         let source = CoreMailSource::start(
             Paths::for_tests(dir.path()),
             store.clone(),
-            Arc::new(flectar_mail_core::oauth::redirect::LoopbackRedirectBroker::default()),
+            Arc::new(fortax_mail_core::oauth::redirect::LoopbackRedirectBroker::default()),
         )
         .await
         .unwrap();
@@ -2749,7 +2749,7 @@ mod account_removal_snapshot_tests {
             Arc::new(DevelopmentFileCredentialStore::new(
                 dir.path().join("credentials.json"),
             )),
-            Arc::new(flectar_mail_core::oauth::redirect::LoopbackRedirectBroker::default()),
+            Arc::new(fortax_mail_core::oauth::redirect::LoopbackRedirectBroker::default()),
         )
         .await
         .unwrap();

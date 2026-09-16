@@ -2290,119 +2290,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "flectar-mail"
-version = "0.1.0-alpha.6"
-dependencies = [
- "anyrender",
- "anyrender_vello",
- "anyrender_vello_cpu",
- "arboard",
- "ashpd",
- "base64 0.22.1",
- "blitz-dom",
- "blitz-html",
- "blitz-paint",
- "blitz-traits",
- "cc",
- "chrono",
- "cosmic-text",
- "cssparser",
- "data-url",
- "dirs",
- "flectar-mail-core",
- "fontique 0.10.0",
- "fontique 0.11.1",
- "html5ever",
- "image",
- "keyboard-types",
- "landlock",
- "libc",
- "parley 0.11.1",
- "pdfium-render",
- "percent-encoding",
- "pulldown-cmark",
- "reqwest",
- "rfd",
- "seccompiler",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "slint",
- "slint-build",
- "sys-locale",
- "tempfile",
- "tokio",
- "tracing",
- "unicode-properties",
- "unicode-segmentation",
- "url",
- "vello",
- "webbrowser",
- "windows-sys 0.61.2",
- "winresource",
-]
-
-[[package]]
-name = "flectar-mail-core"
-version = "0.2.29"
-dependencies = [
- "ammonia",
- "anyhow",
- "async-imap",
- "async-trait",
- "base64 0.23.1",
- "candle-core",
- "candle-nn",
- "candle-transformers",
- "chrono",
- "deunicode",
- "dirs",
- "encoding_rs",
- "futures",
- "hf-hub",
- "jmap-client",
- "keyring",
- "lettre",
- "mail-builder",
- "mail-parser",
- "once_cell",
- "percent-encoding",
- "quick-xml 0.42.0",
- "rand 0.9.5",
- "regex",
- "reqwest",
- "ring",
- "rusqlite",
- "rustix 1.1.4",
- "rustls",
- "rustls-webpki",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "tempfile",
- "thiserror 2.0.20",
- "tokenizers",
- "tokio",
- "tokio-rustls",
- "tracing",
- "tracing-subscriber",
- "url",
- "webpki-roots",
-]
-
-[[package]]
-name = "flectar-renderer-probe"
-version = "0.1.0"
-dependencies = [
- "anyrender",
- "anyrender_vello_cpu",
- "blitz-dom",
- "blitz-html",
- "blitz-paint",
- "blitz-traits",
-]
-
-[[package]]
 name = "float-cmp"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2569,6 +2456,119 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cb4cb245038516f5f85277875cdaa4f7d2c9a0fa0468de06ed190163b1581fcf"
 dependencies = [
  "percent-encoding",
+]
+
+[[package]]
+name = "fortax-mail"
+version = "0.1.0-alpha.6"
+dependencies = [
+ "anyrender",
+ "anyrender_vello",
+ "anyrender_vello_cpu",
+ "arboard",
+ "ashpd",
+ "base64 0.22.1",
+ "blitz-dom",
+ "blitz-html",
+ "blitz-paint",
+ "blitz-traits",
+ "cc",
+ "chrono",
+ "cosmic-text",
+ "cssparser",
+ "data-url",
+ "dirs",
+ "fontique 0.10.0",
+ "fontique 0.11.1",
+ "fortax-mail-core",
+ "html5ever",
+ "image",
+ "keyboard-types",
+ "landlock",
+ "libc",
+ "parley 0.11.1",
+ "pdfium-render",
+ "percent-encoding",
+ "pulldown-cmark",
+ "reqwest",
+ "rfd",
+ "seccompiler",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "slint",
+ "slint-build",
+ "sys-locale",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "unicode-properties",
+ "unicode-segmentation",
+ "url",
+ "vello",
+ "webbrowser",
+ "windows-sys 0.61.2",
+ "winresource",
+]
+
+[[package]]
+name = "fortax-mail-core"
+version = "0.2.29"
+dependencies = [
+ "ammonia",
+ "anyhow",
+ "async-imap",
+ "async-trait",
+ "base64 0.23.1",
+ "candle-core",
+ "candle-nn",
+ "candle-transformers",
+ "chrono",
+ "deunicode",
+ "dirs",
+ "encoding_rs",
+ "futures",
+ "hf-hub",
+ "jmap-client",
+ "keyring",
+ "lettre",
+ "mail-builder",
+ "mail-parser",
+ "once_cell",
+ "percent-encoding",
+ "quick-xml 0.42.0",
+ "rand 0.9.5",
+ "regex",
+ "reqwest",
+ "ring",
+ "rusqlite",
+ "rustix 1.1.4",
+ "rustls",
+ "rustls-webpki",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "thiserror 2.0.20",
+ "tokenizers",
+ "tokio",
+ "tokio-rustls",
+ "tracing",
+ "tracing-subscriber",
+ "url",
+ "webpki-roots",
+]
+
+[[package]]
+name = "fortax-renderer-probe"
+version = "0.1.0"
+dependencies = [
+ "anyrender",
+ "anyrender_vello_cpu",
+ "blitz-dom",
+ "blitz-html",
+ "blitz-paint",
+ "blitz-traits",
 ]
 
 [[package]]

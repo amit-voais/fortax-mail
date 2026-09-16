@@ -56,7 +56,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--baseline-ref")
     parser.add_argument("--rounds", type=int, default=3)
-    parser.add_argument("--output-dir", type=Path, default=Path("/tmp/flectar-sidebar-benchmark"))
+    parser.add_argument("--output-dir", type=Path, default=Path("/tmp/fortax-sidebar-benchmark"))
     args = parser.parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=True)
     path = "ui/components/sidebar.slint"

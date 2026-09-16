@@ -2,7 +2,7 @@
 set -euo pipefail
 
 project_dir="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
-apk="${1:-$project_dir/target/android/release/apk/flectar-mail.apk}"
+apk="${1:-$project_dir/target/android/release/apk/fortax-mail.apk}"
 signing_mode="${2:-test}"
 android_sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
 
@@ -36,12 +36,12 @@ assert_contains() {
   fi
 }
 
-assert_contains "$badging" "package: name='com.flectar.mail'" 'package identity'
-if [[ -n "${FLECTAR_ANDROID_VERSION_NAME:-}" ]]; then
-  assert_contains "$badging" "versionName='$FLECTAR_ANDROID_VERSION_NAME'" 'release version name'
+assert_contains "$badging" "package: name='in.fortax.mail'" 'package identity'
+if [[ -n "${FORTAX_ANDROID_VERSION_NAME:-}" ]]; then
+  assert_contains "$badging" "versionName='$FORTAX_ANDROID_VERSION_NAME'" 'release version name'
 fi
-if [[ -n "${FLECTAR_ANDROID_VERSION_CODE:-}" ]]; then
-  assert_contains "$badging" "versionCode='$FLECTAR_ANDROID_VERSION_CODE'" 'release version code'
+if [[ -n "${FORTAX_ANDROID_VERSION_CODE:-}" ]]; then
+  assert_contains "$badging" "versionCode='$FORTAX_ANDROID_VERSION_CODE'" 'release version code'
 fi
 assert_contains "$badging" "sdkVersion:'26'" 'minimum SDK'
 assert_contains "$badging" "targetSdkVersion:'36'" 'target SDK'
@@ -52,9 +52,9 @@ assert_contains "$badging" "native-code: 'arm64-v8a'" 'arm64 ABI'
 assert_contains "$badging" 'application-icon-' 'launcher icon'
 assert_contains "$xmltree" 'android:usesCleartextTraffic(0x010104ec)=(type 0x12)0x0' 'cleartext traffic disabled'
 assert_contains "$xmltree" 'android:scheme(0x01010027)="msauth"' 'Microsoft OAuth callback scheme'
-assert_contains "$xmltree" 'android:host(0x01010028)="com.flectar.mail"' 'Microsoft OAuth callback host'
+assert_contains "$xmltree" 'android:host(0x01010028)="in.fortax.mail"' 'Microsoft OAuth callback host'
 assert_contains "$xmltree" 'android:exported(0x01010010)=(type 0x12)0xffffffff' 'explicitly exported callback/launcher Activity'
-assert_contains "$xmltree" 'com.flectar.mail.FlectarActivity' 'Google AuthorizationClient Activity host'
+assert_contains "$xmltree" 'in.fortax.mail.FortaxActivity' 'Google AuthorizationClient Activity host'
 assert_contains "$xmltree" 'android:allowBackup(0x01010280)=(type 0x12)0x0' 'Android backup disabled'
 
 if [[ "$badging" == *"application-debuggable"* ]]; then
@@ -78,7 +78,7 @@ printf '%s\n' "$signing"
 signing_args=("$signing_mode")
 if [[ "$signing_mode" == test ]]; then
   data_home="${XDG_DATA_HOME:-$HOME/.local/share}"
-  keystore="${FLECTAR_ANDROID_TEST_KEYSTORE:-$data_home/flectar-mail/android/test-signing.keystore}"
+  keystore="${FORTAX_ANDROID_TEST_KEYSTORE:-$data_home/fortax-mail/android/test-signing.keystore}"
   if [[ ! -f "$keystore" ]]; then
     printf 'Expected test keystore not found: %s\n' "$keystore" >&2
     exit 1

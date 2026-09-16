@@ -2,12 +2,12 @@
 // the UI font; compiling a SystemTrayIcon alongside it makes Slint 1.17 create
 // a window adapter just to register that font, which leaks an empty 800x600
 // "Slint Window" into Linux task switchers.
-export component FlectarTray inherits SystemTrayIcon {
+export component FortaxTray inherits SystemTrayIcon {
     in-out property <bool> enabled: false;
     visible: root.enabled;
-    icon: @image-url("../resources/app-icon/flectar-mail-masked.png");
-    title: @tr("Flectar Mail");
-    tooltip: @tr("Flectar Mail");
+    icon: @image-url("../resources/app-icon/fortax-mail-masked.png");
+    title: @tr("Fortax Mail");
+    tooltip: @tr("Fortax Mail");
 
     callback show_window();
     callback quit_app();
@@ -16,7 +16,7 @@ export component FlectarTray inherits SystemTrayIcon {
 
     Menu {
         MenuItem {
-            title: @tr("Show Flectar Mail");
+            title: @tr("Show Fortax Mail");
             activated => { root.show_window(); }
         }
         MenuItem {

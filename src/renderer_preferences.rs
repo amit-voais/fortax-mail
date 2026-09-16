@@ -77,12 +77,12 @@ fn save(path: &Path, mode: RendererMode) -> Result<(), Box<dyn std::error::Error
 }
 
 pub(crate) fn requested(preferred: RendererMode) -> RendererMode {
-    if std::env::var_os("FLECTAR_GPU_FALLBACK").is_some() {
+    if std::env::var_os("FORTAX_GPU_FALLBACK").is_some() {
         return RendererMode::Cpu;
     }
-    match std::env::var("FLECTAR_RENDERER") {
+    match std::env::var("FORTAX_RENDERER") {
         Ok(value) => RendererMode::parse(&value).unwrap_or_else(|| {
-            eprintln!("invalid FLECTAR_RENDERER; using saved preference");
+            eprintln!("invalid FORTAX_RENDERER; using saved preference");
             preferred
         }),
         Err(_) => preferred,
@@ -191,7 +191,7 @@ pub(crate) fn restart_cpu(error: &dyn std::error::Error) -> Result<(), Box<dyn s
     let mut command = std::process::Command::new(std::env::current_exe()?);
     command
         .args(std::env::args_os().skip(1))
-        .env("FLECTAR_GPU_FALLBACK", "1");
+        .env("FORTAX_GPU_FALLBACK", "1");
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;

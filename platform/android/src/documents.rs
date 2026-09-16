@@ -1,4 +1,4 @@
-use flectar_mail::documents::{
+use fortax_mail::documents::{
     DocumentFuture, DocumentProvider, DocumentRequestGuard, ImportedDocument,
 };
 use jni::{
@@ -145,7 +145,7 @@ impl DocumentProvider for AndroidDocuments {
     }
 }
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_flectar_mail_FlectarActivity_nativeDocumentResult(
+pub extern "system" fn Java_com_fortax_mail_FortaxActivity_nativeDocumentResult(
     mut env: JNIEnv,
     _class: JClass,
     id: jlong,
@@ -180,7 +180,7 @@ pub extern "system" fn Java_com_flectar_mail_FlectarActivity_nativeDocumentResul
     }
 }
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_flectar_mail_FlectarActivity_nativeDocumentRequestActive(
+pub extern "system" fn Java_com_fortax_mail_FortaxActivity_nativeDocumentRequestActive(
     _env: JNIEnv,
     _class: JClass,
     id: jlong,

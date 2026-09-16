@@ -68,6 +68,6 @@ async fn read_certificate(path: &std::path::Path) -> Result<String, String> {
     if pem.trim().is_empty() {
         return Err("The certificate file is empty".into());
     }
-    flectar_mail_core::imap::trusted_certificates(&pem).map_err(|e| e.to_string())?;
+    fortax_mail_core::imap::trusted_certificates(&pem).map_err(|e| e.to_string())?;
     Ok(pem)
 }
