@@ -141,6 +141,11 @@ export global I18n {
     ui-message-settings(key, argument, second-argument, third-argument) => {
         if (key == "Notification preferences are active for this session.") { return @tr("Notification preferences are active for this session."); }
         if (key == "Notification preferences saved.") { return @tr("Notification preferences saved."); }
+        if (key == "Assistant settings saved.") { return @tr("Assistant settings saved."); }
+        if (key == "Assistant key saved to the keychain.") { return @tr("Assistant key saved to the keychain."); }
+        if (key == "The assistant needs the mailbox open first.") { return @tr("The assistant needs the mailbox open first."); }
+        if (key == "Could not save the assistant settings: {}") { return @tr("Could not save the assistant settings: {}", argument); }
+        if (key == "Could not save the assistant key: {}") { return @tr("Could not save the assistant key: {}", argument); }
         if (key == "hiSAI can read this mailbox once you restart Fortax Mail.") { return @tr("hiSAI can read this mailbox once you restart Fortax Mail."); }
         if (key == "hiSAI will lose access to this mailbox once you restart Fortax Mail.") { return @tr("hiSAI will lose access to this mailbox once you restart Fortax Mail."); }
         if (key == "Could not save the hiSAI bridge setting: {}") { return @tr("Could not save the hiSAI bridge setting: {}", argument); }
@@ -525,6 +530,11 @@ export component AppWindow inherits Window {
     callback select-email-text();
     callback set-remote-images(bool);
     callback set-bridge-enabled(bool);
+    callback save-ai-connection(string, string);
+    callback save-ai-key(string);
+    callback check-ai-connection();
+    callback set-agent-level(string);
+    callback set-agent-scope(string);
     callback load-remote-images-for-message();
     callback calendar-navigate(string, int);
     callback calendar-select-date(string);
@@ -713,6 +723,12 @@ export component AppWindow inherits Window {
     in property <bool> remote-images-available: true;
     in-out property <bool> remote-images-enabled: false;
     in-out property <bool> bridge-enabled: false;
+    in-out property <string> ai-base-url: "";
+    in-out property <string> ai-model: "";
+    in-out property <bool> ai-configured: false;
+    in-out property <string> ai-status-line: "";
+    in-out property <string> ai-agent-level: "read";
+    in-out property <string> ai-agent-scope: "selection";
     in property <bool> remote-images-blocked: false;
     in-out property <bool> compose_open: false;
     in property <string> compose_mode: "new";
@@ -1356,6 +1372,12 @@ export component AppWindow inherits Window {
             close_to_tray <=> root.close_to_tray;
             remote-images-enabled <=> root.remote-images-enabled;
             bridge-enabled <=> root.bridge-enabled;
+            ai-base-url <=> root.ai-base-url;
+            ai-model <=> root.ai-model;
+            ai-configured <=> root.ai-configured;
+            ai-status-line <=> root.ai-status-line;
+            ai-agent-level <=> root.ai-agent-level;
+            ai-agent-scope <=> root.ai-agent-scope;
             account_email <=> root.account_email;
             account_username <=> root.account_username;
             account_password <=> root.account_password;
@@ -1441,6 +1463,11 @@ export component AppWindow inherits Window {
             }
             set-remote-images(enabled) => { root.set-remote-images(enabled); }
             set-bridge-enabled(enabled) => { root.set-bridge-enabled(enabled); }
+            save-ai-connection(url, model) => { root.save-ai-connection(url, model); }
+            save-ai-key(key) => { root.save-ai-key(key); }
+            check-ai-connection() => { root.check-ai-connection(); }
+            set-agent-level(level) => { root.set-agent-level(level); }
+            set-agent-scope(scope) => { root.set-agent-scope(scope); }
             make_account_transfer(value) => root.make_account_transfer(value);
             read_account_transfer(value) => root.read_account_transfer(value);
             reorder_account(source, target, after) => { root.reorder_account(source, target, after); }

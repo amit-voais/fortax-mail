@@ -3366,6 +3366,13 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
 
                     if let Some(settings) = settings.as_ref() {
                         apply_settings(&app, settings);
+                        // Whether a key is in the keyring is not in the settings row, so ask the
+                        // core once here; the form only ever says yes or no, never the key itself.
+                        if let Some(core) = startup_state.borrow().core.clone()
+                            && let Ok(status) = startup_runtime.block_on(core.ai_status())
+                        {
+                            app.set_ai_configured(status.configured);
+                        }
                         #[cfg(any(target_os = "android", target_os = "ios", feature = "flatpak"))]
                         app.set_close_to_tray(false);
                         if let Some(tray) =

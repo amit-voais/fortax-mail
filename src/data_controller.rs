@@ -416,6 +416,12 @@ pub(super) fn register_data_management_callbacks(
                 app.set_remote_images_enabled(
                     settings.load_remote_images && cfg!(feature = "remote-content"),
                 );
+                // The assistant's endpoint and its leash. The key itself never comes back out of
+                // the keyring — the form only says whether one is there.
+                app.set_ai_base_url(settings.ai_base_url.clone().into());
+                app.set_ai_model(settings.ai_model_intelligent.clone().into());
+                app.set_ai_agent_level(settings.ai_agent_level.clone().into());
+                app.set_ai_agent_scope(settings.ai_agent_scope.clone().into());
                 #[cfg(not(any(target_os = "android", target_os = "ios", feature = "flatpak")))]
                 app.set_close_to_tray(settings.close_to_tray);
                 #[cfg(any(target_os = "android", target_os = "ios", feature = "flatpak"))]

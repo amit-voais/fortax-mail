@@ -719,6 +719,76 @@ impl CoreMailSource {
             .map_err(|error| error.to_string())
     }
 
+    /// The assistant's endpoint. One model id is written to all three tiers: a firm picks a model,
+    /// not a tier table, and the per-tier fields stay available to anyone who edits settings by hand.
+    pub async fn set_ai_connection(&self, base_url: &str, model: &str) -> Result<(), String> {
+        let base_url = base_url.trim();
+        let model = model.trim();
+        if base_url.is_empty() {
+            return Err("The assistant needs an address to talk to.".into());
+        }
+        if !base_url.starts_with("http://") && !base_url.starts_with("https://") {
+            return Err("The address has to start with http:// or https://.".into());
+        }
+        if model.is_empty() {
+            return Err("Name the model to use.".into());
+        }
+        let mut settings = self.load_settings().await?;
+        settings.ai_base_url = base_url.to_owned();
+        settings.ai_model_instant = model.to_owned();
+        settings.ai_model_cheap = model.to_owned();
+        settings.ai_model_intelligent = model.to_owned();
+        self.core
+            .set_settings(settings)
+            .await
+            .map_err(|error| error.to_string())
+    }
+
+    /// The key goes to the OS keyring, never to the settings row. An empty key forgets it,
+    /// which is how a firm moves from a hosted model to one running on the machine.
+    pub async fn set_ai_key(&self, api_key: &str) -> Result<(), String> {
+        self.core
+            .set_ai_key(api_key.to_owned())
+            .await
+            .map_err(|error| error.to_string())
+    }
+
+    pub async fn ai_status(&self) -> Result<fortax_mail_core::models::AiStatus, String> {
+        self.core.ai_status().await.map_err(|e| e.to_string())
+    }
+
+    pub async fn ai_list_models(&self) -> Result<Vec<String>, String> {
+        self.core.ai_list_models().await.map_err(|e| e.to_string())
+    }
+
+    /// How far the assistant may go on its own. Anything unrecognised falls back to the
+    /// narrowest setting rather than the widest.
+    pub async fn set_agent_level(&self, level: &str) -> Result<(), String> {
+        let mut settings = self.load_settings().await?;
+        settings.ai_agent_level = match level {
+            "organise" | "confirm" | "auto" => level,
+            _ => "read",
+        }
+        .to_owned();
+        self.core
+            .set_settings(settings)
+            .await
+            .map_err(|error| error.to_string())
+    }
+
+    pub async fn set_agent_scope(&self, scope: &str) -> Result<(), String> {
+        let mut settings = self.load_settings().await?;
+        settings.ai_agent_scope = match scope {
+            "mailbox" | "incoming" => scope,
+            _ => "selection",
+        }
+        .to_owned();
+        self.core
+            .set_settings(settings)
+            .await
+            .map_err(|error| error.to_string())
+    }
+
     pub async fn set_theme(&self, theme: &str) -> Result<(), String> {
         let mut settings = self.load_settings().await?;
         settings.theme = match theme {

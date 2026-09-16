@@ -1178,6 +1178,20 @@ pub struct Settings {
     /// Which model tier the AI classifier uses: "instant" | "cheap" | "intelligent".
     #[serde(default = "default_tier_instant")]
     pub ai_tier_categorize: String,
+    /// How far the assistant may go on its own, widest last:
+    /// "read"    — summarise, answer, draft, proofread; the mailbox is never changed.
+    /// "organise" — the above, plus the automation rules' own actions (label, move, archive…).
+    /// "confirm" — the above, plus sending a reply the person says yes to, one by one.
+    /// "auto"    — the above, plus sending without asking.
+    /// A firm's mail cannot be unsent, so this starts at "read" and every step up is deliberate.
+    #[serde(default = "default_agent_level")]
+    pub ai_agent_level: String,
+    /// How much of the mailbox the assistant may send to the model:
+    /// "selection" — only the thread open in front of the person.
+    /// "mailbox"   — whatever a question turns up, searched across the mailbox.
+    /// "incoming"  — every arriving message, as it arrives.
+    #[serde(default = "default_agent_scope")]
+    pub ai_agent_scope: String,
     /// Group the thread list under date headers (Today / Yesterday / …).
     #[serde(default = "default_true")]
     pub group_by_date: bool,
@@ -1285,6 +1299,12 @@ fn default_tier_intelligent() -> String {
 fn default_tier_instant() -> String {
     "instant".into()
 }
+fn default_agent_level() -> String {
+    "read".into()
+}
+fn default_agent_scope() -> String {
+    "selection".into()
+}
 fn default_tier_cheap() -> String {
     "cheap".into()
 }
@@ -1344,6 +1364,8 @@ impl Default for Settings {
             ai_category_prompt: String::new(),
             ai_automation_rules: Vec::new(),
             ai_tier_categorize: default_tier_instant(),
+            ai_agent_level: default_agent_level(),
+            ai_agent_scope: default_agent_scope(),
             group_by_date: true,
             contact_suggest_all_accounts: false,
             dock_badge_enabled: true,

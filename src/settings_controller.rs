@@ -86,6 +86,130 @@ pub(super) fn register_settings_preference_callbacks(
         }
     });
 
+    // The assistant's endpoint, key, and how much rope it gets. Each writes through the core and
+    // reports in the same status line as every other preference.
+    let app_weak = app.as_weak();
+    let state_for_ai_conn = Rc::clone(state);
+    let runtime_for_ai_conn = Rc::clone(runtime);
+    app.on_save_ai_connection(move |base_url, model| {
+        let Some(app) = app_weak.upgrade() else {
+            return;
+        };
+        let Some(core) = state_for_ai_conn.borrow().core.clone() else {
+            app.set_sync_status(UiMessage::plain("The assistant needs the mailbox open first."));
+            return;
+        };
+        match runtime_for_ai_conn.block_on(core.set_ai_connection(base_url.as_str(), model.as_str()))
+        {
+            Ok(()) => {
+                app.set_ai_status_line(slint::SharedString::from(""));
+                app.set_sync_status(UiMessage::plain("Assistant settings saved."));
+            }
+            Err(error) => {
+                app.set_ai_status_line(slint::SharedString::from(error.clone()));
+                app.set_sync_status(UiMessage::detail(
+                    "Could not save the assistant settings: {}",
+                    error,
+                ));
+            }
+        }
+    });
+
+    let app_weak = app.as_weak();
+    let state_for_ai_key = Rc::clone(state);
+    let runtime_for_ai_key = Rc::clone(runtime);
+    app.on_save_ai_key(move |key| {
+        let Some(app) = app_weak.upgrade() else {
+            return;
+        };
+        // An empty box is not a mistake: it is how a firm drops a hosted key and moves to a
+        // model on the machine. Saving the rest of the form must not wipe a key they kept.
+        if key.trim().is_empty() {
+            return;
+        }
+        let Some(core) = state_for_ai_key.borrow().core.clone() else {
+            return;
+        };
+        match runtime_for_ai_key.block_on(core.set_ai_key(key.as_str())) {
+            Ok(()) => {
+                app.set_ai_configured(true);
+                app.set_sync_status(UiMessage::plain("Assistant key saved to the keychain."));
+            }
+            Err(error) => app.set_sync_status(UiMessage::detail(
+                "Could not save the assistant key: {}",
+                error,
+            )),
+        }
+    });
+
+    let app_weak = app.as_weak();
+    let state_for_ai_check = Rc::clone(state);
+    let runtime_for_ai_check = Rc::clone(runtime);
+    app.on_check_ai_connection(move || {
+        let Some(app) = app_weak.upgrade() else {
+            return;
+        };
+        let Some(core) = state_for_ai_check.borrow().core.clone() else {
+            return;
+        };
+        app.set_ai_status_line(slint::SharedString::from("Asking the endpoint what it can do…"));
+        match runtime_for_ai_check.block_on(core.ai_list_models()) {
+            Ok(models) => {
+                let configured = runtime_for_ai_check
+                    .block_on(core.ai_status())
+                    .map(|status| status.configured)
+                    .unwrap_or(false);
+                app.set_ai_configured(configured);
+                app.set_ai_status_line(slint::SharedString::from(format!(
+                    "Answered, and offers {} model{}.",
+                    models.len(),
+                    if models.len() == 1 { "" } else { "s" }
+                )));
+            }
+            Err(error) => app.set_ai_status_line(slint::SharedString::from(format!(
+                "No answer from that address: {error}"
+            ))),
+        }
+    });
+
+    let app_weak = app.as_weak();
+    let state_for_level = Rc::clone(state);
+    let runtime_for_level = Rc::clone(runtime);
+    app.on_set_agent_level(move |level| {
+        let Some(app) = app_weak.upgrade() else {
+            return;
+        };
+        let Some(core) = state_for_level.borrow().core.clone() else {
+            return;
+        };
+        match runtime_for_level.block_on(core.set_agent_level(level.as_str())) {
+            Ok(()) => app.set_sync_status(UiMessage::plain("Assistant settings saved.")),
+            Err(error) => app.set_sync_status(UiMessage::detail(
+                "Could not save the assistant settings: {}",
+                error,
+            )),
+        }
+    });
+
+    let app_weak = app.as_weak();
+    let state_for_scope = Rc::clone(state);
+    let runtime_for_scope = Rc::clone(runtime);
+    app.on_set_agent_scope(move |scope| {
+        let Some(app) = app_weak.upgrade() else {
+            return;
+        };
+        let Some(core) = state_for_scope.borrow().core.clone() else {
+            return;
+        };
+        match runtime_for_scope.block_on(core.set_agent_scope(scope.as_str())) {
+            Ok(()) => app.set_sync_status(UiMessage::plain("Assistant settings saved.")),
+            Err(error) => app.set_sync_status(UiMessage::detail(
+                "Could not save the assistant settings: {}",
+                error,
+            )),
+        }
+    });
+
     let app_weak = app.as_weak();
     let state_for_theme = Rc::clone(state);
     let runtime_for_theme = Rc::clone(runtime);

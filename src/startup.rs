@@ -621,6 +621,10 @@ pub(crate) fn apply_settings(app: &AppWindow, settings: &Settings) {
         _ => 5,
     });
     app.set_mark_read_on_open(settings.mark_read_on_open);
+    app.set_ai_base_url(settings.ai_base_url.clone().into());
+    app.set_ai_model(settings.ai_model_intelligent.clone().into());
+    app.set_ai_agent_level(settings.ai_agent_level.clone().into());
+    app.set_ai_agent_scope(settings.ai_agent_scope.clone().into());
     app.set_close_to_tray(settings.close_to_tray && !cfg!(feature = "flatpak"));
     app.set_monochrome_sidebar_icons(settings.monochrome_sidebar_icons);
     app.set_show_avatars(settings.show_avatars);
