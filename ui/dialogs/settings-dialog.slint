@@ -90,6 +90,7 @@ export component SettingsDialog inherits Rectangle {
     in-out property <int> sync_interval_minutes: 5;
     in-out property <bool> mark_read_on_open: true;
     in-out property <bool> remote-images-enabled: false;
+    in-out property <bool> bridge-enabled: false;
     in-out property <bool> close_to_tray: false;
     in-out property <string> account_email: "";
     in-out property <string> account_username: "";
@@ -153,6 +154,7 @@ export component SettingsDialog inherits Rectangle {
     callback cancel_oauth();
     callback save_oauth_app(string, string, string);
     callback set-remote-images(bool);
+    callback set-bridge-enabled(bool);
     pure callback make_account_transfer(string) -> data-transfer;
     pure callback read_account_transfer(data-transfer) -> string;
     callback reorder_account(string, int, bool);
@@ -587,6 +589,32 @@ export component SettingsDialog inherits Rectangle {
                                         enabled: root.remote-images-available;
                                         checked: root.remote-images-enabled;
                                         toggled => { root.set-remote-images(self.checked); }
+                                    }
+                                }
+                            }
+
+                            Rectangle {
+                                height: root.compact ? 168px : 130px;
+                                background: root.surface;
+                                border-radius: 8px;
+                                border-width: 1px;
+                                border-color: root.border-subtle;
+                                HorizontalBox {
+                                    padding-top: 18px;
+                                    padding-right: 20px;
+                                    padding-bottom: 18px;
+                                    padding-left: 20px;
+                                    spacing: 16px;
+                                    VerticalBox {
+                                        spacing: 5px;
+                                        Text { text: @tr("hiSAI bridge"); color: root.heading; font-size: TypeScale.subtitle; font-weight: 700; }
+                                        Text { height: root.compact ? 38px : 17px; text: @tr("Let the hiSAI agent on this computer read this mailbox, calendar and contacts."); color: root.faint-text; font-size: TypeScale.secondary; wrap: word-wrap; }
+                                        Text { height: root.compact ? 52px : 34px; text: @tr("Reading only: hiSAI cannot send, delete or change anything, and nothing leaves this computer. Takes effect when you restart Fortax Mail."); color: root.faint-text; font-size: TypeScale.caption; wrap: word-wrap; }
+                                    }
+                                    Rectangle { horizontal-stretch: 1; }
+                                    Switch {
+                                        checked: root.bridge-enabled;
+                                        toggled => { root.set-bridge-enabled(self.checked); }
                                     }
                                 }
                             }

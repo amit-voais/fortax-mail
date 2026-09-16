@@ -141,6 +141,9 @@ export global I18n {
     ui-message-settings(key, argument, second-argument, third-argument) => {
         if (key == "Notification preferences are active for this session.") { return @tr("Notification preferences are active for this session."); }
         if (key == "Notification preferences saved.") { return @tr("Notification preferences saved."); }
+        if (key == "hiSAI can read this mailbox once you restart Fortax Mail.") { return @tr("hiSAI can read this mailbox once you restart Fortax Mail."); }
+        if (key == "hiSAI will lose access to this mailbox once you restart Fortax Mail.") { return @tr("hiSAI will lose access to this mailbox once you restart Fortax Mail."); }
+        if (key == "Could not save the hiSAI bridge setting: {}") { return @tr("Could not save the hiSAI bridge setting: {}", argument); }
         if (key == "Could not save notifications: {}") { return @tr("Could not save notifications: {}", argument); }
         if (key == "Sync interval is active for this session.") { return @tr("Sync interval is active for this session."); }
         if (key == "Sync interval set to {} minutes.") { return @tr("Sync interval set to {} minutes.", argument); }
@@ -520,6 +523,7 @@ export component AppWindow inherits Window {
     callback email-key-event(string, bool, bool, bool, bool, bool, bool);
     callback select-email-text();
     callback set-remote-images(bool);
+    callback set-bridge-enabled(bool);
     callback load-remote-images-for-message();
     callback calendar-navigate(string, int);
     callback calendar-select-date(string);
@@ -707,6 +711,7 @@ export component AppWindow inherits Window {
     in-out property <bool> oauth_in_progress: false;
     in property <bool> remote-images-available: true;
     in-out property <bool> remote-images-enabled: false;
+    in-out property <bool> bridge-enabled: false;
     in property <bool> remote-images-blocked: false;
     in-out property <bool> compose_open: false;
     in property <string> compose_mode: "new";
@@ -1349,6 +1354,7 @@ export component AppWindow inherits Window {
             mark_read_on_open <=> root.mark_read_on_open;
             close_to_tray <=> root.close_to_tray;
             remote-images-enabled <=> root.remote-images-enabled;
+            bridge-enabled <=> root.bridge-enabled;
             account_email <=> root.account_email;
             account_username <=> root.account_username;
             account_password <=> root.account_password;
@@ -1433,6 +1439,7 @@ export component AppWindow inherits Window {
                 root.save_oauth_app(google-id, google-secret, microsoft-id);
             }
             set-remote-images(enabled) => { root.set-remote-images(enabled); }
+            set-bridge-enabled(enabled) => { root.set-bridge-enabled(enabled); }
             make_account_transfer(value) => root.make_account_transfer(value);
             read_account_transfer(value) => root.read_account_transfer(value);
             reorder_account(source, target, after) => { root.reorder_account(source, target, after); }

@@ -67,6 +67,7 @@ use favicon::{
     FaviconImage, FaviconImages, FaviconLoader, ProfileAvatarImages, ProfileAvatarLoader,
     physical_pixel_side,
 };
+use fortax_mail_core::bridge;
 use fortax_mail_core::config::Paths;
 use fortax_mail_core::models::{
     Account, AccountConfig, AddPasswordAccountArgs, CalendarConnection, CardDavConnection,
@@ -4058,6 +4059,37 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                 })
                 .await;
         });
+    });
+
+    // The hiSAI bridge, from Settings rather than `fortax-mail --bridge on`. The listener itself starts
+    // with the app, so the switch records the choice and says a restart is what makes it real.
+    let bridge_db_path = platform.paths.db_file();
+    app.set_bridge_enabled(bridge::is_enabled(&bridge_db_path).unwrap_or(false));
+    let app_weak = app.as_weak();
+    let bridge_db_for_toggle = bridge_db_path.clone();
+    app.on_set_bridge_enabled(move |enabled| {
+        let Some(app) = app_weak.upgrade() else {
+            return;
+        };
+        match bridge::set_enabled(&bridge_db_for_toggle, enabled) {
+            Ok(()) => {
+                app.set_bridge_enabled(enabled);
+                app.set_sync_status(if enabled {
+                    UiMessage::plain("hiSAI can read this mailbox once you restart Fortax Mail.")
+                } else {
+                    UiMessage::plain(
+                        "hiSAI will lose access to this mailbox once you restart Fortax Mail.",
+                    )
+                });
+            }
+            Err(error) => {
+                app.set_bridge_enabled(!enabled);
+                app.set_sync_status(UiMessage::detail(
+                    "Could not save the hiSAI bridge setting: {}",
+                    error.to_string(),
+                ));
+            }
+        }
     });
 
     let app_weak = app.as_weak();

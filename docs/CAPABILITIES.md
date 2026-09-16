@@ -51,7 +51,8 @@ and on the government portals. The bridge is how it reads the firm's mail withou
 
 **Shape of it**
 
-- Off until you switch it on: `fortax-mail --bridge on`, then restart the app (`--bridge status`, `--bridge off`).
+- Off until you switch it on: **Settings → General → hiSAI bridge**, then restart the app. From a terminal:
+  `fortax-mail --bridge on` (also `--bridge status`, `--bridge off`).
 - Listens on `127.0.0.1` only, on a port the OS assigns. A LAN or internet client cannot reach it.
 - Every request carries a bearer token. The token is written to `bridge.json` in the application data
   directory with `0600` permissions, and hiSAI — running as the same user — is the only thing that can read

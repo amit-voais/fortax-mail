@@ -39,7 +39,7 @@ Fortax Mail closes that gap:
   CardDAV — the same standards the upstream client supports.
 - **It stays on the machine.** Mail, calendar and contacts are stored locally and work offline. Nothing is
   copied to Fortax's servers, and passwords and tokens live in the operating system's own keychain.
-- **hiSAI can read it, with your permission.** A local bridge — off until you turn it on, loopback only,
+- **hiSAI can read it, with your permission.** A local bridge — off until you turn it on in Settings, loopback only,
   token-authenticated and read-only — lets hiSAI search the mailbox, read a thread, look up a contact and see
   the calendar. Writing is not one of its powers: a reply arrives as a draft for you to send.
 - **Native and light.** Rust, Slint and Blitz — no browser engine, no WebView for email HTML, remote images
@@ -79,7 +79,7 @@ IMAP/JMAP.
 # macOS 14+, Windows 10+, or Linux. Needs the Rust toolchain (https://rustup.rs), 1.92 or newer.
 cargo run --bin fortax-mail          # run it
 bash scripts/package-macos.sh        # a .app and a .dmg
-fortax-mail --bridge on              # let hiSAI read this mailbox (restart the app afterwards)
+fortax-mail --bridge on              # or Settings → General → hiSAI bridge (restart the app afterwards)
 ```
 
 ## Licence

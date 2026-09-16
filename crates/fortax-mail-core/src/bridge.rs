@@ -478,6 +478,30 @@ mod tests {
     }
 
     #[test]
+    fn the_switch_survives_a_restart() {
+        // What the Settings toggle and `--bridge on` both write: one row the next launch reads back.
+        let dir = tempfile::tempdir().expect("temp dir");
+        let db = dir.path().join("mail.db");
+        Connection::open(&db)
+            .and_then(|c| {
+                c.execute(
+                    "CREATE TABLE app_settings (key TEXT PRIMARY KEY, value TEXT)",
+                    [],
+                )
+            })
+            .expect("settings table");
+
+        assert!(
+            !is_enabled(&db).expect("read"),
+            "off until someone says otherwise"
+        );
+        set_enabled(&db, true).expect("switch on");
+        assert!(is_enabled(&db).expect("read"));
+        set_enabled(&db, false).expect("switch off");
+        assert!(!is_enabled(&db).expect("read"));
+    }
+
+    #[test]
     fn reads_a_query_string() {
         let q = Query::parse("q=bank+statement&limit=25&empty=");
         assert_eq!(q.get("q"), Some("bank statement"));

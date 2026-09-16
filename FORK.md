@@ -22,7 +22,7 @@ own channels. That is what the list below does.
 
 - **The hiSAI bridge** — a local, token-authenticated, read-only interface on the loopback address that lets
   the hiSAI desktop agent search the mailbox, read a thread or a message, look up a contact and read the
-  calendar. It is off until you switch it on (`fortax-mail --bridge on`), it never leaves the machine, and it
+  calendar. It is off until you switch it on (Settings → General → hiSAI bridge, or `fortax-mail --bridge on`), it never leaves the machine, and it
   answers `GET` only: nothing it exposes can mark, move, delete or send. A reply hiSAI writes arrives as a
   draft in the composer for a person to send. Endpoint by endpoint:
   [docs/CAPABILITIES.md](docs/CAPABILITIES.md).
