@@ -216,7 +216,8 @@ class ReleaseTests(unittest.TestCase):
             shutil.copytree(SCRIPTS.parent / "LICENSES", root / "LICENSES")
             (root / "Cargo.toml").write_text('[package]\nversion = "0.1.0-alpha.1"\n')
             (root / "target/release").mkdir(parents=True)
-            shutil.copyfile("/bin/true", root / "target/release/fortax-mail")
+            # Not a hard-coded /bin/true: macOS keeps it in /usr/bin, and this repo builds there.
+            shutil.copyfile(shutil.which("true"), root / "target/release/fortax-mail")
             # This test checks package metadata using fixture ELFs. Stub only
             # the download/renderer helpers in the disposable checkout; actual
             # native PDF rendering is exercised by the dedicated smoke tests.
@@ -224,7 +225,7 @@ class ReleaseTests(unittest.TestCase):
                 "import pathlib, shutil, sys\n"
                 "destination = pathlib.Path(sys.argv[2])\n"
                 "destination.mkdir(parents=True, exist_ok=True)\n"
-                "shutil.copyfile('/bin/true', destination / 'libpdfium.so')\n"
+                "shutil.copyfile(shutil.which('true'), destination / 'libpdfium.so')\n"
             )
             (root / "scripts/test-pdf-preview.py").write_text(
                 "import pathlib, sys\n"

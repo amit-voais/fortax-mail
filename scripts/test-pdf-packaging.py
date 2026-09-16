@@ -124,7 +124,8 @@ class PackagingTests(unittest.TestCase):
             (root / "resources/app-icon/fortax-mail-masked.png").write_bytes(b"png")
             (root / "Cargo.toml").write_text('[package]\nversion = "0.1.0-alpha.5"\n')
             (root / "target/release").mkdir(parents=True)
-            shutil.copyfile("/bin/true", root / "target/release/fortax-mail")
+            # Not a hard-coded /bin/true: macOS keeps it in /usr/bin, and this repo builds there.
+            shutil.copyfile(shutil.which("true"), root / "target/release/fortax-mail")
             (root / "target/release/fortax-mail").chmod(0o755)
 
             (root / "scripts/stage-pdfium.py").write_text(
