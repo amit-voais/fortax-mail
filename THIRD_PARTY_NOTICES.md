@@ -72,6 +72,17 @@ The bundled SVG icons in `ui/icons/phosphor` are sourced from
 `2b75f3ad12b420c9504ef05df8d2564a28f8500e` and are licensed under the MIT
 License. Copyright © 2023 Phosphor Icons.
 
+## Lucide Icons
+
+The original SVG inputs in `ui/icons/lucide/sources` are sourced from
+[Lucide](https://lucide.dev) Static 1.46.0. The displayed outlines in
+`ui/icons/lucide/outline` preserve that geometry with an adjusted stroke weight.
+The active and sidebar variants in `ui/icons/lucide/filled` are modifications
+created for Flectar Mail from the same 24px Lucide geometry. Lucide is licensed
+under the ISC License, with Feather-derived icons covered by the MIT License.
+Both notices are retained in `ui/icons/lucide/LICENSE`. Source mappings are
+recorded in `ui/icons/lucide/sources.json` and `ui/icons/lucide/solid_recipes.py`.
+
 ## Google Sans Flex
 
 The bundled Google Sans Flex font is distributed under the SIL Open Font

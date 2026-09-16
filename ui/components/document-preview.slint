@@ -40,9 +40,9 @@ export component DocumentPreview inherits Rectangle {
         ZoomControls { compact: root.compact; zoom: root.zoom; minimum: 0.1; fitting: root.fitting; revision: root.revision; available: root.source.width > 0; command(action) => { root.command(action); } }
         if root.pages > 0 : HorizontalBox {
             height: root.compact ? 44px : 40px; padding: 0px;
-            ToolbarIconButton { compact: root.compact; icon-color: AppTheme.secondary; icon: @image-url("../icons/phosphor/caret-left.svg"); tooltip-text: @tr("Previous page"); interactive: !root.busy && root.page > 0; clicked => { root.render-page(root.page - 1, 200); } }
+            ToolbarIconButton { compact: root.compact; icon-color: AppTheme.secondary; icon: @image-url("../icons/lucide/outline/chevron-left.svg"); tooltip-text: @tr("Previous page"); interactive: !root.busy && root.page > 0; clicked => { root.render-page(root.page - 1, 200); } }
             Text { text: @tr("Page {} of {}", root.page + 1, root.pages); color: AppTheme.secondary; font-size: TypeScale.caption; vertical-alignment: center; horizontal-alignment: center; horizontal-stretch: 1; }
-            ToolbarIconButton { compact: root.compact; icon-color: AppTheme.secondary; icon: @image-url("../icons/phosphor/caret-right.svg"); tooltip-text: @tr("Next page"); interactive: !root.busy && root.page + 1 < root.pages; clicked => { root.render-page(root.page + 1, 200); } }
+            ToolbarIconButton { compact: root.compact; icon-color: AppTheme.secondary; icon: @image-url("../icons/lucide/outline/chevron-right.svg"); tooltip-text: @tr("Next page"); interactive: !root.busy && root.page + 1 < root.pages; clicked => { root.render-page(root.page + 1, 200); } }
         }
         canvas := ScrollView {
             vertical-stretch: 1;

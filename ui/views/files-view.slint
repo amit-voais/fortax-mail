@@ -92,7 +92,7 @@ component FilesNavigation inherits Rectangle {
                 Button {
                     height: LayoutMetrics.sidebar-action-height;
                     text: @tr("Connect storage"); primary: true; has-icon: true;
-                    icon: @image-url("../icons/phosphor/plus.svg");
+                    icon: @image-url("../icons/lucide/outline/plus.svg");
                     enabled: !FilesUi.busy; clicked => { root.setup(); }
                 }
                 ScrollView {
@@ -103,7 +103,7 @@ component FilesNavigation inherits Rectangle {
                         WorkspaceMiniHeading { label: @tr("UNIFIED"); }
                         FilesSidebarItem {
                             label: @tr("Email attachments"); left-padding: 12px;
-                            icon: @image-url("../icons/phosphor/paperclip.svg");
+                            icon: @image-url("../icons/lucide/filled/paperclip.svg");
                             selected: FilesUi.attachments && FilesUi.account == 0;
                             clicked(scope) => { root.navigate("account", "0", "attachments"); }
                         }
@@ -123,13 +123,13 @@ component FilesNavigation inherits Rectangle {
                             }
                             if self.expanded : FilesSidebarItem {
                                 label: @tr("Email attachments");
-                                icon: @image-url("../icons/phosphor/paperclip.svg");
+                                icon: @image-url("../icons/lucide/filled/paperclip.svg");
                                 selected: FilesUi.attachments && FilesUi.selected-account-id == account.id;
                                 clicked(scope) => { root.navigate("account-id", "" + account.id, "attachments"); }
                             }
                             if self.expanded : FilesSidebarItem {
                                 label: @tr("Server storage");
-                                icon: @image-url("../icons/phosphor/files.svg");
+                                icon: @image-url("../icons/lucide/filled/files.svg");
                                 selected: !FilesUi.attachments && FilesUi.selected-account-id == account.id;
                                 clicked(scope) => { root.navigate("account-id", "" + account.id, "storage"); }
                             }
@@ -137,7 +137,7 @@ component FilesNavigation inherits Rectangle {
                         if !FilesUi.attachments && FilesUi.storage-accounts.length > 0 : WorkspaceMiniHeading { label: @tr("STORAGE SPACE"); }
                         for space[index] in FilesUi.storage-accounts : FilesSidebarItem {
                             visible: !FilesUi.attachments;
-                            label: space; icon: @image-url("../icons/phosphor/folder-simple.svg");
+                            label: space; icon: @image-url("../icons/lucide/filled/file-directory.svg");
                             selected: index == FilesUi.storage-account;
                             clicked(scope) => { root.navigate("space", "" + index, ""); }
                         }
@@ -269,7 +269,7 @@ export component FilesView inherits Rectangle {
                         y: (parent.height - self.height) / 2;
                         width: parent.width - 2 * self.x;
                         show-leading: true;
-                        leading-icon: root.compact || root.sidebar-collapsed ? @image-url("../icons/phosphor/sidebar.svg") : @image-url("../icons/phosphor/sidebar-fill.svg");
+                        leading-icon: root.compact || root.sidebar-collapsed ? @image-url("../icons/lucide/outline/sidebar-expand.svg") : @image-url("../icons/lucide/outline/sidebar-collapse.svg");
                         leading-tooltip: @tr("File sources");
                         leading-accessible-id: "files-sidebar-button";
                         text: root.search-text;
@@ -299,21 +299,21 @@ export component FilesView inherits Rectangle {
 
                         if FilesUi.can-up : ToolbarIconButton {
                             icon-color: AppTheme.secondary;
-                            icon: @image-url("../icons/phosphor/arrow-left.svg");
+                            icon: @image-url("../icons/lucide/outline/arrow-left.svg");
                             tooltip-text: @tr("Back");
                             interactive: !FilesUi.busy;
                             clicked => { root.navigate("up", "", ""); }
                         }
                         if !FilesUi.attachments : ToolbarIconButton {
                             icon-color: AppTheme.secondary;
-                            icon: @image-url("../icons/phosphor/upload-simple.svg");
+                            icon: @image-url("../icons/lucide/outline/upload.svg");
                             tooltip-text: @tr("Upload");
                             interactive: FilesUi.can-create && !FilesUi.busy;
                             clicked => { root.navigate("upload", "", ""); }
                         }
                         if !FilesUi.attachments : ToolbarIconButton {
                             icon-color: AppTheme.secondary;
-                            icon: @image-url("../icons/phosphor/folder-plus.svg");
+                            icon: @image-url("../icons/lucide/outline/folder-add.svg");
                             tooltip-text: @tr("New folder");
                             interactive: FilesUi.can-create && !FilesUi.busy;
                             clicked => { root.value = ""; FilesUi.collision = 0; FilesUi.case-insensitive = false; FilesUi.dialog = "folder"; }
@@ -324,7 +324,7 @@ export component FilesView inherits Rectangle {
                 vertical-stretch: 1;
                 if FilesUi.rows.length == 0 : VerticalBox {
                     alignment: center; padding: 24px; spacing: 12px;
-                    Image { source: @image-url("../icons/phosphor/files.svg"); width: 40px; height: 40px; colorize: AppTheme.muted; horizontal-stretch: 0; }
+                    Image { source: @image-url("../icons/lucide/outline/files.svg"); width: 40px; height: 40px; colorize: AppTheme.muted; horizontal-stretch: 0; }
                     Text { text: FilesUi.busy ? @tr("Loading files…") : @tr("No files to show"); color: AppTheme.heading; font-weight: 600; font-size: TypeScale.body; horizontal-alignment: center; }
                     Text { text: FilesUi.attachments ? @tr("Attachments from synchronized messages will appear here.") : FilesUi.connected ? @tr("Upload a file or create a folder to get started.") : @tr("Select an account and connect its storage."); color: AppTheme.secondary; wrap: word-wrap; horizontal-alignment: center; }
                 }
@@ -340,7 +340,7 @@ export component FilesView inherits Rectangle {
                         x: LayoutMetrics.list-row-inset; width: max(0px, parent.visible-width - 2 * LayoutMetrics.list-row-inset); height: 82px; border-radius: 6px; background: FilesUi.selected == index ? AppTheme.accent-soft : hit.has-hover ? AppTheme.sidebar-bg : transparent;
                         HorizontalBox {
                             padding: 12px; spacing: 12px;
-                            Image { width: 24px; height: 24px; source: row.directory ? @image-url("../icons/phosphor/folder-simple.svg") : row.attachment ? @image-url("../icons/phosphor/paperclip.svg") : @image-url("../icons/phosphor/file.svg"); colorize: row.directory ? AppTheme.accent : AppTheme.secondary; }
+                            Image { width: 24px; height: 24px; source: row.directory ? @image-url("../icons/lucide/outline/file-directory.svg") : row.attachment ? @image-url("../icons/lucide/outline/paperclip.svg") : @image-url("../icons/lucide/outline/file.svg"); colorize: row.directory ? AppTheme.accent : AppTheme.secondary; }
                             VerticalBox {
                                 padding: 0px; spacing: 4px;
                                 Text { text: row.name; color: AppTheme.heading; font-size: TypeScale.body; font-weight: 600; overflow: elide; }
@@ -348,7 +348,7 @@ export component FilesView inherits Rectangle {
                             }
 
                             Text { text: row.size; color: AppTheme.secondary; font-size: TypeScale.caption; width: 70px; horizontal-alignment: right; }
-                            if row.locked : Image { width: 16px; height: 16px; source: @image-url("../icons/phosphor/lock-key.svg"); colorize: AppTheme.muted; }
+                            if row.locked : Image { width: 16px; height: 16px; source: @image-url("../icons/lucide/outline/lock.svg"); colorize: AppTheme.muted; }
                         }
                         row-focus := FocusScope {
                             enabled: !FilesUi.busy;
@@ -389,10 +389,10 @@ export component FilesView inherits Rectangle {
                 if FilesUi.preview-open : WorkspaceTitleRow {
                     title: FilesUi.activity-open ? @tr("Sharing activity") : root.selected-row.name;
                     show-leading: root.single-surface;
-                    leading-icon: @image-url("../icons/phosphor/arrow-left.svg");
+                    leading-icon: @image-url("../icons/lucide/outline/arrow-left.svg");
                     leading-tooltip: @tr("Back to files");
                     leading-clicked => { FilesUi.preview-open = false; if FilesUi.busy { FilesUi.command("cancel", "", ""); } FilesUi.command("release-preview", "", ""); }
-                    if !root.single-surface : ToolbarIconButton { icon-color: AppTheme.secondary; icon: @image-url("../icons/phosphor/x.svg"); tooltip-text: @tr("Close"); clicked => { FilesUi.preview-open = false; if FilesUi.busy { FilesUi.command("cancel", "", ""); } FilesUi.command("release-preview", "", ""); } }
+                    if !root.single-surface : ToolbarIconButton { icon-color: AppTheme.secondary; icon: @image-url("../icons/lucide/outline/x.svg"); tooltip-text: @tr("Close"); clicked => { FilesUi.preview-open = false; if FilesUi.busy { FilesUi.command("cancel", "", ""); } FilesUi.command("release-preview", "", ""); } }
                 }
                 if FilesUi.preview-open && !FilesUi.activity-open : VerticalBox {
                     padding: 0px; spacing: 8px;
@@ -400,15 +400,15 @@ export component FilesView inherits Rectangle {
                     HorizontalBox {
                         padding: 0px; spacing: 8px;
                         Button { text: root.selected-row.directory ? @tr("Open folder") : @tr("Download"); enabled: !FilesUi.busy && root.selected-row.readable; clicked => { FilesUi.command(root.selected-row.directory ? "enter" : "download", "", ""); } }
-                        if !FilesUi.attachments : ToolbarIconButton { icon-color: AppTheme.secondary; icon: @image-url("../icons/phosphor/dots-three.svg"); tooltip-text: @tr("Manage"); interactive: !FilesUi.busy; clicked => { FilesUi.dialog = "manage"; } }
+                        if !FilesUi.attachments : ToolbarIconButton { icon-color: AppTheme.secondary; icon: @image-url("../icons/lucide/outline/kebab-horizontal.svg"); tooltip-text: @tr("Manage"); interactive: !FilesUi.busy; clicked => { FilesUi.dialog = "manage"; } }
                         if !root.selected-row.directory : Button { text: @tr("Preview"); enabled: !FilesUi.busy; clicked => { FilesUi.command("preview", "", ""); } }
-                        if FilesUi.attachments : ToolbarIconButton { icon-color: AppTheme.secondary; icon: @image-url("../icons/phosphor/info-fill.svg"); tooltip-text: @tr("Details"); interactive: !FilesUi.busy; clicked => { FilesUi.command("details", "", ""); } }
+                        if FilesUi.attachments : ToolbarIconButton { icon-color: AppTheme.secondary; icon: @image-url("../icons/lucide/outline/info.svg"); tooltip-text: @tr("Details"); interactive: !FilesUi.busy; clicked => { FilesUi.command("details", "", ""); } }
                         Rectangle { horizontal-stretch: 1; }
                     }
                 }
                 if !FilesUi.preview-open : VerticalBox {
                     alignment: center; spacing: 12px;
-                    Image { source: @image-url("../icons/phosphor/files.svg"); width: 40px; height: 40px; colorize: AppTheme.muted; }
+                    Image { source: @image-url("../icons/lucide/outline/files.svg"); width: 40px; height: 40px; colorize: AppTheme.muted; }
                     Text { text: @tr("Select a file to preview"); color: AppTheme.heading; horizontal-alignment: center; font-size: TypeScale.title-small; }
                     Text { text: FilesUi.pdf-supported ? @tr("PDFs, images and text appear here. Other formats can be downloaded.") : @tr("Images and text appear here. Other formats can be downloaded."); wrap: word-wrap; color: AppTheme.secondary; horizontal-alignment: center; }
                 }
@@ -474,7 +474,7 @@ export component FilesView inherits Rectangle {
                     Button { text: @tr("Copy…"); enabled: root.selected-row.readable; clicked => { root.value = root.selected-row.name; root.destination = ""; root.copy-space = FilesUi.storage-account; FilesUi.collision = 0; FilesUi.case-insensitive = false; FilesUi.dialog = "copy"; } }
                     if !root.selected-row.directory : Button { text: @tr("Replace content…"); enabled: root.selected-row.writable; clicked => { FilesUi.dialog = ""; FilesUi.command("replace", "" + FilesUi.selected, ""); } }
                     Button { text: @tr("Properties…"); enabled: root.selected-row.writable; clicked => { root.created = root.selected-row.created; root.modified = root.selected-row.modified; root.accessed = root.selected-row.accessed; root.executable = root.selected-row.executable; root.subscribed = root.selected-row.subscribed; root.value = ""; FilesUi.dialog = "metadata"; } }
-                    Button { text: @tr("Sharing…"); has-icon: true; icon: @image-url("../icons/phosphor/share-network.svg"); enabled: root.selected-row.shareable; clicked => { root.value = ""; root.allow-write = false; root.allow-properties=false; root.allow-add = false; root.allow-rename = false; root.allow-delete = false; root.allow-share = false; FilesUi.dialog = "share"; } }
+                    Button { text: @tr("Sharing…"); has-icon: true; icon: @image-url("../icons/lucide/outline/share.svg"); enabled: root.selected-row.shareable; clicked => { root.value = ""; root.allow-write = false; root.allow-properties=false; root.allow-add = false; root.allow-rename = false; root.allow-delete = false; root.allow-share = false; FilesUi.dialog = "share"; } }
                     if FilesUi.can-lock : Button { text: root.selected-row.owns-lock ? @tr("Release lock") : @tr("Lock…"); enabled: root.selected-row.writable; clicked => { if root.selected-row.owns-lock {FilesUi.dialog="";FilesUi.command("unlock","","");}else{FilesUi.dialog="lock";} } }
                     if FilesUi.can-lock && root.selected-row.owns-lock : Button { text: @tr("Renew lock for 5 minutes"); enabled: root.selected-row.writable; clicked => { FilesUi.dialog = ""; FilesUi.command("lock", "300", ""); } }
                     Button { text: @tr("Delete…"); destructive: true; enabled: root.selected-row.deletable; clicked => { FilesUi.dialog = "delete"; } }
@@ -572,7 +572,7 @@ export component FilesView inherits Rectangle {
                 padding: 16px; spacing: 12px;
                 HorizontalBox { height: 40px; vertical-stretch: 0;
                     Text { text: @tr("Connect storage"); color: AppTheme.heading; font-size: TypeScale.title; horizontal-stretch: 1; }
-                    ToolbarIconButton { compact: root.compact; icon: @image-url("../icons/phosphor/x.svg"); icon-color: AppTheme.secondary; tooltip-text: @tr("Close"); clicked => { root.setup = false; } }
+                    ToolbarIconButton { compact: root.compact; icon: @image-url("../icons/lucide/outline/x.svg"); icon-color: AppTheme.secondary; tooltip-text: @tr("Close"); clicked => { root.setup = false; } }
                 }
                 ScrollView { viewport-width: self.visible-width; viewport-height: storage-form.preferred-height;
             storage-form := VerticalBox {

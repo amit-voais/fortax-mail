@@ -54,7 +54,7 @@ export component MailSidebar inherits CollapsibleWorkspaceSidebar {
             height: LayoutMetrics.sidebar-action-height;
             horizontal-stretch: 1;
             text: @tr("New email");
-            icon: @image-url("../icons/phosphor/note-pencil-fill.svg");
+            icon: @image-url("../icons/lucide/filled/compose.svg");
             has-icon: true;
             primary: true;
             clicked => { root.compose(); }
@@ -78,7 +78,7 @@ export component MailSidebar inherits CollapsibleWorkspaceSidebar {
                     y: 8px;
                     width: 16px;
                     height: 16px;
-                    source: @image-url("../icons/phosphor/magnifying-glass.svg");
+                    source: @image-url("../icons/lucide/outline/search.svg");
                     colorize: root.muted-color;
                     image-fit: contain;
                     accessible-role: none;
@@ -117,7 +117,7 @@ export component MailSidebar inherits CollapsibleWorkspaceSidebar {
                 placeholder-text: @tr("Find folder");
                 input-label: @tr("Find folder");
                 show-leading-icon: true;
-                leading-icon: @image-url("../icons/phosphor/magnifying-glass.svg");
+                leading-icon: @image-url("../icons/lucide/outline/search.svg");
                 leading-icon-color: root.muted-color;
                 trailing-content-width: 32px;
                 edited(value) => { root.filter-folders(value); }
@@ -128,7 +128,7 @@ export component MailSidebar inherits CollapsibleWorkspaceSidebar {
                 x: parent.width - 32px;
                 width: 32px;
                 height: 32px;
-                icon: @image-url("../icons/phosphor/x.svg");
+                icon: @image-url("../icons/lucide/outline/x.svg");
                 icon-size: 14px;
                 icon-color: root.muted-color;
                 hover-background: root.hover-background;
@@ -184,7 +184,7 @@ export component MailSidebar inherits CollapsibleWorkspaceSidebar {
                         y: 0px;
                         width: parent.width;
                         label: @tr("All Inboxes");
-                        icon: @image-url("../icons/phosphor/stack-fill.svg");
+                        icon: @image-url("../icons/lucide/filled/stack.svg");
                         sidebar-background: root.background-color;
                         hover-background: root.hover-background;
                         body-color: root.title-color;
@@ -204,7 +204,7 @@ export component MailSidebar inherits CollapsibleWorkspaceSidebar {
                         account-id: 0;
                         folder-id: -1;
                         mail-drop-enabled: true;
-                        icon: @image-url("../icons/phosphor/tray-fill.svg");
+                        icon: @image-url("../icons/lucide/filled/inbox.svg");
                         selected: root.selected-scope == "Unified Inbox";
                         prominent: true;
                         row-height: 32px;
@@ -231,12 +231,12 @@ export component MailSidebar inherits CollapsibleWorkspaceSidebar {
                             || entry.mailbox.scope == "Unified Spam"
                             || entry.mailbox.scope == "Unified Trash";
                         mail-drop-copies: entry.mailbox.scope == "Unified Starred";
-                        icon: entry.mailbox.scope == "Unified Starred" ? @image-url("../icons/phosphor/star-fill.svg")
-                            : entry.mailbox.scope == "Unified Sent" ? @image-url("../icons/phosphor/paper-plane-tilt-fill.svg")
-                            : entry.mailbox.scope == "Unified Spam" ? @image-url("../icons/phosphor/warning-fill.svg")
-                            : entry.mailbox.scope == "Unified Trash" ? @image-url("../icons/phosphor/trash-fill.svg")
-                            : entry.mailbox.scope == "Unified Archive" ? @image-url("../icons/phosphor/archive-fill.svg")
-                            : @image-url("../icons/phosphor/file-plus-fill.svg");
+                        icon: entry.mailbox.scope == "Unified Starred" ? @image-url("../icons/lucide/filled/star.svg")
+                            : entry.mailbox.scope == "Unified Sent" ? @image-url("../icons/lucide/filled/paper-airplane.svg")
+                            : entry.mailbox.scope == "Unified Spam" ? @image-url("../icons/lucide/filled/alert.svg")
+                            : entry.mailbox.scope == "Unified Trash" ? @image-url("../icons/lucide/filled/trash.svg")
+                            : entry.mailbox.scope == "Unified Archive" ? @image-url("../icons/lucide/filled/archive.svg")
+                            : @image-url("../icons/lucide/filled/draft.svg");
                         selected: entry.mailbox.scope == root.selected-scope;
                         sidebar-background: root.background-color;
                         selection-background: root.selection-background;
@@ -264,7 +264,7 @@ export component MailSidebar inherits CollapsibleWorkspaceSidebar {
                         hover-background: root.hover-background;
                         body-color: root.body-color;
                         muted-color: root.muted-color;
-                        icon: @image-url("../icons/phosphor/tag-simple-fill.svg");
+                        icon: @image-url("../icons/lucide/filled/tag.svg");
                         icon-color: root.monochrome-icons ? root.body-color : #2f9cf4;
                         open: entry.open;
                         toggled(open) => { root.toggle-section(entry.key, open); }
@@ -278,7 +278,7 @@ export component MailSidebar inherits CollapsibleWorkspaceSidebar {
                         left-padding: 42px;
                         scope: "Important";
                         mail-drop-enabled: true;
-                        icon: @image-url("../icons/phosphor/envelope-fill.svg");
+                        icon: @image-url("../icons/lucide/filled/mail.svg");
                         selected: root.selected-scope == "Important";
                         sidebar-background: root.background-color;
                         selection-background: root.selection-background;
@@ -297,7 +297,7 @@ export component MailSidebar inherits CollapsibleWorkspaceSidebar {
                         left-padding: 42px;
                         scope: "Other";
                         mail-drop-enabled: true;
-                        icon: @image-url("../icons/phosphor/envelope-simple-fill.svg");
+                        icon: @image-url("../icons/lucide/filled/mail.svg");
                         selected: root.selected-scope == "Other";
                         sidebar-background: root.background-color;
                         selection-background: root.selection-background;
@@ -318,8 +318,8 @@ export component MailSidebar inherits CollapsibleWorkspaceSidebar {
                         scope: "Label:" + entry.label.id;
                         mail-drop-enabled: true;
                         icon: root.selected-scope == "Label:" + entry.label.id
-                            ? @image-url("../icons/phosphor/folder-open-fill.svg")
-                            : @image-url("../icons/phosphor/folder-simple-fill.svg");
+                            ? @image-url("../icons/lucide/filled/folder-open.svg")
+                            : @image-url("../icons/lucide/filled/file-directory.svg");
                         selected: root.selected-scope == "Label:" + entry.label.id;
                         sidebar-background: root.background-color;
                         selection-background: root.selection-background;
@@ -343,7 +343,7 @@ export component MailSidebar inherits CollapsibleWorkspaceSidebar {
                         hover-background: root.hover-background;
                         body-color: root.body-color;
                         muted-color: root.muted-color;
-                        icon: @image-url("../icons/phosphor/folders-fill.svg");
+                        icon: @image-url("../icons/lucide/filled/folders.svg");
                         icon-color: root.monochrome-icons ? root.body-color : #22a06b;
                         open: entry.open;
                         toggled(open) => { root.toggle-section(entry.key, open); }
@@ -363,8 +363,8 @@ export component MailSidebar inherits CollapsibleWorkspaceSidebar {
                         mail-drop-enabled: true;
                         mail-drop-copies: true;
                         icon: root.selected-scope == "Label:" + entry.label.id
-                            ? @image-url("../icons/phosphor/folder-open-fill.svg")
-                            : @image-url("../icons/phosphor/folder-simple-fill.svg");
+                            ? @image-url("../icons/lucide/filled/folder-open.svg")
+                            : @image-url("../icons/lucide/filled/file-directory.svg");
                         selected: root.selected-scope == "Label:" + entry.label.id;
                         sidebar-background: root.background-color;
                         selection-background: root.selection-background;
@@ -428,15 +428,15 @@ export component MailSidebar inherits CollapsibleWorkspaceSidebar {
                             || entry.mailbox.label == "Starred";
                         mail-drop-copies: entry.mailbox.label == "Starred";
                         left-padding: 26px + entry.mailbox.depth * 16px;
-                        icon: entry.mailbox.label == "Inbox" ? @image-url("../icons/phosphor/tray-fill.svg")
-                            : entry.mailbox.label == "Starred" ? @image-url("../icons/phosphor/star-fill.svg")
-                            : entry.mailbox.label == "Sent" ? @image-url("../icons/phosphor/paper-plane-tilt-fill.svg")
-                            : entry.mailbox.label == "Archive" ? @image-url("../icons/phosphor/archive-fill.svg")
-                            : entry.mailbox.label == "Spam" ? @image-url("../icons/phosphor/warning-fill.svg")
-                            : entry.mailbox.label == "Trash" ? @image-url("../icons/phosphor/trash-fill.svg")
-                            : entry.mailbox.label == "Drafts" ? @image-url("../icons/phosphor/file-plus-fill.svg")
-                            : entry.mailbox.scope == root.selected-scope ? @image-url("../icons/phosphor/folder-open-fill.svg")
-                            : @image-url("../icons/phosphor/folder-simple-fill.svg");
+                        icon: entry.mailbox.label == "Inbox" ? @image-url("../icons/lucide/filled/inbox.svg")
+                            : entry.mailbox.label == "Starred" ? @image-url("../icons/lucide/filled/star.svg")
+                            : entry.mailbox.label == "Sent" ? @image-url("../icons/lucide/filled/paper-airplane.svg")
+                            : entry.mailbox.label == "Archive" ? @image-url("../icons/lucide/filled/archive.svg")
+                            : entry.mailbox.label == "Spam" ? @image-url("../icons/lucide/filled/alert.svg")
+                            : entry.mailbox.label == "Trash" ? @image-url("../icons/lucide/filled/trash.svg")
+                            : entry.mailbox.label == "Drafts" ? @image-url("../icons/lucide/filled/draft.svg")
+                            : entry.mailbox.scope == root.selected-scope ? @image-url("../icons/lucide/filled/folder-open.svg")
+                            : @image-url("../icons/lucide/filled/file-directory.svg");
                         selected: entry.mailbox.scope == root.selected-scope;
                         prominent: entry.mailbox.label == "Inbox";
                         row-height: entry.mailbox.label == "Inbox" ? 32px : 28px;
@@ -470,7 +470,7 @@ export component MailSidebar inherits CollapsibleWorkspaceSidebar {
                         width: parent.width;
                         label: @tr("New folder");
                         scope: "";
-                        icon: @image-url("../icons/phosphor/plus.svg");
+                        icon: @image-url("../icons/lucide/outline/plus.svg");
                         sidebar-background: root.background-color;
                         selection-background: root.selection-background;
                         accent-color: root.accent-color;
@@ -502,7 +502,7 @@ export component MailSidebar inherits CollapsibleWorkspaceSidebar {
                             y: 10px;
                             width: 14px;
                             height: 14px;
-                            source: @image-url("../icons/phosphor/plus.svg");
+                            source: @image-url("../icons/lucide/outline/plus.svg");
                             colorize: root.muted-color;
                             image-fit: contain;
                             accessible-role: none;

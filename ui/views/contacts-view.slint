@@ -145,7 +145,7 @@ export component ContactsView inherits Rectangle {
                     text: @tr("New contact");
                     primary: true;
                     has-icon: true;
-                    icon: @image-url("../icons/phosphor/user-plus-fill.svg");
+                    icon: @image-url("../icons/lucide/filled/person-add.svg");
                     clicked => {
                         root.detail-page-visible = true;
                         root.new-contact();
@@ -188,7 +188,7 @@ export component ContactsView inherits Rectangle {
                                 avatar-image: entry.account.avatar;
                                 has-avatar-image: entry.account.has-avatar;
                                 has-avatar: entry.kind == ContactSidebarRowKind.account;
-                                icon: @image-url("../icons/phosphor/users-fill.svg");
+                                icon: @image-url("../icons/lucide/filled/people.svg");
                                 sidebar-background: root.sidebar-bg;
                                 body-color: root.body-text;
                                 muted-color: root.muted-text;
@@ -207,7 +207,7 @@ export component ContactsView inherits Rectangle {
                                     : entry.kind == ContactSidebarRowKind.favorites ? (root.favorite-count > 0 ? root.favorite-count : "") : entry.account.count;
                                 scope: entry.kind == ContactSidebarRowKind.all ? "all"
                                     : entry.kind == ContactSidebarRowKind.favorites ? "favorites" : "Account:" + entry.account.id;
-                                icon: entry.kind == ContactSidebarRowKind.favorites ? @image-url("../icons/phosphor/star-fill.svg") : @image-url("../icons/phosphor/users-fill.svg");
+                                icon: entry.kind == ContactSidebarRowKind.favorites ? @image-url("../icons/lucide/filled/star.svg") : @image-url("../icons/lucide/filled/people.svg");
                                 selected: entry.kind == ContactSidebarRowKind.all ? root.selected-scope == "All contacts"
                                     : entry.kind == ContactSidebarRowKind.favorites ? root.selected-scope == "Favorites" : entry.account.selected;
                                 prominent: entry.kind != ContactSidebarRowKind.favorites;
@@ -272,8 +272,8 @@ export component ContactsView inherits Rectangle {
                         width: parent.width - 2 * self.x;
                         show-leading: !root.compact;
                         leading-icon: root.sidebar-collapsed
-                            ? @image-url("../icons/phosphor/sidebar.svg")
-                            : @image-url("../icons/phosphor/sidebar-fill.svg");
+                            ? @image-url("../icons/lucide/outline/sidebar-expand.svg")
+                            : @image-url("../icons/lucide/outline/sidebar-collapse.svg");
                         leading-tooltip: root.sidebar-collapsed ? @tr("Show contact groups") : @tr("Hide contact groups");
                         leading-accessible-id: "contacts-sidebar-button";
                         text: root.query;
@@ -346,7 +346,7 @@ export component ContactsView inherits Rectangle {
                                         y: 3px;
                                         width: 15px;
                                         height: 15px;
-                                        source: @image-url("../icons/phosphor/star-fill.svg");
+                                        source: @image-url("../icons/lucide/filled/star.svg");
                                         colorize: root.accent;
                                         image-fit: contain;
                                         accessible-role: none;
@@ -417,7 +417,7 @@ export component ContactsView inherits Rectangle {
                         visible: root.compact || root.sidebar-collapsed;
                         x: parent.width - self.width - 16px;
                         y: parent.height - self.height - 16px;
-                        icon: @image-url("../icons/phosphor/user-plus-fill.svg");
+                        icon: @image-url("../icons/lucide/filled/person-add.svg");
                         tooltip-text: @tr("New contact");
                         accessible-id: "contacts-new-button";
                         z: 100;
@@ -458,8 +458,8 @@ export component ContactsView inherits Rectangle {
                             visible: root.single-surface;
                             compact: root.compact;
                             icon: root.compact
-                                ? @image-url("../icons/phosphor/arrow-left.svg")
-                                : @image-url("../icons/phosphor/x.svg");
+                                ? @image-url("../icons/lucide/outline/arrow-left.svg")
+                                : @image-url("../icons/lucide/outline/x.svg");
                             icon-color: root.secondary-text;
                             hover-background: root.muted-control-bg;
                             tooltip-text: @tr("Back to contacts");
@@ -479,7 +479,7 @@ export component ContactsView inherits Rectangle {
                         Rectangle { horizontal-stretch: 1; }
                         ToolbarIconButton {
                             compact: root.compact;
-                            icon: root.edit-favorite ? @image-url("../icons/phosphor/star-fill.svg") : @image-url("../icons/phosphor/star.svg");
+                            icon: root.edit-favorite ? @image-url("../icons/lucide/filled/star.svg") : @image-url("../icons/lucide/outline/star.svg");
                             icon-color: root.edit-favorite ? root.accent : root.secondary-text;
                             hover-background: root.muted-control-bg;
                             active-background: root.accent-soft;
@@ -508,7 +508,7 @@ export component ContactsView inherits Rectangle {
                         if !root.delete-confirming : ToolbarIconButton {
                             visible: root.selected-id > 0;
                             compact: root.compact;
-                            icon: @image-url("../icons/phosphor/trash.svg");
+                            icon: @image-url("../icons/lucide/outline/trash.svg");
                             icon-color: root.secondary-text;
                             hover-background: root.muted-control-bg;
                             tooltip-text: @tr("Delete contact");
@@ -621,7 +621,7 @@ export component ContactsView inherits Rectangle {
                                 visible: root.edit-email != "";
                                 text: @tr("Send email");
                                 has-icon: true;
-                                icon: @image-url("../icons/phosphor/paper-plane-tilt-fill.svg");
+                                icon: @image-url("../icons/lucide/outline/paper-airplane.svg");
                                 clicked => { root.compose-to-contact(root.edit-email); }
                             }
                             Rectangle { horizontal-stretch: 1; }
@@ -651,7 +651,7 @@ export component ContactsView inherits Rectangle {
                 Image {
                     width: 44px;
                     height: 44px;
-                    source: @image-url("../icons/phosphor/users-fill.svg");
+                    source: @image-url("../icons/lucide/outline/people.svg");
                     colorize: root.muted-text;
                     image-fit: contain;
                     accessible-role: none;

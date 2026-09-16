@@ -29,7 +29,7 @@ component MailListLabelChip inherits Rectangle {
         y: 4px;
         width: 12px;
         height: 12px;
-        source: @image-url("../icons/phosphor/folder-simple-fill.svg");
+        source: @image-url("../icons/lucide/outline/file-directory.svg");
         colorize: root.label-color;
         image-fit: contain;
         accessible-role: none;
@@ -139,8 +139,8 @@ export component MailListPane inherits Rectangle {
                             width: parent.width - 2 * self.x;
                             show-leading: true;
                             leading-icon: root.mail_sidebar_collapsed
-                                ? @image-url("../icons/phosphor/sidebar.svg")
-                                : @image-url("../icons/phosphor/sidebar-fill.svg");
+                                ? @image-url("../icons/lucide/outline/sidebar-expand.svg")
+                                : @image-url("../icons/lucide/outline/sidebar-collapse.svg");
                             leading-tooltip: root.mail_sidebar_collapsed ? @tr("Show folders") : @tr("Hide folders");
                             leading-accessible-id: "mail-folders-button";
                             text: root.search_query;
@@ -299,7 +299,7 @@ export component MailListPane inherits Rectangle {
                                         if row.has_attachments : Image {
                                             width: 14px;
                                             height: 14px;
-                                            source: @image-url("../icons/phosphor/paperclip.svg");
+                                            source: @image-url("../icons/lucide/outline/paperclip.svg");
                                             colorize: root.muted-text;
                                             image-fit: contain;
                                             accessible-role: none;
@@ -307,7 +307,7 @@ export component MailListPane inherits Rectangle {
                                         if row.has_replied && row.message_count <= 1 : Image {
                                             width: 14px;
                                             height: 14px;
-                                            source: @image-url("../icons/phosphor/arrow-bend-up-left.svg");
+                                            source: @image-url("../icons/lucide/outline/reply.svg");
                                             colorize: root.muted-text;
                                             image-fit: contain;
                                             accessible-role: none;
@@ -332,7 +332,7 @@ export component MailListPane inherits Rectangle {
                                             Image {
                                                 width: 11px;
                                                 height: 11px;
-                                                source: @image-url("../icons/phosphor/arrow-bend-up-left.svg");
+                                                source: @image-url("../icons/lucide/outline/reply.svg");
                                                 colorize: root.accent;
                                                 image-fit: contain;
                                                 accessible-role: none;
@@ -560,7 +560,7 @@ export component MailListPane inherits Rectangle {
                             visible: root.single-pane-navigation || root.mail_sidebar_collapsed;
                             x: parent.width - self.width - 16px;
                             y: parent.height - self.height - 16px;
-                            icon: @image-url("../icons/phosphor/note-pencil-fill.svg");
+                            icon: @image-url("../icons/lucide/filled/compose.svg");
                             tooltip-text: @tr("New email");
                             accessible-id: "mail-compose-button";
                             z: 100;

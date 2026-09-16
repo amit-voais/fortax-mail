@@ -184,7 +184,7 @@ export component WorkspaceSearchToolbar inherits Rectangle {
                 text: root.text;
                 placeholder-text: root.placeholder-text;
                 show-leading-icon: true;
-                leading-icon: @image-url("../icons/phosphor/magnifying-glass.svg");
+                leading-icon: @image-url("../icons/lucide/outline/search.svg");
                 leading-icon-color: AppTheme.secondary;
                 trailing-content-width: LayoutMetrics.control-height;
                 edited(value) => { root.edited(value); }
@@ -197,7 +197,7 @@ export component WorkspaceSearchToolbar inherits Rectangle {
                 height: LayoutMetrics.control-height;
 
                 ToolbarIconButton {
-                    icon: @image-url("../icons/phosphor/funnel.svg");
+                    icon: @image-url("../icons/lucide/outline/filter.svg");
                     icon-color: root.filter-active ? AppTheme.accent : AppTheme.secondary;
                     hover-background: AppTheme.muted-control-bg;
                     active: root.filter-active;
@@ -220,7 +220,7 @@ export component WorkspaceSearchToolbar inherits Rectangle {
 
         ToolbarIconButton {
             interactive: root.refresh-enabled;
-            icon: @image-url("../icons/phosphor/arrow-clockwise.svg");
+            icon: @image-url("../icons/lucide/outline/sync.svg");
             icon-color: AppTheme.secondary;
             hover-background: AppTheme.muted-control-bg;
             tooltip-text: root.refresh-tooltip;

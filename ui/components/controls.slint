@@ -66,9 +66,9 @@ export component LineEdit inherits Rectangle {
 
     if root.show-leading-icon : Image {
         x: 12px;
-        y: (parent.height - 18px) / 2;
-        width: 18px;
-        height: 18px;
+        y: (parent.height - 16px) / 2;
+        width: 16px;
+        height: 16px;
         source: root.leading-icon;
         colorize: root.leading-icon-color;
         image-fit: contain;
@@ -227,8 +227,8 @@ export component SelectionCheckBox inherits FocusScope {
                 width: 12px;
                 height: 12px;
                 source: root.indeterminate
-                    ? @image-url("../icons/phosphor/minus.svg")
-                    : @image-url("../icons/phosphor/check.svg");
+                    ? @image-url("../icons/lucide/outline/dash.svg")
+                    : @image-url("../icons/lucide/outline/check.svg");
                 colorize: white;
                 image-fit: contain;
                 accessible-role: none;
@@ -321,7 +321,7 @@ export component IconButton inherits Rectangle {
     in property <bool> primary: false;
     in property <bool> active: false;
     in property <bool> interactive: true;
-    in property <length> icon-size: 18px;
+    in property <length> icon-size: 16px;
     in property <string> tooltip-text: "";
     in property <bool> tooltip-above: false;
     in property <bool> tooltip-align-left: false;
