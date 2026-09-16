@@ -5771,6 +5771,8 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                 },
             };
             app.set_account_setup_in_progress(true);
+            let username_for_hint = args.username.clone();
+            let email_for_hint = args.email.clone();
             let updates = ui_task_tx_for_account.clone();
             runtime_for_account.spawn(async move {
                 let update = match core.add_password_account(args).await {
@@ -5796,7 +5798,19 @@ pub fn run(platform: PlatformContext) -> Result<(), Box<dyn std::error::Error>> 
                         }
                     }
                     Err(error) => UiTaskUpdate {
-                        message: UiMessage::detail("Account setup failed: {}", error),
+                        // A server that rejects the login says only "authentication failed". The commonest
+                        // reason is a person's name in the username box: nearly every IMAP server wants the
+                        // full address there. Say so rather than leaving them to guess at the password.
+                        message: if error.to_string().contains("AUTHENTICATIONFAILED")
+                            && !username_for_hint.contains('@')
+                        {
+                            UiMessage::detail(
+                                "The server rejected that sign-in. Most servers want the full email address as the username, not a name — clear the username box to use {}.",
+                                email_for_hint,
+                            )
+                        } else {
+                            UiMessage::detail("Account setup failed: {}", error)
+                        },
                         accounts: None,
                         calendar_connections: None,
                         carddav_connections: None,

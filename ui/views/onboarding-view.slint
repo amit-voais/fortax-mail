@@ -261,7 +261,9 @@ export component OnboardingView inherits Rectangle {
                     label: @tr("Username (defaults to email)");
                     label-color: root.muted-text;
                     value: root.account-username;
-                    placeholder: @tr("Username (defaults to email)");
+                    // The address itself, greyed out: a name typed here is the commonest reason a server
+                    // answers "authentication failed", and seeing the address makes that obvious.
+                    placeholder: root.account-email != "" ? root.account-email : @tr("Same as the email address");
                     edited(value) => { root.account-username = value; }
                 }
                 FormField {
