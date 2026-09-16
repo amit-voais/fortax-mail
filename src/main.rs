@@ -3,6 +3,7 @@ mod account_mail_preferences;
 #[cfg(test)]
 mod account_removal_tests;
 mod attachment_controller;
+pub mod bridge_cli;
 mod browser;
 mod calendar;
 mod compose_controller;

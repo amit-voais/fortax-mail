@@ -5,6 +5,7 @@
 pub mod accounts;
 pub mod ai;
 pub mod autolabel;
+pub mod bridge;
 pub mod caldav;
 pub mod calendar;
 pub mod carddav;
@@ -370,6 +371,28 @@ impl Core {
         // calendar stores, then remove calendar rows that predate the durable
         // operation journal and no longer have a mail account owner.
         core.recover_cross_store_state().await?;
+
+        // The hiSAI bridge: only when the user has switched it on, only on the loopback address,
+        // and never for sending. See crates/fortax-mail-core/src/bridge.rs.
+        let bridge_wanted = core
+            .db
+            .read(|conn| Ok(bridge::enabled(conn)))
+            .await
+            .unwrap_or(false);
+        if bridge_wanted {
+            match bridge::start(
+                core.db.clone(),
+                Some(core.calendar_db.clone()),
+                core.paths.data_dir.clone(),
+            )
+            .await
+            {
+                Ok(handle) => tracing::info!(port = handle.port, "hiSAI bridge is listening"),
+                Err(error) => tracing::warn!("hiSAI bridge did not start: {error}"),
+            }
+        } else {
+            bridge::clear_state(&core.paths.data_dir);
+        }
         if core.paths.files_db_file().exists()
             || core
                 .db
